@@ -21,7 +21,9 @@ export const TRUSTED_OUTPUT_PATHS = new Set([
   'SPAWNS.md',
   'WORLDGEN.md',
   'LOOT.md',
-  'BLOCKS.md'
+  'BLOCKS.md',
+  'CONFIG.md',
+  'DATAPACK.md'
 ])
 
 export const BUILD_SCRIPT_PATHS = new Set([
@@ -36,6 +38,7 @@ const TRUSTED_PREFIXES = [
   'src/main/resources/',
   'craftstudio/textures/',
   'resource-pack/',
+  'datapack/',
   'snapshots/',
   'run-spigot/'
 ]
@@ -59,6 +62,9 @@ export function isTrustedOutputPath(relativePath: string): boolean {
     return false
   }
   if (TRUSTED_OUTPUT_PATHS.has(normalized)) {
+    return true
+  }
+  if (/^[a-z][a-z0-9_]{1,30}\.config\.json$/.test(normalized)) {
     return true
   }
   return TRUSTED_PREFIXES.some((prefix) => normalized.startsWith(prefix))

@@ -250,7 +250,7 @@ export function DesignGenerate({
         <h2 className="text-lg font-semibold">Generate specification</h2>
         {!codegenReady ? (
           <p>
-            Phase 9 codegen is Fabric 1.21.x, Paper 1.21.x, NeoForge 1.21.1/1.21.4/1.21.8, Forge 1.21.1, and Spigot
+            Phase 10 codegen is Fabric 1.21.x, Paper 1.21.x, NeoForge 1.21.1/1.21.4/1.21.8, Forge 1.21.1, and Spigot
             1.21/1.21.1/1.21.4. This {project.manifest.platform} {project.manifest.minecraftVersion} project cannot emit
             Gradle files. The adapter will not pretend otherwise.
             {project.manifest.platform === 'spigot' ? ' Spigot is not inferred from Paper success.' : ''}
@@ -368,6 +368,61 @@ export function DesignGenerate({
           <BlockEditor spec={workingSpec} pluginLimits={pluginLimits} onChange={applyWorking} />
           <MobEditor spec={workingSpec} pluginLimits={pluginLimits} onChange={applyWorking} />
           <WorldgenEditor spec={workingSpec} pluginLimits={pluginLimits} onChange={applyWorking} />
+          {project.manifest.type === 'mod' ? (
+            <Card className="space-y-3">
+              <div>
+                <h2 className="text-lg font-semibold">Mod config</h2>
+                <p className="mt-1 text-sm text-muted">
+                  Written as <code>config/{workingSpec.modId}.json</code> on first launch. Fabric gates worldgen and
+                  chest inject at runtime. Forge/NeoForge chest inject is runtime; worldgen biome modifiers are omitted
+                  when worldgen is off at Apply time. Spawn scale is runtime on Fabric and baked into biome-modifier JSON
+                  on Forge/NeoForge.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={workingSpec.config.enableWorldgen}
+                  onChange={(event) =>
+                    applyWorking({
+                      ...workingSpec,
+                      config: { ...workingSpec.config, enableWorldgen: event.target.checked }
+                    })
+                  }
+                />
+                Enable worldgen injection
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={workingSpec.config.enableChestLoot}
+                  onChange={(event) =>
+                    applyWorking({
+                      ...workingSpec,
+                      config: { ...workingSpec.config, enableChestLoot: event.target.checked }
+                    })
+                  }
+                />
+                Enable chest loot inject
+              </label>
+              <Field label="Spawn weight scale (0.25–4)" htmlFor="config-spawn-scale">
+                <TextInput
+                  id="config-spawn-scale"
+                  inputMode="decimal"
+                  value={String(workingSpec.config.spawnWeightScale)}
+                  onChange={(event) =>
+                    applyWorking({
+                      ...workingSpec,
+                      config: {
+                        ...workingSpec.config,
+                        spawnWeightScale: Math.min(4, Math.max(0.25, Number(event.target.value) || 1))
+                      }
+                    })
+                  }
+                />
+              </Field>
+            </Card>
+          ) : null}
           {project.manifest.type === 'mod' ? (
             <ModGuiEditor
               spec={workingSpec}

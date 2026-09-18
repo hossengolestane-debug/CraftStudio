@@ -1,6 +1,15 @@
 import { defaultMob } from '../../../../shared/defaults'
-import { PRESET_GOAL_LISTS, resolveMobGoals, type MobGoal } from '../../../../shared/goals'
-import { MOB_GOAL_CAP, MOB_GOALS, MOB_PRESETS, SPAWN_BIOMES, VANILLA_MOB_BASES, type ProjectSpec, type SpecMob } from '../../../../shared/spec'
+import { goalId, PRESET_GOAL_LISTS, resolveMobGoals, type MobGoal } from '../../../../shared/goals'
+import {
+  MOB_GOAL_CAP,
+  MOB_GOALS,
+  MOB_PRESETS,
+  MOB_TARGETING,
+  SPAWN_BIOMES,
+  VANILLA_MOB_BASES,
+  type ProjectSpec,
+  type SpecMob
+} from '../../../../shared/spec'
 import { Button, Card, Field, TextInput } from '../../components/ui'
 
 export function MobEditor({
@@ -23,7 +32,7 @@ export function MobEditor({
         <h2 className="text-lg font-semibold">Custom mobs</h2>
         <p className="mt-1 text-sm text-muted">
           Presets are shortcuts that expand into a capped goal list (max {MOB_GOAL_CAP} of {MOB_GOALS.join(', ')}).
-          Not a behavior tree. Optional biome spawn tables and drops still apply.
+          Each goal has a priority 0–9. Targeting can be none / players / hostiles / both. Not a behavior tree.
         </p>
         {pluginLimits ? (
           <p className="mt-2 text-sm">
@@ -86,6 +95,16 @@ export function MobEditor({
                 }
               />
             </Field>
+            <Field label="Follow range" htmlFor={`mob-follow-${index}`}>
+              <TextInput
+                id={`mob-follow-${index}`}
+                inputMode="decimal"
+                value={String(mob.followRange ?? 16)}
+                onChange={(event) =>
+                  update(index, { followRange: Math.min(64, Math.max(4, Number(event.target.value) || 16)) })
+                }
+              />
+            </Field>
             <Field label="Behavior preset" htmlFor={`mob-preset-${index}`}>
               <select
                 id={`mob-preset-${index}`}
@@ -110,9 +129,11 @@ export function MobEditor({
                 value={mob.targeting}
                 onChange={(event) => update(index, { targeting: event.target.value as SpecMob['targeting'] })}
               >
-                <option value="none">none</option>
-                <option value="players">players</option>
-                <option value="hostiles">hostiles</option>
+                {MOB_TARGETING.map((target) => (
+                  <option key={target} value={target}>
+                    {target}
+                  </option>
+                ))}
               </select>
             </Field>
             <Field label="Vanilla disguise / model ref" htmlFor={`mob-base-${index}`}>
@@ -140,12 +161,19 @@ export function MobEditor({
           <div className="space-y-2 border border-dashed border-line p-2">
             <p className="text-xs text-muted">
               Goal list (max {MOB_GOAL_CAP}). Empty list expands from the preset:{' '}
-              {(PRESET_GOAL_LISTS[mob.preset] ?? ['wander']).join(', ')}. Active:{' '}
-              {resolveMobGoals(mob).join(', ')}.
+              {(PRESET_GOAL_LISTS[mob.preset] ?? [{ id: 'wander' as const, priority: 4 }])
+                .map((entry) => `${entry.id}@${entry.priority}`)
+                .join(', ')}
+              . Active:{' '}
+              {resolveMobGoals(mob)
+                .map((entry) => `${entry.id}@${entry.priority}`)
+                .join(', ')}
+              .
             </p>
             <div className="flex flex-wrap gap-2">
               {MOB_GOALS.map((goal) => {
-                const checked = mob.goals.includes(goal)
+                const selectedIds = mob.goals.map((entry) => goalId(entry))
+                const checked = selectedIds.includes(goal)
                 const atCap = !checked && mob.goals.length >= MOB_GOAL_CAP
                 return (
                   <label key={goal} className="flex items-center gap-1 text-xs">
@@ -155,8 +183,8 @@ export function MobEditor({
                       disabled={atCap}
                       onChange={(event) => {
                         const goals = event.target.checked
-                          ? ([...mob.goals, goal] as MobGoal[])
-                          : mob.goals.filter((entry) => entry !== goal)
+                          ? [...mob.goals, { id: goal, priority: Math.min(9, mob.goals.length + 1) }]
+                          : mob.goals.filter((entry) => goalId(entry) !== goal)
                         update(index, { goals })
                       }}
                     />
@@ -165,11 +193,37 @@ export function MobEditor({
                 )
               })}
             </div>
+            {mob.goals.length > 0 ? (
+              <div className="grid gap-2 md:grid-cols-2">
+                {mob.goals.map((entry, goalIndex) => {
+                  const id = goalId(entry)
+                  const priority = typeof entry === 'string' ? goalIndex + 1 : entry.priority
+                  return (
+                    <Field key={`${id}-${goalIndex}`} label={`${id} priority`} htmlFor={`mob-goal-pri-${index}-${id}`}>
+                      <TextInput
+                        id={`mob-goal-pri-${index}-${id}`}
+                        inputMode="numeric"
+                        value={String(priority)}
+                        onChange={(event) => {
+                          const next = Math.min(9, Math.max(0, Number(event.target.value) || 0))
+                          const goals = mob.goals.map((item, itemIndex) =>
+                            itemIndex === goalIndex ? { id: goalId(item), priority: next } : item
+                          )
+                          update(index, { goals })
+                        }}
+                      />
+                    </Field>
+                  )
+                })}
+              </div>
+            ) : null}
             <Button
               type="button"
               variant="ghost"
               onClick={() =>
-                update(index, { goals: [...(PRESET_GOAL_LISTS[mob.preset] ?? ['wander'])] })
+                update(index, {
+                  goals: [...(PRESET_GOAL_LISTS[mob.preset] ?? [{ id: 'wander' as MobGoal, priority: 4 }])]
+                })
               }
             >
               Fill from preset

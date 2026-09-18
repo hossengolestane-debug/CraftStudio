@@ -1,5 +1,12 @@
 import { defaultSpecBlock } from '../../../../shared/editorSpec'
-import { BLOCK_ENTRY_CAP, BLOCK_MATERIALS, VANILLA_ITEMS, type ProjectSpec, type SpecBlock } from '../../../../shared/spec'
+import {
+  BLOCK_ENTRY_CAP,
+  BLOCK_MATERIALS,
+  BLOCK_SHAPES,
+  VANILLA_ITEMS,
+  type ProjectSpec,
+  type SpecBlock
+} from '../../../../shared/spec'
 import { Button, Card, Field, TextInput } from '../../components/ui'
 
 export function BlockEditor({
@@ -21,8 +28,9 @@ export function BlockEditor({
       <div>
         <h2 className="text-lg font-semibold">Custom blocks</h2>
         <p className="mt-1 text-sm text-muted">
-          Cube-all blocks with a BlockItem, blockstate, model, and loot table. Cap: {BLOCK_ENTRY_CAP}. Paint the texture
-          in Assets. Ore veins can place a spec block.
+          Cube-all or pillar (axis) blocks with a BlockItem, blockstate, model, and loot table. Optional slab and stairs
+          variants reuse the parent texture. Cap: {BLOCK_ENTRY_CAP}. Paint the texture in Assets. Inventory BlockEntities
+          are not emitted.
         </p>
         {pluginLimits ? (
           <p className="mt-2 text-sm">
@@ -31,7 +39,8 @@ export function BlockEditor({
           </p>
         ) : (
           <p className="mt-2 text-sm">
-            Fabric, Forge, and NeoForge emit real block registration. Not a multipart blockstate or inventory API.
+            Fabric, Forge, and NeoForge emit real block registration. Pillar uses axis blockstates. Slab/stairs are
+            trusted templates. Not an inventory BlockEntity API.
           </p>
         )}
       </div>
@@ -54,6 +63,20 @@ export function BlockEditor({
                 maxLength={31}
                 onChange={(event) => update(index, { id: event.target.value })}
               />
+            </Field>
+            <Field label="Shape" htmlFor={`block-shape-${index}`}>
+              <select
+                id={`block-shape-${index}`}
+                className="w-full border border-line bg-white px-3 py-2"
+                value={block.shape}
+                onChange={(event) => update(index, { shape: event.target.value as SpecBlock['shape'] })}
+              >
+                {BLOCK_SHAPES.map((shape) => (
+                  <option key={shape} value={shape}>
+                    {shape}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Material / sound" htmlFor={`block-mat-${index}`}>
               <select
@@ -109,6 +132,24 @@ export function BlockEditor({
                 }
               />
             </Field>
+          </div>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={block.slab}
+                onChange={(event) => update(index, { slab: event.target.checked })}
+              />
+              Generate slab
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={block.stairs}
+                onChange={(event) => update(index, { stairs: event.target.checked })}
+              />
+              Generate stairs
+            </label>
           </div>
           <Button
             type="button"

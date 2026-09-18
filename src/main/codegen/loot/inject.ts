@@ -18,6 +18,9 @@ export function fabricLootModify(spec: ProjectSpec, classic: boolean): string {
     : '(key, tableBuilder, source, registries)'
   return `
     LootTableEvents.MODIFY.register(${args} -> {
+      if (!CraftStudioConfig.enableChestLoot) {
+        return;
+      }
       if (!source.isBuiltin()) {
         return;
       }
@@ -74,6 +77,9 @@ public class AddBonusChestModifier extends LootModifier {
 
   @Override
   protected ObjectArrayList<ItemStack> doApply(ObjectArrayList<ItemStack> generatedLoot, LootContext context) {
+    if (!CraftStudioConfig.enableChestLoot) {
+      return generatedLoot;
+    }
 ${adds}
     return generatedLoot;
   }

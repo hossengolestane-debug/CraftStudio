@@ -1,7 +1,8 @@
+import { writeFile } from 'node:fs/promises'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { listAdapters } from '../shared/adapters/registry'
 import { listCompatibility, lookupCompatibility } from '../shared/compatibility'
-import type { EvidenceDraft } from '../shared/evidence'
+import { formatEvidenceSummary, type EvidenceDraft } from '../shared/evidence'
 import { AppError, toAppError } from '../shared/errors'
 import {
   IPC_CHANNELS,
@@ -19,7 +20,7 @@ import { DEFAULT_OLLAMA_ENDPOINT } from '../shared/types'
 import { isCodegenSupported, requiredJava } from '../shared/platformPins'
 import { EvidenceService } from './services/evidenceService'
 import { listProjectSnapshots, restoreProjectSnapshot } from './services/snapshotService'
-import { exportBuiltJar, exportResourcePackZip, exportSourceZip } from './services/exportService'
+import { exportBuiltJar, exportDatapackZip, exportResourcePackZip, exportSourceZip } from './services/exportService'
 import { GenerationService } from './services/generationService'
 import { GradleService } from './services/gradleService'
 import { checkJava } from './services/javaService'
@@ -399,6 +400,78 @@ export function registerIpc(deps: {
         textures,
         result.filePath
       )
+    })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.EXPORT_DATAPACK, (event, projectId: string) =>
+    wrap(async () => {
+      const record = await deps.projects.get(projectId)
+      const spec = await deps.generation.getSpec(projectId)
+      if (!spec) {
+        throw new AppError({
+          code: 'EXPORT_FAILED',
+          message: 'No validated spec on disk. Generate and apply first.',
+          action: 'Open Design, apply a spec with loot or worldgen, then export the datapack.'
+        })
+      }
+      parseProjectSpec(spec)
+      const settings = await deps.settings.get()
+      const window = senderWindow(event)
+      const dialogOpts = {
+        title: 'Export datapack ZIP',
+        defaultPath: `${record.manifest.name.replace(/[^a-zA-Z0-9_-]+/g, '-')}-datapack.zip`,
+        filters: [{ name: 'ZIP', extensions: ['zip'] }]
+      }
+      const result = window
+        ? await dialog.showSaveDialog(window, dialogOpts)
+        : await dialog.showSaveDialog(dialogOpts)
+      if (result.canceled || !result.filePath) {
+        throw new AppError({
+          code: 'EXPORT_FAILED',
+          message: 'Datapack export was cancelled.',
+          action: 'Choose a .zip destination for the datapack.'
+        })
+      }
+      return exportDatapackZip(
+        settings.projectsPath,
+        record.directoryName,
+        spec,
+        record.manifest.minecraftVersion,
+        result.filePath
+      )
+    })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.EXPORT_EVIDENCE, (event) =>
+    wrap(async () => {
+      const records = await deps.evidence.list()
+      const window = senderWindow(event)
+      const dialogOpts = {
+        title: 'Export evidence summary',
+        defaultPath: 'craftstudio-evidence-summary.md',
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      }
+      const result = window
+        ? await dialog.showSaveDialog(window, dialogOpts)
+        : await dialog.showSaveDialog(dialogOpts)
+      if (result.canceled || !result.filePath) {
+        throw new AppError({
+          code: 'EXPORT_FAILED',
+          message: 'Evidence export was cancelled.',
+          action: 'Choose a .md destination for the summary.'
+        })
+      }
+      const contents = formatEvidenceSummary(records, {
+        appVersion: '0.10.0',
+        generatedAt: new Date().toISOString()
+      })
+      await writeFile(result.filePath, contents, 'utf8')
+      return {
+        kind: 'evidence-summary' as const,
+        destPath: result.filePath,
+        fileCount: 1,
+        message: `Wrote evidence summary (${records.length} record${records.length === 1 ? '' : 's'}) to ${result.filePath}.`
+      }
     })
   )
 

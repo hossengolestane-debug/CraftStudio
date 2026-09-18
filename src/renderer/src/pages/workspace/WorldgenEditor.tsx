@@ -1,6 +1,7 @@
-import { defaultSurfacePatchEntry, defaultWorldgenEntry } from '../../../../shared/editorSpec'
+import { defaultSpringEntry, defaultSurfacePatchEntry, defaultWorldgenEntry } from '../../../../shared/editorSpec'
 import {
   SPAWN_BIOMES,
+  SPRING_FLUIDS,
   SURFACE_PATCH_BLOCKS,
   WORLDGEN_BLOCKS,
   type ProjectSpec,
@@ -30,10 +31,10 @@ export function WorldgenEditor({
   return (
     <Card className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Worldgen (ore veins + surface patches)</h2>
+        <h2 className="text-lg font-semibold">Worldgen (ore veins + surface patches + springs)</h2>
         <p className="mt-1 text-sm text-muted">
-          Trusted-template features only. ore_vein uses minecraft:ore (vanilla ore or a spec block). surface_patch uses
-          minecraft:random_patch. Not a dimension or structure stack. Cap: 4 entries.
+          Trusted-template features only. ore_vein uses minecraft:ore. surface_patch uses minecraft:random_patch. spring
+          uses minecraft:spring_feature (water or lava). Not a dimension or structure stack. Cap: 4 entries.
         </p>
         {pluginLimits ? (
           <p className="mt-2 text-sm">
@@ -66,29 +67,48 @@ export function WorldgenEditor({
                   const kind = event.target.value as SpecWorldgen['kind']
                   update(index, {
                     kind,
-                    block: kind === 'surface_patch' ? SURFACE_PATCH_BLOCKS[0] : WORLDGEN_BLOCKS[1]
+                    block:
+                      kind === 'surface_patch'
+                        ? SURFACE_PATCH_BLOCKS[0]
+                        : kind === 'spring'
+                          ? SPRING_FLUIDS[0]
+                          : WORLDGEN_BLOCKS[1]
                   })
                 }}
               >
                 <option value="ore_vein">ore_vein</option>
                 <option value="surface_patch">surface_patch</option>
+                <option value="spring">spring</option>
               </select>
             </Field>
-            <Field label={entry.kind === 'surface_patch' ? 'Plant / block' : 'Ore / spec block'} htmlFor={`wg-block-${index}`}>
+            <Field
+              label={
+                entry.kind === 'surface_patch' ? 'Plant / block' : entry.kind === 'spring' ? 'Fluid' : 'Ore / spec block'
+              }
+              htmlFor={`wg-block-${index}`}
+            >
               <select
                 id={`wg-block-${index}`}
                 className="w-full border border-line bg-white px-3 py-2"
                 value={entry.block}
                 onChange={(event) => update(index, { block: event.target.value })}
               >
-                {(entry.kind === 'surface_patch' ? patchBlocks : oreBlocks).map((block) => (
+                {(entry.kind === 'surface_patch'
+                  ? patchBlocks
+                  : entry.kind === 'spring'
+                    ? SPRING_FLUIDS
+                    : oreBlocks
+                ).map((block) => (
                   <option key={block} value={block}>
                     {block}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label={entry.kind === 'surface_patch' ? 'XZ spread' : 'Vein size'} htmlFor={`wg-size-${index}`}>
+            <Field
+              label={entry.kind === 'surface_patch' ? 'XZ spread' : entry.kind === 'spring' ? 'Rock count' : 'Vein size'}
+              htmlFor={`wg-size-${index}`}
+            >
               <TextInput
                 id={`wg-size-${index}`}
                 inputMode="numeric"
@@ -108,7 +128,7 @@ export function WorldgenEditor({
                 }
               />
             </Field>
-            {entry.kind === 'ore_vein' ? (
+            {entry.kind === 'ore_vein' || entry.kind === 'spring' ? (
               <>
                 <Field label="Min Y" htmlFor={`wg-min-${index}`}>
                   <TextInput
@@ -194,6 +214,20 @@ export function WorldgenEditor({
           }
         >
           Add surface patch
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={spec.worldgen.length >= 4}
+          onClick={() =>
+            onChange({
+              ...spec,
+              worldgen: [...spec.worldgen, defaultSpringEntry(`stone_spring_${spec.worldgen.length + 1}`)],
+              source: 'editor'
+            })
+          }
+        >
+          Add spring
         </Button>
       </div>
     </Card>

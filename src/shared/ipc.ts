@@ -47,6 +47,8 @@ export const IPC_CHANNELS = {
   EXPORT_SOURCE: 'export:source',
   EXPORT_JAR: 'export:jar',
   EXPORT_PACK: 'export:pack',
+  EXPORT_DATAPACK: 'export:datapack',
+  EXPORT_EVIDENCE: 'export:evidence',
   FILES_WRITE: 'files:write',
   TEXTURE_GET: 'texture:get',
   TEXTURE_SAVE: 'texture:save',
@@ -165,7 +167,7 @@ export interface RepairResultDto {
 }
 
 export interface ExportResultDto {
-  kind: 'source-zip' | 'jar' | 'resource-pack'
+  kind: 'source-zip' | 'jar' | 'resource-pack' | 'datapack' | 'evidence-summary'
   destPath: string
   fileCount: number
   message: string
@@ -258,6 +260,8 @@ export interface CraftStudioAPI {
   exportSourceZip: (projectId: string) => Promise<ExportResultDto>
   exportBuiltJar: (projectId: string) => Promise<ExportResultDto>
   exportResourcePack: (projectId: string) => Promise<ExportResultDto>
+  exportDatapack: (projectId: string) => Promise<ExportResultDto>
+  exportEvidenceSummary: () => Promise<ExportResultDto>
   getTexture: (projectId: string, itemId: string, layer?: TextureLayer) => Promise<TextureDto | null>
   saveTexture: (input: SaveTextureInput) => Promise<TextureDto>
   suggestTexturePalette: (projectId: string, prompt?: string) => Promise<PaletteSuggestionDto>

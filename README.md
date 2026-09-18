@@ -6,7 +6,17 @@ Desktop app that helps beginners create **Minecraft Java Edition** mods and serv
 | --- | --- |
 | Fabric, NeoForge, Forge | Paper, Spigot |
 
-**Phase 9** is implemented: Phase 8 plus cube-all custom blocks, allowlisted chest loot injection on mods, a capped composable mob goal list (presets still expand), and `surface_patch` worldgen (`minecraft:random_patch`). A compile-only Gradle build never flips **Tested**.
+**Phase 10** is implemented: Phase 9 plus pillar/axis blocks, auto slab+stairs, `minecraft:spring_feature` worldgen, goal priorities and `both` targeting, a loader-norm JSON config, and standalone datapack ZIP export. A compile-only Gradle build never flips **Tested**. App version stays **0.10.0** until a live `./gradlew build` for the Phase 10 slice is recorded; then it may become 1.0.0. See [SMOKE.md](SMOKE.md) and [PHASE10.md](PHASE10.md).
+
+## Quick start
+
+1. **Create** a project (Fabric 1.21.1 is the shortest path). Pick an exact Minecraft version the adapter emits.
+2. **Describe / edit** on Design. Type a prompt or use the editors: items, blocks (cube-all or pillar, optional slab/stairs), mobs (preset or up to 5 goals with priorities), worldgen (ore / surface patch / spring), GUI, and config toggles.
+3. **Apply** — Review file changes, then Apply files. A snapshot is written first. Java and Gradle come from trusted templates, never from the model.
+4. **Build** — Test → Gradle build. Exit 0 is compile-only. It does not mark Tested.
+5. **Export** — source ZIP anytime; built JAR after a real compile; resource pack after painting textures; optional datapack ZIP for loot + worldgen JSON (not the Java mod). Packages stay unsigned unless you have a real certificate.
+
+Then, on a desktop with the game: accept the Minecraft EULA on Test, run `runClient` (or launch your own Paper/Spigot server), write what you verified, and record evidence. Only that flips a compatibility row to Tested.
 
 ## Requirements
 
@@ -35,7 +45,7 @@ npm run dist:linux
 npm run dist:mac
 ```
 
-Packaging is **unsigned**. `dist:linux` builds a directory + AppImage on Linux x64. `dist:mac` is a directory target and typically fails on Linux (no macOS SDK / notarization). `dist:win` may only produce an unpacked/`portable` artifact on Linux (NSIS often needs Wine). See [PHASE9.md](PHASE9.md).
+Packaging is **unsigned**. `dist:linux` builds a directory + AppImage on Linux x64. `dist:mac` is a directory target and typically fails on Linux (no macOS SDK / notarization). `dist:win` may only produce an unpacked/`portable` artifact on Linux (NSIS often needs Wine). See [PHASE10.md](PHASE10.md).
 
 On some Linux containers:
 
@@ -43,17 +53,17 @@ On some Linux containers:
 CRAFTSTUDIO_NO_SANDBOX=1 npm run dev
 ```
 
-## Vertical slice (Phase 9)
+## Vertical slice (Phase 10)
 
 1. Create **Fabric** 1.21.x, **Paper** 1.21.x, **NeoForge** 1.21.1 / 1.21.4 / 1.21.8, **Forge 1.21.1**, or **Spigot** 1.21 / 1.21.1 / 1.21.4.
-2. Open **Design**. Edit items, cube-all **blocks**, recipes, a mob (preset shortcut or up to 5 allowlisted goals), ore veins / surface patches, and a GUI. Generate a spec (templates first). Undo keeps a 20-step history.
+2. Open **Design**. Edit items, **blocks** (cube-all or pillar; optional slab/stairs), recipes, a mob (preset shortcut or up to 5 allowlisted goals with priorities and players/hostiles/both targeting), ore veins / surface patches / springs, config toggles, and a GUI. Generate a spec (templates first). Undo keeps a 20-step history.
 3. **Review file changes**, then **Apply files**. A snapshot is written first.
 4. Change Minecraft version only after **Assess change** lists incompatible features. Adding blocks on a plugin pin is blocked. A snapshot is written first.
-5. Open **Assets**. Paint item layer0 / layer1 or a **block** cube-all texture.
-6. Open **Export** for a source ZIP, a built JAR after `./gradlew build`, or a resource pack that includes `pack.png`, layer1, and painted block textures when present.
-7. Open **Test** for a real Gradle compile. Failed builds show actionable diagnostics; known template mismatches can be repaired without touching `build.gradle`. Runtime verification (and Tested) is a separate, evidence-gated step.
+5. Open **Assets**. Paint item layer0 / layer1 or a **block** texture (reused by pillar/slab/stairs).
+6. Open **Export** for a source ZIP, a built JAR after `./gradlew build`, a resource pack, or a **datapack ZIP** (loot + worldgen JSON only).
+7. Open **Test** for a real Gradle compile. Export an evidence summary from the same tab. Runtime verification (and Tested) is a separate, evidence-gated step.
 
-Fabric 1.21 / 1.21.1 uses classic `Registry.register` (items + blocks) and loot-api-v2 chest injection. Fabric 1.21.2+ uses `Items.register` + `RegistryKey` (blocks also take `.registryKey`) and loot-api-v3. NeoForge and Forge emit `Block` + `BlockItem`, GLM chest injection, and client entity renderers. NeoForge is **not** Forge. Forge 1.21.1 uses ForgeGradle 6 + `mods.toml` `mandatory=true`. Paper items are vanilla `Material.PAPER` + PDC + CustomModelData. Spigot uses `org.spigotmc:spigot-api` — **Paper APIs are not copied**. Plugin mobs are **vanilla disguises**. Plugins **cannot** register custom blocks or inject vanilla chests. Biome spawn tables, ore veins, and surface patches emit for Fabric / Forge / NeoForge only.
+Fabric 1.21 / 1.21.1 uses classic `Registry.register` (items + blocks) and loot-api-v2 chest injection. Fabric 1.21.2+ uses `Items.register` + `RegistryKey` (blocks also take `.registryKey`) and loot-api-v3. NeoForge and Forge emit `Block` / `RotatedPillarBlock` / `SlabBlock` / `StairBlock` + `BlockItem`, GLM chest injection, and client entity renderers. NeoForge is **not** Forge. Forge 1.21.1 uses ForgeGradle 6 + `mods.toml` `mandatory=true`. Paper items are vanilla `Material.PAPER` + PDC + CustomModelData. Spigot uses `org.spigotmc:spigot-api` — **Paper APIs are not copied**. Plugin mobs are **vanilla disguises**. Plugins **cannot** register custom blocks or inject vanilla chests. Biome spawn tables, ore veins, surface patches, and springs emit for Fabric / Forge / NeoForge only.
 
 Ollama may only propose spec JSON (or a color palette). That JSON is independently validated. **Nothing is written from unvalidated model text.** Java and Gradle stay template-authored.
 
@@ -77,12 +87,17 @@ Fabric pins come from [fabricmc.net/develop](https://fabricmc.net/develop/) / Fa
 - Paper success is not Spigot compatibility
 - Plugin custom mobs are vanilla disguises; they are not new client entity types
 - Plugin custom blocks are unsupported; they are not equal to Fabric/Forge/NeoForge blocks
+- Inventory-capable BlockEntities are not emitted
 - Chest bonus loot is injected on mods into four allowlisted vanilla chests only; plugins do not inject
+- A standalone datapack ZIP does not inject biome features or vanilla chests
+- Goal lists stay a hard-capped allowlist with priorities — not a behavior tree
+- `spring` is `minecraft:spring_feature` only. This is not a custom dimension stack
 - GUI designers are labeled **preview**; they are not Minecraft-verified UIs
 - Compatibility rows are **not Tested** until a runtime evidence record exists
 - `runClient` requires an explicit Minecraft EULA checkbox; CraftStudio never silent-accepts and never distributes game files
 - Model output cannot write outside the project or run a shell
 - The texture editor does not pretend Ollama painted a PNG
 - Build repair only rewrites allowlisted Java for known template mismatches — never model shell, never silent `build.gradle` mutation
+- Installers stay unsigned without a real certificate
 
-See [PHASE1.md](PHASE1.md), [PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md), [PHASE5.md](PHASE5.md), [PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md), [PHASE8.md](PHASE8.md), and [PHASE9.md](PHASE9.md).
+See [SMOKE.md](SMOKE.md), [PHASE1.md](PHASE1.md)–[PHASE10.md](PHASE10.md).

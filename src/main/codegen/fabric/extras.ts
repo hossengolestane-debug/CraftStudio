@@ -74,7 +74,8 @@ public class ${cls} extends ${parent.extend} {
     return MobEntity.createMobAttributes()
       .add(EntityAttributes.${classic ? 'GENERIC_MAX_HEALTH' : 'MAX_HEALTH'}, ${mob.health}d)
       .add(EntityAttributes.${classic ? 'GENERIC_MOVEMENT_SPEED' : 'MOVEMENT_SPEED'}, ${mob.movementSpeed}d)
-      .add(EntityAttributes.${classic ? 'GENERIC_ATTACK_DAMAGE' : 'ATTACK_DAMAGE'}, ${mob.attackDamage}d);
+      .add(EntityAttributes.${classic ? 'GENERIC_ATTACK_DAMAGE' : 'ATTACK_DAMAGE'}, ${mob.attackDamage}d)
+      .add(EntityAttributes.${classic ? 'GENERIC_FOLLOW_RANGE' : 'FOLLOW_RANGE'}, ${mob.followRange ?? 16}d);
   }
 
   @Override
@@ -137,21 +138,33 @@ export function fabricSpawnInit(spec: ProjectSpec): string {
     .map((mob) => {
       const keys = mob.spawn.biomes.map((biome) => `BiomeKeys.${yarnBiomeKey(biome)}`).join(', ')
       const group = isHostileMob(mob) ? 'SpawnGroup.MONSTER' : 'SpawnGroup.CREATURE'
-      return `    BiomeModifications.addSpawn(BiomeSelectors.includeByKey(${keys}), ${group}, ${toConstName(mob.id)}, ${mob.spawn.weight}, ${mob.spawn.minGroup}, ${mob.spawn.maxGroup});`
+      return `    BiomeModifications.addSpawn(BiomeSelectors.includeByKey(${keys}), ${group}, ${toConstName(mob.id)}, Math.max(1, (int) Math.round(${mob.spawn.weight} * CraftStudioConfig.spawnWeightScale)), ${mob.spawn.minGroup}, ${mob.spawn.maxGroup});`
     })
   return lines.join('\n')
 }
 
 export function fabricWorldgenInit(spec: ProjectSpec): string {
-  return spec.worldgen
+  if (spec.worldgen.length === 0) {
+    return ''
+  }
+  const body = spec.worldgen
     .map((entry) => {
       const biomes = entry.biomes.length
         ? `BiomeSelectors.includeByKey(${entry.biomes.map((biome) => `BiomeKeys.${yarnBiomeKey(biome)}`).join(', ')})`
         : 'BiomeSelectors.foundInOverworld()'
-      const step = entry.kind === 'surface_patch' ? 'VEGETAL_DECORATION' : 'UNDERGROUND_ORES'
+      const step =
+        entry.kind === 'surface_patch'
+          ? 'VEGETAL_DECORATION'
+          : entry.kind === 'spring'
+            ? 'FLUID_SPRINGS'
+            : 'UNDERGROUND_ORES'
       return `    BiomeModifications.addFeature(${biomes}, GenerationStep.Feature.${step}, RegistryKey.of(RegistryKeys.PLACED_FEATURE, Identifier.of(MOD_ID, "${entry.id}")));`
     })
     .join('\n')
+  return `
+    if (CraftStudioConfig.enableWorldgen) {
+${body}
+    }`
 }
 
 function customSlotCount(gui: SpecModGui): number {

@@ -1,6 +1,6 @@
 import { defaultBlock } from './blocks'
 import { parseProjectSpec, VANILLA_ITEMS, type ProjectSpec, type SpecBlock, type SpecItem, type SpecRecipe, type SpecWorldgen } from './spec'
-import { defaultSurfacePatch, defaultWorldgen } from './worldgen'
+import { defaultSpring, defaultSurfacePatch, defaultWorldgen } from './worldgen'
 
 export function withEditorSource(spec: ProjectSpec): ProjectSpec {
   return parseProjectSpec({ ...spec, source: 'editor' })
@@ -91,6 +91,10 @@ export function defaultWorldgenEntry(id = 'iron_vein'): SpecWorldgen {
 
 export function defaultSurfacePatchEntry(id = 'flower_patch'): SpecWorldgen {
   return defaultSurfacePatch(id)
+}
+
+export function defaultSpringEntry(id = 'stone_spring'): SpecWorldgen {
+  return defaultSpring(id)
 }
 
 export function defaultSpecBlock(id = 'river_stone'): SpecBlock {

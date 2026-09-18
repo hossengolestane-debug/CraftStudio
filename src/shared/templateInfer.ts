@@ -1,6 +1,6 @@
 import { defaultBlock } from './blocks'
 import { defaultMob, defaultModGui, defaultPluginGui } from './defaults'
-import { defaultSurfacePatch, defaultWorldgen } from './worldgen'
+import { defaultSpring, defaultSurfacePatch, defaultWorldgen } from './worldgen'
 import type { ProjectManifest } from './types'
 import {
   parseProjectSpec,
@@ -14,12 +14,12 @@ const UNSUPPORTED_PATTERNS: { pattern: RegExp; feature: string; reason: string }
   {
     pattern: /\b(boss|golem|behavior tree|pathfinding tree)\b/i,
     feature: 'advanced entities',
-    reason: 'Phase 9 emits a capped goal list (max 5) plus seven presets. Full behavior trees are out of scope.'
+    reason: 'Phase 10 emits a capped goal list (max 5) with optional priorities. Full behavior trees are out of scope.'
   },
   {
     pattern: /\b(dimension|nether dimension|end dimension|custom structure|jigsaw)\b/i,
     feature: 'worldgen stack',
-    reason: 'Phase 9 emits ore-vein and surface-patch features only. Dimensions and structures stay unsupported.'
+    reason: 'Phase 10 emits ore-vein, surface-patch, and spring features only. Dimensions and structures stay unsupported.'
   }
 ]
 
@@ -54,7 +54,10 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
   const wantsSpawn = /\b(spawn|spawns in|biome spawn)\b/i.test(text)
   const wantsOre = /\b(ore|vein|ore gen|worldgen)\b/i.test(text)
   const wantsPatch = /\b(flower patch|random patch|surface patch|wildflower)\b/i.test(text)
-  const wantsBlock = /\b(custom block|new block|ore block|stone block)\b/i.test(text)
+  const wantsSpring = /\b(spring|water spring|lava spring|geyser)\b/i.test(text)
+  const wantsBlock = /\b(custom block|new block|ore block|stone block|pillar|slab|stairs)\b/i.test(text)
+  const wantsPillar = /\b(pillar|column|axis block|log.?shaped)\b/i.test(text)
+  const wantsSlabStairs = /\b(slab|stairs|stair)\b/i.test(text)
   const unsupportedRequests = UNSUPPORTED_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => ({
     feature: entry.feature,
     reason: entry.reason
@@ -71,7 +74,7 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
       reason: `${manifest.platform} cannot register biome spawn tables. Custom mobs stay summon/command disguises.`
     })
   }
-  if ((wantsOre || wantsPatch) && (manifest.platform === 'paper' || manifest.platform === 'spigot')) {
+  if ((wantsOre || wantsPatch || wantsSpring) && (manifest.platform === 'paper' || manifest.platform === 'spigot')) {
     unsupportedRequests.push({
       feature: 'worldgen',
       reason: `${manifest.platform} cannot emit configured/placed features. This is an honest gap, not fake worldgen.`
@@ -144,13 +147,22 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
     pluginGuis: wantsGui && manifest.type === 'plugin' ? [defaultPluginGui()] : [],
     blocks:
       wantsBlock && manifest.type === 'mod'
-        ? [{ ...defaultBlock(`${itemId.slice(0, 16)}_block`), displayName: `${titleCase(itemName)} Block` }]
+        ? [
+            {
+              ...defaultBlock(`${itemId.slice(0, 16)}_block`),
+              displayName: `${titleCase(itemName)} Block`,
+              shape: wantsPillar ? 'pillar' : 'cube_all',
+              slab: wantsSlabStairs,
+              stairs: wantsSlabStairs
+            }
+          ]
         : [],
     worldgen:
       manifest.type === 'mod'
         ? [
             ...(wantsOre ? [defaultWorldgen(`${itemId.slice(0, 16)}_vein`)] : []),
-            ...(wantsPatch ? [defaultSurfacePatch(`${itemId.slice(0, 14)}_patch`)] : [])
+            ...(wantsPatch ? [defaultSurfacePatch(`${itemId.slice(0, 14)}_patch`)] : []),
+            ...(wantsSpring ? [defaultSpring(`${itemId.slice(0, 14)}_spring`)] : [])
           ]
         : [],
     unsupportedRequests,

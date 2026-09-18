@@ -3,6 +3,7 @@ import path from 'node:path'
 import { AppError } from '../../shared/errors'
 import type { ProjectSpec } from '../../shared/spec'
 import type { PlatformId, ProjectManifest } from '../../shared/types'
+import { planStandaloneDatapack } from '../codegen/pack/datapack'
 import { planStandaloneResourcePack, resourcePackClientNote } from '../codegen/pack/planner'
 import { writePlannedFiles } from './filePlan'
 import { assertInsideRoot, resolveProjectFile, splitRelativePath } from './pathSafety'
@@ -11,7 +12,7 @@ import { writeZipFile, type ZipEntry } from './zip'
 const SKIP_DIRS = new Set(['.gradle', 'build', 'run', 'out', 'node_modules', '.idea'])
 
 export interface ExportResult {
-  kind: 'source-zip' | 'jar' | 'resource-pack'
+  kind: 'source-zip' | 'jar' | 'resource-pack' | 'datapack' | 'evidence-summary'
   destPath: string
   fileCount: number
   message: string
@@ -195,5 +196,48 @@ export async function exportResourcePackZip(
     destPath,
     fileCount: entries.length,
     message: `Wrote ${entries.length} pack files to ${destPath}. ${resourcePackClientNote(manifest.platform)}`
+  }
+}
+
+export async function exportDatapackZip(
+  projectsRoot: string,
+  projectDirName: string,
+  spec: ProjectSpec,
+  minecraftVersion: string,
+  destPath: string
+): Promise<ExportResult> {
+  if (!destPath.toLowerCase().endsWith('.zip')) {
+    throw new AppError({
+      code: 'EXPORT_FAILED',
+      message: 'Datapack export must be a .zip file.',
+      action: 'Choose a destination ending in .zip.'
+    })
+  }
+  if (destPath.includes('\0')) {
+    throw new AppError({
+      code: 'PATH_ESCAPE',
+      message: 'Export destination contains a null byte.',
+      action: 'Choose a different save location.'
+    })
+  }
+  const planned = planStandaloneDatapack(spec, minecraftVersion)
+  await writePlannedFiles(
+    projectsRoot,
+    projectDirName,
+    planned.map((file) => ({
+      ...file,
+      relativePath: `datapack/${file.relativePath}`
+    }))
+  )
+  const entries: ZipEntry[] = planned.map((file) => ({
+    name: file.relativePath,
+    data: typeof file.contents === 'string' ? Buffer.from(file.contents, 'utf8') : file.contents
+  }))
+  await writeZipFile(destPath, entries)
+  return {
+    kind: 'datapack',
+    destPath,
+    fileCount: entries.length,
+    message: `Wrote ${entries.length} datapack files to ${destPath}. Loot + worldgen JSON only — not the Java mod. See DATAPACK.md.`
   }
 }

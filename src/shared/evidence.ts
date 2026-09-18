@@ -197,6 +197,46 @@ export function overlayCompatibility(
   })
 }
 
+export function formatEvidenceSummary(
+  records: RuntimeEvidenceRecord[],
+  context?: { appVersion?: string; generatedAt?: string }
+): string {
+  const generatedAt = context?.generatedAt ?? new Date().toISOString()
+  const appVersion = context?.appVersion ?? 'unknown'
+  const lines = [
+    '# CraftStudio runtime evidence summary',
+    '',
+    `Generated: ${generatedAt}`,
+    `App version: ${appVersion}`,
+    '',
+    'A compile-only Gradle build never marks Tested. This file lists recorded runtime evidence only.',
+    'Packages remain unsigned unless a real certificate exists.',
+    '',
+    `Records: ${records.length}`,
+    ''
+  ]
+  if (records.length === 0) {
+    lines.push('No runtime evidence has been recorded. Compatibility rows stay Experimental.', '')
+    return lines.join('\n')
+  }
+  for (const record of records) {
+    const tested = canMarkTested(record) ? 'can mark Tested' : 'insufficient for Tested'
+    lines.push(`## ${record.platform} ${record.minecraftVersion} (${record.verifiedWhat})`)
+    lines.push('')
+    lines.push(`- id: ${record.id}`)
+    lines.push(`- timestamp: ${record.timestamp}`)
+    lines.push(`- project: ${record.projectId}`)
+    lines.push(`- compileOnly: ${record.compileOnly}`)
+    lines.push(`- eulaAccepted: ${record.eulaAccepted}`)
+    lines.push(`- runtimeExitCode: ${record.runtimeExitCode ?? 'n/a'}`)
+    lines.push(`- userAttestedLaunch: ${record.userAttestedLaunch ?? 'n/a'}`)
+    lines.push(`- status: ${tested}`)
+    lines.push(`- notes: ${record.notes}`)
+    lines.push('')
+  }
+  return lines.join('\n')
+}
+
 export function hasValidEvidence(
   evidence: RuntimeEvidenceRecord[],
   platform: PlatformId,

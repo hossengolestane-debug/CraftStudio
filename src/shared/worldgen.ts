@@ -23,7 +23,10 @@ export const SURFACE_PATCH_BLOCKS = [
 
 export type SurfacePatchBlock = (typeof SURFACE_PATCH_BLOCKS)[number]
 
-export const WORLDGEN_KINDS = ['ore_vein', 'surface_patch'] as const
+export const SPRING_FLUIDS = ['minecraft:water', 'minecraft:lava'] as const
+export type SpringFluid = (typeof SPRING_FLUIDS)[number]
+
+export const WORLDGEN_KINDS = ['ore_vein', 'surface_patch', 'spring'] as const
 export type WorldgenKind = (typeof WORLDGEN_KINDS)[number]
 export const WORLDGEN_KIND = 'ore_vein' as const
 export const WORLDGEN_ENTRY_CAP = 4
@@ -45,6 +48,10 @@ export function isVanillaOre(block: string): block is WorldgenVanillaOre {
 
 export function isSurfacePatchPlant(block: string): block is SurfacePatchBlock {
   return (SURFACE_PATCH_BLOCKS as readonly string[]).includes(block)
+}
+
+export function isSpringFluid(block: string): block is SpringFluid {
+  return (SPRING_FLUIDS as readonly string[]).includes(block)
 }
 
 export interface WorldgenDefaults {
@@ -80,12 +87,27 @@ export const DEFAULT_SURFACE_PATCH: WorldgenDefaults = {
   biomes: ['plains']
 }
 
+export const DEFAULT_SPRING: WorldgenDefaults = {
+  id: 'stone_spring',
+  kind: 'spring',
+  block: 'minecraft:water',
+  size: 4,
+  count: 8,
+  minY: -24,
+  maxY: 64,
+  biomes: ['plains']
+}
+
 export function defaultWorldgen(id = DEFAULT_WORLDGEN.id): WorldgenDefaults {
   return { ...DEFAULT_WORLDGEN, id, biomes: [...DEFAULT_WORLDGEN.biomes] }
 }
 
 export function defaultSurfacePatch(id = DEFAULT_SURFACE_PATCH.id): WorldgenDefaults {
   return { ...DEFAULT_SURFACE_PATCH, id, biomes: [...DEFAULT_SURFACE_PATCH.biomes] }
+}
+
+export function defaultSpring(id = DEFAULT_SPRING.id): WorldgenDefaults {
+  return { ...DEFAULT_SPRING, id, biomes: [...DEFAULT_SPRING.biomes] }
 }
 
 export function worldgenBiomesOrAllowlist(biomes: readonly SpawnBiome[]): SpawnBiome[] {

@@ -241,6 +241,14 @@ export const PACK_FORMAT: Record<string, number> = {
   '1.21.8': 64
 }
 
+export const DATA_PACK_FORMAT: Record<string, number> = {
+  '1.21': 48,
+  '1.21.1': 48,
+  '1.21.2': 57,
+  '1.21.4': 61,
+  '1.21.8': 81
+}
+
 export const FABRIC_CODEGEN_VERSIONS = Object.keys(FABRIC_PINS)
 export const PAPER_CODEGEN_VERSIONS = Object.keys(PAPER_PINS)
 export const NEOFORGE_CODEGEN_VERSIONS = Object.keys(NEOFORGE_PINS)
@@ -319,6 +327,18 @@ export function packFormatFor(minecraftVersion: string): number {
       code: 'ADAPTER_UNSUPPORTED',
       message: `No pack_format pin for Minecraft ${minecraftVersion}.`,
       action: 'Export a resource pack for a supported 1.21.x version.'
+    })
+  }
+  return format
+}
+
+export function dataPackFormatFor(minecraftVersion: string): number {
+  const format = DATA_PACK_FORMAT[minecraftVersion]
+  if (!format) {
+    throw new AppError({
+      code: 'ADAPTER_UNSUPPORTED',
+      message: `No datapack pack_format pin for Minecraft ${minecraftVersion}.`,
+      action: 'Export a datapack for a supported 1.21.x version.'
     })
   }
   return format

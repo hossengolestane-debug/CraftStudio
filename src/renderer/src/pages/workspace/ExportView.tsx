@@ -27,7 +27,8 @@ export function ExportView({ project }: { project: ProjectRecord }) {
         <h1 className="text-2xl font-semibold">Export</h1>
         <p className="mt-1 text-muted">
           Source ZIP is always available after files exist. JAR export requires a real successful Gradle build on disk.
-          Resource packs require painted or imported item textures.
+          Resource packs require painted or imported item textures. A standalone datapack ZIP is loot + worldgen JSON
+          only — it is not the Java mod.
         </p>
       </div>
       {error ? <ErrorPanel error={error} onDismiss={() => setError(null)} /> : null}
@@ -110,6 +111,30 @@ export function ExportView({ project }: { project: ProjectRecord }) {
           }}
         >
           Export resource pack
+        </Button>
+      </Card>
+
+      <Card className="space-y-3">
+        <h2 className="text-lg font-semibold">Datapack ZIP</h2>
+        <p className="text-sm">
+          Exports <code>pack.mcmeta</code>, loot JSON, and configured/placed feature JSON. It does{' '}
+          <strong>not</strong> include Java, Fabric biome injection, Forge/NeoForge biome modifiers, or GLM chest
+          inject. Vanilla will not place features until you add biome JSON, or you use the Java mod. See DATAPACK.md
+          inside the zip.
+        </p>
+        <Button
+          disabled={busy || !supported}
+          onClick={() => {
+            setBusy(true)
+            setError(null)
+            void api
+              .exportDatapack(project.manifest.id)
+              .then(setResult)
+              .catch((err) => setError(asAppError(err)))
+              .finally(() => setBusy(false))
+          }}
+        >
+          Export datapack ZIP
         </Button>
       </Card>
 

@@ -14,7 +14,17 @@ import { fabricSpawnDoc, placeholderEntityPng } from '../fabric/extras'
 import { isHostileMob, mojangGoalBlock, mojangParent } from '../mobs/presets'
 import { forgeLikeCommandMethod, forgeLikeMenuFields, planForgeLikeMenuFiles } from '../modgui/forgeLike'
 import { mojangItemProperties, mojangNeedsAttributeImports } from '../items/settings'
-import { forgeBlockCreative, neoBlockRegs, planBlockAssetFiles, planBlockDocs } from '../blocks/registration'
+import {
+  blockLangEntries,
+  forgeBlockCreative,
+  forgeNeedsRotatedPillar,
+  forgeNeedsSlab,
+  forgeNeedsStairs,
+  neoBlockRegs,
+  planBlockAssetFiles,
+  planBlockDocs
+} from '../blocks/registration'
+import { planConfigFiles } from '../config/modConfig'
 import { planForgeLikeLootModifierFiles } from '../loot/inject'
 import { planEntityLootFiles, planItemLootFiles, planLootDocs } from '../loot/tables'
 import { entityClassName } from '../naming'
@@ -108,7 +118,8 @@ public class ${cls} extends ${parent.extend} {
     return ${parent.extend}.createMobAttributes()
       .add(Attributes.MAX_HEALTH, ${mob.health}d)
       .add(Attributes.MOVEMENT_SPEED, ${mob.movementSpeed}d)
-      .add(Attributes.ATTACK_DAMAGE, ${mob.attackDamage}d);
+      .add(Attributes.ATTACK_DAMAGE, ${mob.attackDamage}d)
+      .add(Attributes.FOLLOW_RANGE, ${mob.followRange ?? 16}d);
   }
 
   @Override
@@ -156,6 +167,9 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;` : ''}
 ${needsHolder || hasLoot ? 'import net.neoforged.neoforge.registries.DeferredHolder;' : ''}
 ${spec.blocks.length ? `import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.level.block.Block;
+${forgeNeedsRotatedPillar(spec) ? 'import net.minecraft.world.level.block.RotatedPillarBlock;' : ''}
+${forgeNeedsSlab(spec) ? 'import net.minecraft.world.level.block.SlabBlock;' : ''}
+${forgeNeedsStairs(spec) ? 'import net.minecraft.world.level.block.StairBlock;' : ''}
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.neoforge.registries.DeferredBlock;` : ''}
@@ -183,6 +197,7 @@ ${hasLoot ? `  public static final DeferredHolder<MapCodec<? extends IGlobalLoot
 ${emitEntities ? `\n${entityRegistrations(spec, pins)}` : ''}
 
   public ${spec.mainClass}(IEventBus modEventBus) {
+    CraftStudioConfig.load();
     ${spec.blocks.length ? 'BLOCKS.register(modEventBus);' : ''}
     ITEMS.register(modEventBus);
     ${hasLoot ? 'LOOT_MODIFIERS.register(modEventBus);' : ''}
@@ -388,10 +403,7 @@ jar {
   for (const item of spec.items) {
     lang[`item.${spec.modId}.${item.id}`] = item.displayName
   }
-  for (const block of spec.blocks) {
-    lang[`block.${spec.modId}.${block.id}`] = block.displayName
-    lang[`item.${spec.modId}.${block.id}`] = block.displayName
-  }
+  Object.assign(lang, blockLangEntries(spec))
   if (pins.entityRegistration) {
     for (const mob of spec.mobs) {
       lang[`entity.${spec.modId}.${mob.id}`] = mob.displayName
@@ -423,6 +435,7 @@ jar {
     contents: mainJava(spec, pins)
   })
   files.push(...planRecipeFiles(spec))
+  files.push(...planConfigFiles(spec, packagePath, 'neoforge'))
   files.push(...planBlockAssetFiles(spec))
   files.push(...planBlockDocs(spec, 'neoforge'))
   files.push(...planOreFeatureJson(spec))
@@ -503,7 +516,9 @@ jar {
       spec.mobs.length > 0 && pins.entityRegistration
         ? `Summon a preset mob with \`/summon ${spec.modId}:${spec.mobs[0]!.id}\`. See ENTITY_RENDERING.md and SPAWNS.md. Presets expand into a capped goal list (max 5).`
         : '',
-      spec.blocks.length > 0 ? 'Custom blocks are cube_all + BlockItem. Paint a block texture in Assets. See BLOCKS.md.' : '',
+      spec.blocks.length > 0
+        ? 'Custom blocks are cube_all or pillar (axis), plus optional slab/stairs. Paint a block texture in Assets. See BLOCKS.md and CONFIG.md.'
+        : '',
       spec.items.length > 0
         ? 'Chest bonus loot is injected via a NeoForge global loot modifier into four allowlisted vanilla chests. See LOOT.md.'
         : '',

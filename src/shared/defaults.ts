@@ -10,6 +10,7 @@ export function defaultMob(id = 'custom_mob'): SpecMob {
     attackDamage: 3,
     preset: 'passive_wanderer',
     targeting: 'none',
+    followRange: 16,
     spawnStub: 'Summon/command always works. Enable a biome spawn table for Fabric/Forge/NeoForge (not plugins).',
     spawn: { ...DEFAULT_MOB_SPAWN },
     drops: [],

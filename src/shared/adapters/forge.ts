@@ -21,7 +21,7 @@ export const ForgeAdapter: PlatformAdapter = {
   javaRequirements: {
     minVersion: 17,
     recommendedVersion: 21,
-    notes: 'Java 17 for 1.18–1.20.4; Java 21 for 1.21+. Phase 9 emits ForgeGradle only for 1.21.1 (items, cube_all blocks, preset mobs, menus, spawn tables, ore-vein + surface-patch worldgen, chest loot modifiers). NeoForge is a separate adapter.'
+    notes: 'Java 17 for 1.18–1.20.4; Java 21 for 1.21+. Phase 10 emits ForgeGradle only for 1.21.1 (items, cube_all/pillar/slab/stairs blocks, preset mobs with goal priorities, menus, spawn tables, ore-vein + surface-patch + spring worldgen, chest loot modifiers, JSON config). NeoForge is a separate adapter.'
   },
   templates: [
     {

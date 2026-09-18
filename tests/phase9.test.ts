@@ -143,10 +143,13 @@ describe('Phase 9 spec + emitters', () => {
   })
 
   it('expands empty goal lists from presets and keeps an explicit list', () => {
-    expect(resolveMobGoals({ preset: 'leap_melee', goals: [] })).toEqual(['leap', 'melee'])
+    expect(resolveMobGoals({ preset: 'leap_melee', goals: [] })).toEqual([
+      { id: 'leap', priority: 1 },
+      { id: 'melee', priority: 2 }
+    ])
     expect(resolveMobGoals({ preset: 'passive_wanderer', goals: ['look_player', 'wander'] })).toEqual([
-      'look_player',
-      'wander'
+      { id: 'look_player', priority: 1 },
+      { id: 'wander', priority: 2 }
     ])
   })
 

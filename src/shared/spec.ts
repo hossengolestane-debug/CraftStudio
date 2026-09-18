@@ -1,11 +1,12 @@
 import { z } from 'zod'
 import { AppError } from './errors'
-import { BLOCK_ENTRY_CAP, BLOCK_MATERIALS } from './blocks'
-import { MOB_GOAL_CAP, MOB_GOALS } from './goals'
+import { BLOCK_ENTRY_CAP, BLOCK_MATERIALS, BLOCK_SHAPES, derivedBlockIds } from './blocks'
+import { MOB_GOAL_CAP, MOB_GOALS, MOB_TARGETING, normalizeGoalEntry, type ResolvedMobGoal } from './goals'
 import { ITEM_ATTRIBUTE_CAP, ITEM_ATTRIBUTE_SLOTS, ITEM_ATTRIBUTES } from './itemStats'
 import { DEFAULT_MOB_SPAWN, SPAWN_BIOMES } from './spawn'
 import { SPEC_FILENAME } from './types'
 import {
+  isSpringFluid,
   isSurfacePatchPlant,
   isVanillaOre,
   WORLDGEN_ENTRY_CAP,
@@ -14,9 +15,9 @@ import {
 
 export { SPAWN_BIOMES }
 export { ITEM_ATTRIBUTES, ITEM_ATTRIBUTE_SLOTS } from './itemStats'
-export { WORLDGEN_BLOCKS, WORLDGEN_KINDS, SURFACE_PATCH_BLOCKS } from './worldgen'
-export { BLOCK_MATERIALS, BLOCK_ENTRY_CAP } from './blocks'
-export { MOB_GOALS, MOB_GOAL_CAP } from './goals'
+export { WORLDGEN_BLOCKS, WORLDGEN_KINDS, SURFACE_PATCH_BLOCKS, SPRING_FLUIDS } from './worldgen'
+export { BLOCK_MATERIALS, BLOCK_ENTRY_CAP, BLOCK_SHAPES, slabId, stairsId, derivedBlockIds } from './blocks'
+export { MOB_GOALS, MOB_GOAL_CAP, MOB_TARGETING } from './goals'
 
 export const SPEC_SCHEMA_VERSION = 1
 export { SPEC_FILENAME }
@@ -103,7 +104,8 @@ const mobSchema = z.object({
   movementSpeed: z.number().min(0.05).max(1).default(0.25),
   attackDamage: z.number().min(0).max(40).default(3),
   preset: z.enum(MOB_PRESETS).default('passive_wanderer'),
-  targeting: z.enum(['none', 'players', 'hostiles']).default('none'),
+  targeting: z.enum(MOB_TARGETING).default('none'),
+  followRange: z.number().min(4).max(64).default(16),
   spawnStub: z
     .string()
     .trim()
@@ -119,7 +121,18 @@ const mobSchema = z.object({
     })
     .default(DEFAULT_MOB_SPAWN),
   drops: z.array(mobDropSchema).max(4).default([]),
-  goals: z.array(z.enum(MOB_GOALS)).max(MOB_GOAL_CAP).default([]),
+  goals: z
+    .array(
+      z.union([
+        z.enum(MOB_GOALS),
+        z.object({
+          id: z.enum(MOB_GOALS),
+          priority: z.number().int().min(0).max(9).default(1)
+        })
+      ])
+    )
+    .max(MOB_GOAL_CAP)
+    .default([]),
   appearance: z
     .object({
       model: z.enum(MOB_MODELS).default('humanoid'),
@@ -199,7 +212,16 @@ const blockSchema = z.object({
   material: z.enum(BLOCK_MATERIALS).default('stone'),
   hardness: z.number().min(0.1).max(50).default(1.5),
   resistance: z.number().min(0).max(1200).default(6),
-  dropItem: z.string().trim().min(1).max(64).default('self')
+  dropItem: z.string().trim().min(1).max(64).default('self'),
+  shape: z.enum(BLOCK_SHAPES).default('cube_all'),
+  slab: z.boolean().default(false),
+  stairs: z.boolean().default(false)
+})
+
+const configSchema = z.object({
+  enableWorldgen: z.boolean().default(true),
+  enableChestLoot: z.boolean().default(true),
+  spawnWeightScale: z.number().min(0.25).max(4).default(1)
 })
 
 const worldgenSchema = z.object({
@@ -248,6 +270,7 @@ export const projectSpecSchema = z.object({
   modGuis: z.array(modGuiSchema).max(4).default([]),
   pluginGuis: z.array(pluginGuiSchema).max(4).default([]),
   worldgen: z.array(worldgenSchema).max(WORLDGEN_ENTRY_CAP).default([]),
+  config: configSchema.default({ enableWorldgen: true, enableChestLoot: true, spawnWeightScale: 1 }),
   unsupportedRequests: z.array(unsupportedSchema).max(16).default([]),
   source: z.enum(['template', 'ollama', 'merged', 'editor']),
   prompt: z.string().max(4000).default('')
@@ -264,6 +287,8 @@ export type SpecBlock = z.infer<typeof blockSchema>
 export type SpecDataSlot = z.infer<typeof dataSlotSchema>
 export type SpecItemAttribute = z.infer<typeof itemAttributeSchema>
 export type SpecMobGoal = (typeof MOB_GOALS)[number]
+export type SpecConfig = z.infer<typeof configSchema>
+export type SpecResolvedGoal = ResolvedMobGoal
 
 export const OLLAMA_SPEC_JSON_SCHEMA = {
   type: 'object',
@@ -314,6 +339,7 @@ export const OLLAMA_SPEC_JSON_SCHEMA = {
     modGuis: { type: 'array' },
     pluginGuis: { type: 'array' },
     worldgen: { type: 'array' },
+    config: { type: 'object' },
     unsupportedRequests: { type: 'array' },
     source: { type: 'string', enum: ['template', 'ollama', 'merged'] },
     prompt: { type: 'string' }
@@ -340,6 +366,18 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
   const spec = parsed.data
   const itemIds = new Set(spec.items.map((item) => item.id))
   const blockIds = new Set(spec.blocks.map((block) => block.id))
+  for (const block of spec.blocks) {
+    for (const derived of derivedBlockIds(block)) {
+      if (itemIds.has(derived) || blockIds.has(derived)) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Block "${block.id}" variant "${derived}" collides with an existing id.`,
+          action: 'Rename the parent block or disable slab/stairs.'
+        })
+      }
+      blockIds.add(derived)
+    }
+  }
 
   for (const block of spec.blocks) {
     if (itemIds.has(block.id)) {
@@ -411,11 +449,19 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
           action: 'Pick an allowlisted minecraft ore or a block defined in this spec.'
         })
       }
-    } else if (!isSurfacePatchPlant(entry.block) && !blockIds.has(bare) && !blockIds.has(entry.block)) {
+    } else if (entry.kind === 'surface_patch') {
+      if (!isSurfacePatchPlant(entry.block) && !blockIds.has(bare) && !blockIds.has(entry.block)) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Surface patch "${entry.id}" block "${entry.block}" is not an allowlisted plant or spec block.`,
+          action: 'Use dandelion, poppy, short_grass, fern, dead_bush, or a spec block.'
+        })
+      }
+    } else if (!isSpringFluid(entry.block)) {
       throw new AppError({
         code: 'SPEC_INVALID',
-        message: `Surface patch "${entry.id}" block "${entry.block}" is not an allowlisted plant or spec block.`,
-        action: 'Use dandelion, poppy, short_grass, fern, dead_bush, or a spec block.'
+        message: `Spring "${entry.id}" fluid "${entry.block}" is not allowlisted.`,
+        action: 'Use minecraft:water or minecraft:lava.'
       })
     }
   }
@@ -476,7 +522,8 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
         })
       }
     }
-    if (new Set(mob.goals).size !== mob.goals.length) {
+    const goalIds = mob.goals.map((goal, index) => normalizeGoalEntry(goal, index).id)
+    if (new Set(goalIds).size !== goalIds.length) {
       throw new AppError({
         code: 'SPEC_INVALID',
         message: `Mob "${mob.id}" repeats a goal.`,

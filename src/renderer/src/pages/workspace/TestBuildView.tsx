@@ -151,6 +151,26 @@ export function TestBuildView({
             stays Experimental.
           </p>
         )}
+        <p className="text-xs text-muted">
+          {evidence.length} evidence record{evidence.length === 1 ? '' : 's'} in this app. Export a markdown summary
+          without claiming Tested from compile-only builds.
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => {
+            void api
+              .exportEvidenceSummary()
+              .then((result) => {
+                setError(null)
+                setLogs((current) => `${current}\n${result.message}`)
+              })
+              .catch((err) => setError(asAppError(err)))
+          }}
+        >
+          Export evidence summary
+        </Button>
         <div className="flex flex-wrap gap-2">
           <Button
             disabled={busy}

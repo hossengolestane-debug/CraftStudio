@@ -17,7 +17,7 @@ export function planBiomeModifierFiles(spec: ProjectSpec, flavor: 'forge' | 'neo
             biomes: mob.spawn.biomes.map(minecraftBiomeId),
             spawners: {
               type: `${spec.modId}:${mob.id}`,
-              weight: mob.spawn.weight,
+              weight: Math.max(1, Math.round(mob.spawn.weight * spec.config.spawnWeightScale)),
               minCount: mob.spawn.minGroup,
               maxCount: mob.spawn.maxGroup
             }
