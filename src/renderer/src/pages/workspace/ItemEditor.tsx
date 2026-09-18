@@ -1,5 +1,7 @@
 import { defaultItem, defaultRecipe, defaultShapedRecipe, EDITOR_VANILLA_ITEMS } from '../../../../shared/editorSpec'
 import { ITEM_ATTRIBUTES, ITEM_ATTRIBUTE_SLOTS, type ProjectSpec, type SpecItem, type SpecRecipe } from '../../../../shared/spec'
+import { MACE_COMPATIBLE_ENCHANTMENTS, GENERIC_WEAPON_ENCHANTMENTS } from '../../../../shared/vanillaRegistry'
+import { defaultWeapon, hasWeaponBehavior, type SpecWeapon } from '../../../../shared/weaponSpec'
 import { Button, Card, Field, TextInput } from '../../components/ui'
 
 export function ItemEditor({
@@ -199,6 +201,7 @@ export function ItemEditor({
               Add attribute
             </Button>
           </div>
+          <WeaponEditor item={item} onChange={(weapon) => updateItem(index, { weapon })} />
           {spec.items.length > 1 ? (
             <Button
               type="button"
@@ -260,7 +263,7 @@ export function ItemEditor({
                   } else {
                     updateRecipe(index, {
                       type: 'shapeless',
-                      ingredients: [{ kind: 'vanilla', id: EDITOR_VANILLA_ITEMS[0] }],
+                      ingredients: [{ kind: 'vanilla', id: EDITOR_VANILLA_ITEMS[0] ?? 'minecraft:stick' }],
                       pattern: [],
                       keys: []
                     })
@@ -331,9 +334,58 @@ export function ItemEditor({
             </Field>
           </div>
           {recipe.type === 'shaped' ? (
-            <p className="text-xs text-muted">
-              Keys: {recipe.keys.map((key) => `${key.symbol}=${key.id}`).join(', ') || 'none'}
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs text-muted">
+                Keys are not replaced with iron or stick when you type a registry id.
+              </p>
+              {recipe.keys.map((key, keyIndex) => (
+                <div key={`${recipe.id}-${key.symbol}-${keyIndex}`} className="grid gap-2 md:grid-cols-3">
+                  <TextInput
+                    value={key.symbol}
+                    maxLength={1}
+                    onChange={(event) => {
+                      const keys = recipe.keys.map((entry, i) =>
+                        i === keyIndex ? { ...entry, symbol: event.target.value.toUpperCase().slice(0, 1) } : entry
+                      )
+                      updateRecipe(index, { keys })
+                    }}
+                  />
+                  <TextInput
+                    value={key.id}
+                    onChange={(event) => {
+                      const keys = recipe.keys.map((entry, i) =>
+                        i === keyIndex
+                          ? {
+                              ...entry,
+                              id: event.target.value,
+                              kind: event.target.value.startsWith('minecraft:') ? ('vanilla' as const) : ('mod' as const)
+                            }
+                          : entry
+                      )
+                      updateRecipe(index, { keys })
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => updateRecipe(index, { keys: recipe.keys.filter((_, i) => i !== keyIndex) })}
+                  >
+                    Remove key
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  updateRecipe(index, {
+                    keys: [...recipe.keys, { symbol: 'A', kind: 'vanilla', id: 'minecraft:stick' }]
+                  })
+                }
+              >
+                Add key
+              </Button>
+            </div>
           ) : null}
           <Button
             type="button"
@@ -382,5 +434,234 @@ export function ItemEditor({
         </Button>
       </div>
     </Card>
+  )
+}
+
+function WeaponEditor({
+  item,
+  onChange
+}: {
+  item: SpecItem
+  onChange: (weapon: SpecWeapon) => void
+}) {
+  const weapon = item.weapon ?? defaultWeapon()
+  const enchants = weapon.smash ? MACE_COMPATIBLE_ENCHANTMENTS : GENERIC_WEAPON_ENCHANTMENTS
+  const patch = (partial: Partial<SpecWeapon>): void => {
+    onChange({ ...weapon, ...partial })
+  }
+  return (
+    <div className="space-y-2 border border-dashed border-line p-2">
+      <p className="text-xs text-muted">
+        Reusable Forge 1.21.1 weapon abilities. These generate Java, not description text. Leave them off for a generic
+        item.
+      </p>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={weapon.smash} onChange={(event) => patch({ smash: event.target.checked })} />
+        Mace smash (extends vanilla MaceItem)
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={weapon.lifeSteal?.enabled === true}
+          onChange={(event) =>
+            patch({
+              lifeSteal: {
+                enabled: event.target.checked,
+                percent: weapon.lifeSteal?.percent ?? 0.2,
+                capHealth: weapon.lifeSteal?.capHealth ?? 4,
+                hostileOnly: weapon.lifeSteal?.hostileOnly ?? true
+              }
+            })
+          }
+        />
+        Direct-hit Life Steal
+      </label>
+      {weapon.lifeSteal?.enabled ? (
+        <div className="grid gap-2 md:grid-cols-3">
+          <Field label="Life Steal percent" htmlFor={`${item.id}-ls-pct`}>
+            <TextInput
+              id={`${item.id}-ls-pct`}
+              inputMode="decimal"
+              value={String(weapon.lifeSteal.percent)}
+              onChange={(event) =>
+                patch({
+                  lifeSteal: {
+                    ...weapon.lifeSteal!,
+                    percent: Math.min(1, Math.max(0, Number(event.target.value) || 0))
+                  }
+                })
+              }
+            />
+          </Field>
+          <Field label="Cap (health points)" htmlFor={`${item.id}-ls-cap`}>
+            <TextInput
+              id={`${item.id}-ls-cap`}
+              inputMode="decimal"
+              value={String(weapon.lifeSteal.capHealth)}
+              onChange={(event) =>
+                patch({
+                  lifeSteal: {
+                    ...weapon.lifeSteal!,
+                    capHealth: Math.min(20, Math.max(0, Number(event.target.value) || 0))
+                  }
+                })
+              }
+            />
+          </Field>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={weapon.lifeSteal.hostileOnly}
+              onChange={(event) =>
+                patch({ lifeSteal: { ...weapon.lifeSteal!, hostileOnly: event.target.checked } })
+              }
+            />
+            Hostile mobs only
+          </label>
+        </div>
+      ) : null}
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={weapon.shockwave?.enabled === true}
+          onChange={(event) =>
+            patch({
+              shockwave: {
+                enabled: event.target.checked,
+                minFallBlocks: weapon.shockwave?.minFallBlocks ?? 3,
+                cooldownSeconds: weapon.shockwave?.cooldownSeconds ?? 10,
+                radius: weapon.shockwave?.radius ?? 6,
+                damage: weapon.shockwave?.damage ?? 8,
+                upwardImpulse: weapon.shockwave?.upwardImpulse ?? 1
+              }
+            })
+          }
+        />
+        Smash shockwave
+      </label>
+      {weapon.shockwave?.enabled ? (
+        <div className="grid gap-2 md:grid-cols-3">
+          <Field label="Shockwave radius" htmlFor={`${item.id}-sw-r`}>
+            <TextInput
+              id={`${item.id}-sw-r`}
+              inputMode="decimal"
+              value={String(weapon.shockwave.radius)}
+              onChange={(event) =>
+                patch({
+                  shockwave: {
+                    ...weapon.shockwave!,
+                    radius: Math.min(16, Math.max(0, Number(event.target.value) || 0))
+                  }
+                })
+              }
+            />
+          </Field>
+          <Field label="Damage" htmlFor={`${item.id}-sw-d`}>
+            <TextInput
+              id={`${item.id}-sw-d`}
+              inputMode="decimal"
+              value={String(weapon.shockwave.damage)}
+              onChange={(event) =>
+                patch({
+                  shockwave: {
+                    ...weapon.shockwave!,
+                    damage: Math.min(40, Math.max(0, Number(event.target.value) || 0))
+                  }
+                })
+              }
+            />
+          </Field>
+          <Field label="Cooldown seconds" htmlFor={`${item.id}-sw-cd`}>
+            <TextInput
+              id={`${item.id}-sw-cd`}
+              inputMode="decimal"
+              value={String(weapon.shockwave.cooldownSeconds)}
+              onChange={(event) =>
+                patch({
+                  shockwave: {
+                    ...weapon.shockwave!,
+                    cooldownSeconds: Math.min(120, Math.max(0, Number(event.target.value) || 0))
+                  }
+                })
+              }
+            />
+          </Field>
+        </div>
+      ) : null}
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={weapon.terrain?.enabled === true}
+          onChange={(event) =>
+            patch({
+              terrain: {
+                enabled: event.target.checked,
+                radius: weapon.terrain?.radius ?? 3,
+                maxBlocks: weapon.terrain?.maxBlocks ?? 24,
+                allowBlocks: weapon.terrain?.allowBlocks ?? [
+                  'minecraft:dirt',
+                  'minecraft:grass_block',
+                  'minecraft:stone',
+                  'minecraft:sand',
+                  'minecraft:gravel'
+                ]
+              }
+            })
+          }
+        />
+        Bounded terrain smash
+      </label>
+      <Field label="Texture style" htmlFor={`${item.id}-tex`}>
+        <select
+          id={`${item.id}-tex`}
+          className="w-full border border-line bg-white px-3 py-2"
+          value={weapon.textureStyle}
+          onChange={(event) => patch({ textureStyle: event.target.value as SpecWeapon['textureStyle'] })}
+        >
+          <option value="none">none (keep painted/imported PNG only)</option>
+          <option value="netherite_mace">netherite_mace (32×32 procedural)</option>
+          <option value="generic_weapon">generic_weapon (32×32 procedural)</option>
+        </select>
+      </Field>
+      <div className="space-y-1">
+        <p className="text-xs text-muted">Compatible enchantments applied to the crafted item.</p>
+        {enchants.map((id) => {
+          const selected = weapon.enchantments.find((entry) => entry.id === id)
+          return (
+            <label key={id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={Boolean(selected)}
+                onChange={(event) => {
+                  const next = event.target.checked
+                    ? [...weapon.enchantments, { id, level: 1 }]
+                    : weapon.enchantments.filter((entry) => entry.id !== id)
+                  patch({ enchantments: next })
+                }}
+              />
+              {id}
+              {selected ? (
+                <TextInput
+                  inputMode="numeric"
+                  value={String(selected.level)}
+                  onChange={(event) =>
+                    patch({
+                      enchantments: weapon.enchantments.map((entry) =>
+                        entry.id === id
+                          ? { ...entry, level: Math.min(5, Math.max(1, Number(event.target.value) || 1)) }
+                          : entry
+                      )
+                    })
+                  }
+                />
+              ) : null}
+            </label>
+          )
+        })}
+      </div>
+      {hasWeaponBehavior(weapon) ? (
+        <p className="text-xs text-muted">These fields emit Forge Java. Other loaders record them as unsupported.</p>
+      ) : null}
+    </div>
   )
 }

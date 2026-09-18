@@ -1,5 +1,8 @@
 import { defaultBlock } from './blocks'
 import { defaultMob, defaultModGui, defaultPluginGui } from './defaults'
+import { shortSummary, preservePrompt } from './promptPreserve'
+import { extractShapedRecipeFromPrompt } from './recipeExtract'
+import { assembleGeneratedSpec } from './specMerge'
 import { defaultSpring, defaultSurfacePatch, defaultWorldgen } from './worldgen'
 import type { ProjectManifest } from './types'
 import {
@@ -9,6 +12,7 @@ import {
   toPackageName,
   type ProjectSpec
 } from './spec'
+import { inferWeaponFromPrompt, promptRequestsChestLoot, promptRequestsCustomMob } from './weaponSpec'
 
 const UNSUPPORTED_PATTERNS: { pattern: RegExp; feature: string; reason: string }[] = [
   {
@@ -22,29 +26,9 @@ const UNSUPPORTED_PATTERNS: { pattern: RegExp; feature: string; reason: string }
     reason: 'Phase 10 emits ore-vein, surface-patch, and spring features only. Dimensions and structures stay unsupported.'
   },
   {
-    pattern: /\b(mace|smash attack|density|breach enchantment|wind charge smash)\b/i,
-    feature: 'mace combat',
-    reason: 'CraftStudio items are generic custom items with optional attack_damage / attack_speed. 1.21 mace smash, Density, and Breach are not emitted.'
-  },
-  {
-    pattern: /\b(life ?steal|lifesteal|leech health)\b/i,
-    feature: 'life steal',
-    reason: 'No custom on-hit healing effect is generated.'
-  },
-  {
-    pattern: /\b(shockwave|quake|terrain smash|break blocks on hit)\b/i,
-    feature: 'shockwave / terrain',
-    reason: 'No area damage or terrain modification is generated.'
-  },
-  {
-    pattern: /\b(enchantment|enchanted with|custom enchant)\b/i,
-    feature: 'enchantments',
-    reason: 'Custom enchantments are not registered. This is not a completed enchantment implementation.'
-  },
-  {
-    pattern: /\b(ai texture|generated texture|paint a png|dall-e|image model)\b/i,
-    feature: 'generated textures',
-    reason: 'Ollama does not draw PNGs. Paint textures on the Assets tab.'
+    pattern: /\b(dall-e|stable diffusion|image model|ai[- ]drawn texture)\b/i,
+    feature: 'AI-drawn textures',
+    reason: 'Ollama does not draw PNGs. CraftStudio can emit a procedural 32×32 item texture or copy a painted/imported PNG.'
   }
 ]
 
@@ -76,12 +60,12 @@ function extractQuotedName(prompt: string): string | null {
 }
 
 export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): ProjectSpec {
-  const text = prompt.trim() || manifest.description || manifest.name
+  const text = preservePrompt(prompt.trim() || manifest.description || manifest.name)
   const itemName = extractQuotedName(text) ?? manifest.name
   const itemId = (toModId(itemName).replace(/^m(?=\d)/, '') || 'custom_item').slice(0, 24)
   const wantsRecipe = /\b(recipe|craft|crafting|shapeless|shaped)\b/i.test(text)
   const wantsShaped = /\bshaped\b/i.test(text)
-  const wantsMob = /\b(mob|entity|entities|creature)\b/i.test(text)
+  const wantsMob = promptRequestsCustomMob(text)
   const wantsGui = /\b(gui|screen|inventory menu|container|menu)\b/i.test(text)
   const wantsSpawn = /\b(spawn|spawns in|biome spawn)\b/i.test(text)
   const wantsOre = /\b(ore|vein|ore gen|worldgen)\b/i.test(text)
@@ -91,6 +75,14 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
   const wantsPillar = /\b(pillar|column|axis block|log.?shaped)\b/i.test(text)
   const wantsSlabStairs = /\b(slab|stairs|stair)\b/i.test(text)
   const unsupportedRequests = collectUnsupportedFromPrompt(text)
+  const extracted = extractShapedRecipeFromPrompt(text)
+  const weapon = inferWeaponFromPrompt(text)
+  if (weapon && manifest.platform !== 'forge') {
+    unsupportedRequests.push({
+      feature: 'weapon abilities',
+      reason: 'Smash, Life Steal, shockwave, and terrain Java are generated for Forge 1.21.1 only.'
+    })
+  }
   if (wantsMob && (manifest.platform === 'paper' || manifest.platform === 'spigot')) {
     unsupportedRequests.push({
       feature: 'new client entity types',
@@ -116,88 +108,128 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
     })
   }
 
-  return parseProjectSpec({
-    schemaVersion: 1,
-    modId: toModId(manifest.name),
-    displayName: manifest.name,
-    description: manifest.description || text,
-    packageName: toPackageName(toModId(manifest.name)),
-    mainClass: toMainClass(manifest.name),
-    items: [
+  const items = [
+    {
+      id: itemId,
+      displayName: titleCase(itemName),
+      description: shortSummary(text, 400),
+      maxCount: weapon ? 1 : 64,
+      rarity: weapon ? 'epic' : 'common',
+      modelStyle: weapon ? 'handheld' : 'generated',
+      durability: weapon ? 500 : 0,
+      attributes: weapon
+        ? [
+            { id: 'attack_damage', amount: 8, slot: 'mainhand' },
+            { id: 'attack_speed', amount: -2.4, slot: 'mainhand' }
+          ]
+        : [],
+      weapon
+    }
+  ]
+
+  let recipes: unknown[] = []
+  if (extracted) {
+    recipes = [
       {
-        id: itemId,
-        displayName: titleCase(itemName),
-        description: text.slice(0, 400),
-        maxCount: 64,
-        rarity: 'common',
-        durability: 0,
-        attributes: []
+        id: `${itemId.slice(0, 18)}_shaped`,
+        type: 'shaped',
+        resultItemId: itemId,
+        resultCount: 1,
+        ingredients: [],
+        pattern: extracted.pattern,
+        keys: extracted.keys
       }
-    ],
-    recipes: wantsRecipe
-      ? [
-          wantsShaped
-            ? {
-                id: `${itemId.slice(0, 18)}_shaped`,
-                type: 'shaped',
-                resultItemId: itemId,
-                resultCount: 1,
-                ingredients: [],
-                pattern: [' X ', ' X ', ' S '],
-                keys: [
-                  { symbol: 'X', kind: 'vanilla', id: 'minecraft:iron_ingot' },
-                  { symbol: 'S', kind: 'vanilla', id: 'minecraft:stick' }
-                ]
-              }
-            : {
-                id: `${itemId.slice(0, 18)}_cobble`,
-                type: 'shapeless',
-                resultItemId: itemId,
-                resultCount: 1,
-                ingredients: [{ kind: 'vanilla', id: 'minecraft:cobblestone' }]
-              }
+    ]
+  } else if (wantsRecipe && wantsShaped) {
+    recipes = [
+      {
+        id: `${itemId.slice(0, 18)}_shaped`,
+        type: 'shaped',
+        resultItemId: itemId,
+        resultCount: 1,
+        ingredients: [],
+        pattern: [' X ', ' X ', ' S '],
+        keys: [
+          { symbol: 'X', kind: 'vanilla', id: 'minecraft:iron_ingot' },
+          { symbol: 'S', kind: 'vanilla', id: 'minecraft:stick' }
         ]
-      : [],
-    commands: [],
-    mobs: wantsMob
-      ? [
-          {
-            ...defaultMob(`${itemId.slice(0, 20)}_mob`),
-            displayName: `${titleCase(itemName)} Mob`,
-            preset: inferMobPreset(text),
-            spawn:
-              wantsSpawn && manifest.type === 'mod'
-                ? { enabled: true, biomes: ['plains'], weight: 8, minGroup: 1, maxGroup: 2 }
-                : defaultMob().spawn
-          }
-        ]
-      : [],
-    modGuis: wantsGui && manifest.type === 'mod' ? [defaultModGui()] : [],
-    pluginGuis: wantsGui && manifest.type === 'plugin' ? [defaultPluginGui()] : [],
-    blocks:
-      wantsBlock && manifest.type === 'mod'
+      }
+    ]
+  } else if (wantsRecipe) {
+    recipes = [
+      {
+        id: `${itemId.slice(0, 18)}_cobble`,
+        type: 'shapeless',
+        resultItemId: itemId,
+        resultCount: 1,
+        ingredients: [{ kind: 'vanilla', id: 'minecraft:cobblestone' }]
+      }
+    ]
+  }
+
+  const assembled = assembleGeneratedSpec({
+    identity: {
+      modId: toModId(manifest.name),
+      displayName: manifest.name,
+      description: shortSummary(manifest.description || text, 2000),
+      packageName: toPackageName(toModId(manifest.name)),
+      mainClass: toMainClass(manifest.name)
+    },
+    model: {
+      items,
+      recipes,
+      commands: [],
+      mobs: wantsMob
         ? [
             {
-              ...defaultBlock(`${itemId.slice(0, 16)}_block`),
-              displayName: `${titleCase(itemName)} Block`,
-              shape: wantsPillar ? 'pillar' : 'cube_all',
-              slab: wantsSlabStairs,
-              stairs: wantsSlabStairs
+              ...defaultMob(`${itemId.slice(0, 20)}_mob`),
+              displayName: `${titleCase(itemName)} Mob`,
+              preset: inferMobPreset(text),
+              spawn:
+                wantsSpawn && manifest.type === 'mod'
+                  ? { enabled: true, biomes: ['plains'], weight: 8, minGroup: 1, maxGroup: 2 }
+                  : defaultMob().spawn
             }
           ]
         : [],
-    worldgen:
-      manifest.type === 'mod'
-        ? [
-            ...(wantsOre ? [defaultWorldgen(`${itemId.slice(0, 16)}_vein`)] : []),
-            ...(wantsPatch ? [defaultSurfacePatch(`${itemId.slice(0, 14)}_patch`)] : []),
-            ...(wantsSpring ? [defaultSpring(`${itemId.slice(0, 14)}_spring`)] : [])
-          ]
-        : [],
-    unsupportedRequests,
+      modGuis: wantsGui && manifest.type === 'mod' ? [defaultModGui()] : [],
+      pluginGuis: wantsGui && manifest.type === 'plugin' ? [defaultPluginGui()] : [],
+      blocks:
+        wantsBlock && manifest.type === 'mod'
+          ? [
+              {
+                ...defaultBlock(`${itemId.slice(0, 16)}_block`),
+                displayName: `${titleCase(itemName)} Block`,
+                shape: wantsPillar ? 'pillar' : 'cube_all',
+                slab: wantsSlabStairs,
+                stairs: wantsSlabStairs
+              }
+            ]
+          : [],
+      worldgen:
+        manifest.type === 'mod'
+          ? [
+              ...(wantsOre ? [defaultWorldgen(`${itemId.slice(0, 16)}_vein`)] : []),
+              ...(wantsPatch ? [defaultSurfacePatch(`${itemId.slice(0, 14)}_patch`)] : []),
+              ...(wantsSpring ? [defaultSpring(`${itemId.slice(0, 14)}_spring`)] : [])
+            ]
+          : [],
+      config: {
+        enableWorldgen: wantsOre || wantsPatch || wantsSpring,
+        enableChestLoot: promptRequestsChestLoot(text),
+        spawnWeightScale: 1,
+        enableTerrainDestruction: Boolean(weapon?.terrain?.enabled)
+      },
+      unsupportedRequests,
+      source: 'template'
+    },
+    originalPrompt: text,
     source: 'template',
-    prompt: text
+    fallbackItems: items,
+    fallbackRecipes: recipes
   })
+
+  return parseProjectSpec(assembled)
 }
 
 function inferMobPreset(text: string): ReturnType<typeof defaultMob>['preset'] {
@@ -213,7 +245,7 @@ function inferMobPreset(text: string): ReturnType<typeof defaultMob>['preset'] {
   if (/\b(avoid players|skittish|shy)\b/i.test(text)) {
     return 'avoid_players'
   }
-  if (/\b(hostile|zombie|attack|melee)\b/i.test(text)) {
+  if (/\b(hostile|zombie|attack|melee)\b/i.test(text) && promptRequestsCustomMob(text)) {
     return 'hostile_melee'
   }
   if (/\b(flee|neutral)\b/i.test(text)) {
@@ -228,6 +260,9 @@ export function promptLooksComplex(prompt: string): boolean {
     return true
   }
   if (UNSUPPORTED_PATTERNS.some((entry) => entry.pattern.test(text))) {
+    return true
+  }
+  if (inferWeaponFromPrompt(text)) {
     return true
   }
   return /\b(and also|plus|several|multiple items|enchant|effect|potion|armor|tool)\b/i.test(text)

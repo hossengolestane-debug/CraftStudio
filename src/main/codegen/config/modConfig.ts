@@ -6,7 +6,8 @@ export function defaultConfigJson(spec: ProjectSpec): string {
     {
       enableWorldgen: spec.config.enableWorldgen,
       enableChestLoot: spec.config.enableChestLoot,
-      spawnWeightScale: spec.config.spawnWeightScale
+      spawnWeightScale: spec.config.spawnWeightScale,
+      enableTerrainDestruction: spec.config.enableTerrainDestruction
     },
     null,
     2
@@ -26,6 +27,7 @@ import net.fabricmc.loader.api.FabricLoader;
 public final class CraftStudioConfig {
   public static boolean enableWorldgen = ${spec.config.enableWorldgen};
   public static boolean enableChestLoot = ${spec.config.enableChestLoot};
+  public static boolean enableTerrainDestruction = ${spec.config.enableTerrainDestruction};
   public static double spawnWeightScale = ${spec.config.spawnWeightScale}d;
 
   private CraftStudioConfig() {}
@@ -44,6 +46,9 @@ public final class CraftStudioConfig {
       }
       if (json.has("enableChestLoot")) {
         enableChestLoot = json.get("enableChestLoot").getAsBoolean();
+      }
+      if (json.has("enableTerrainDestruction")) {
+        enableTerrainDestruction = json.get("enableTerrainDestruction").getAsBoolean();
       }
       if (json.has("spawnWeightScale")) {
         spawnWeightScale = Math.min(4.0d, Math.max(0.25d, json.get("spawnWeightScale").getAsDouble()));
@@ -70,6 +75,7 @@ import ${paths};
 public final class CraftStudioConfig {
   public static boolean enableWorldgen = ${spec.config.enableWorldgen};
   public static boolean enableChestLoot = ${spec.config.enableChestLoot};
+  public static boolean enableTerrainDestruction = ${spec.config.enableTerrainDestruction};
   public static double spawnWeightScale = ${spec.config.spawnWeightScale}d;
 
   private CraftStudioConfig() {}
@@ -88,6 +94,9 @@ public final class CraftStudioConfig {
       }
       if (json.has("enableChestLoot")) {
         enableChestLoot = json.get("enableChestLoot").getAsBoolean();
+      }
+      if (json.has("enableTerrainDestruction")) {
+        enableTerrainDestruction = json.get("enableTerrainDestruction").getAsBoolean();
       }
       if (json.has("spawnWeightScale")) {
         spawnWeightScale = Math.min(4.0d, Math.max(0.25d, json.get("spawnWeightScale").getAsDouble()));
@@ -124,7 +133,8 @@ export function planConfigFiles(
         `On first launch the loader writes \`config/${spec.modId}.json\` with these toggles:`,
         '',
         '- `enableWorldgen` — skip biome feature injection when false (JSON features still ship in the jar).',
-        '- `enableChestLoot` — skip Fabric loot modify / Forge-NeoForge GLM apply when false.',
+        '- `enableChestLoot` — skip Fabric loot modify / Forge-NeoForge GLM apply when false. Defaults off unless requested.',
+        '- `enableTerrainDestruction` — when false, bounded terrain edits are skipped. Combat shockwaves still run.',
         `- \`spawnWeightScale\` — multiplies biome spawn weights (0.25–4). Default ${spec.config.spawnWeightScale}.`,
         '',
         flavor === 'fabric'

@@ -1,4 +1,5 @@
 import type { ProjectSpec, SpecRecipe } from '../../../shared/spec'
+import { enchantmentResultComponents } from '../weapons/forgeWeapon'
 import type { PlannedFile } from '../types'
 
 function ingredientRef(spec: ProjectSpec, kind: 'vanilla' | 'mod', id: string): { item: string } {
@@ -6,9 +7,14 @@ function ingredientRef(spec: ProjectSpec, kind: 'vanilla' | 'mod', id: string): 
 }
 
 export function recipeJson(spec: ProjectSpec, recipe: SpecRecipe): Record<string, unknown> {
-  const result = {
+  const item = spec.items.find((entry) => entry.id === recipe.resultItemId)
+  const components = item ? enchantmentResultComponents(item) : undefined
+  const result: Record<string, unknown> = {
     id: `${spec.modId}:${recipe.resultItemId}`,
     count: recipe.resultCount
+  }
+  if (components) {
+    result.components = components
   }
   if (recipe.type === 'shaped') {
     const key: Record<string, { item: string }> = {}

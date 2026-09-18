@@ -452,7 +452,20 @@ export function DesignGenerate({
                     })
                   }
                 />
-                Enable chest loot inject
+                Enable chest loot inject (off unless you asked for chests)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={workingSpec.config.enableTerrainDestruction}
+                  onChange={(event) =>
+                    applyWorking({
+                      ...workingSpec,
+                      config: { ...workingSpec.config, enableTerrainDestruction: event.target.checked }
+                    })
+                  }
+                />
+                Enable terrain destruction (shockwave still runs when this is off)
               </label>
               <Field label="Spawn weight scale (0.25–4)" htmlFor="config-spawn-scale">
                 <TextInput
@@ -544,7 +557,8 @@ export function DesignGenerate({
         <Card className="space-y-3">
           <h2 className="text-lg font-semibold">Apply to project</h2>
           <p className="text-sm text-muted">
-            Apply writes Gradle and Java from trusted templates. Existing files show a change summary before overwrite.
+            Existing project files are not removed or overwritten until you review the diff. Apply stays preview-only
+            until this draft matches the last Review.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -564,7 +578,17 @@ export function DesignGenerate({
             <Button
               disabled={busy}
               onClick={() => {
+                const previewMatches =
+                  preview && workingSpec && JSON.stringify(preview.spec) === JSON.stringify(workingSpec)
                 setBusy(true)
+                if (!previewMatches) {
+                  void api
+                    .previewApply(project.manifest.id, workingSpec)
+                    .then((result) => setPreview({ ...result, applied: false }))
+                    .catch((err) => setError(asAppError(err)))
+                    .finally(() => setBusy(false))
+                  return
+                }
                 void api
                   .applySpec(project.manifest.id, workingSpec, true)
                   .then((result) => {
@@ -579,7 +603,9 @@ export function DesignGenerate({
                   .finally(() => setBusy(false))
               }}
             >
-              Apply files
+              {preview && workingSpec && JSON.stringify(preview.spec) === JSON.stringify(workingSpec)
+                ? 'Apply files'
+                : 'Review diff first'}
             </Button>
           </div>
           {preview ? (

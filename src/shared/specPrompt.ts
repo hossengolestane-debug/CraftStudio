@@ -1,5 +1,4 @@
 import { ITEM_ATTRIBUTES } from './itemStats'
-import { VANILLA_ITEMS } from './spec'
 
 export const MINIMAL_VALID_SPEC_EXAMPLE = {
   schemaVersion: 1,
@@ -37,8 +36,8 @@ export const MINIMAL_VALID_SPEC_EXAMPLE = {
   commands: [{ name: 'givecopperrod', description: 'Name only; implementation is a stub on mods.' }],
   unsupportedRequests: [
     {
-      feature: 'life steal',
-      reason: 'No on-hit healing effect is generated. Schema-valid is not the same as implemented.'
+      feature: 'behavior trees',
+      reason: 'Full behavior trees are out of scope. Schema-valid is not the same as implemented.'
     }
   ],
   source: 'ollama',
@@ -52,10 +51,15 @@ Rules:
 - Item attributes are objects { id, amount, slot? }. id MUST be one of: ${ITEM_ATTRIBUTES.join(', ')}.
 - NEVER emit Minecraft API names (generic.attackDamage, generic.attack_damage, GENERIC_ATTACK_DAMAGE, ATTACK_DAMAGE). Use the CraftStudio enums above.
 - recipes: shapeless uses ingredients[{kind,id}]. shaped uses pattern (1-3 rows, each 1-3 of space/A-Z/#/.) AND keys[{symbol,kind,id}]. symbol is one A-Z letter. resultItemId is a spec item id, not a minecraft: id.
-- Vanilla ingredient ids must be from this allowlist: ${VANILLA_ITEMS.join(', ')}. If the user asked for something else (breeze_rod, netherite_ingot, …), keep that request in unsupportedRequests. Do not substitute iron_ingot or another item.
+- Vanilla ingredient ids must exist in the 1.21.1 item registry (including netherite_ingot, heavy_core, breeze_rod, enchanted_golden_apple, netherite_sword). If the user asked for an unknown id, keep that id and record unsupportedRequests. NEVER substitute iron_ingot, stick, or another item.
+- Preserve the exact shaped pattern and keys the user wrote. Do not invent a default sword recipe.
+- "Affects hostile mobs" is a combat filter. Do NOT create a custom mob, entity, or *_mob entry unless the user explicitly asked to add/create a mob.
+- Chest loot, worldgen, and other optional systems stay off (enableChestLoot=false, enableWorldgen=false) unless the user explicitly asked for them.
+- items[].weapon is the reusable combat object: smash, enchantments[{id,level}], lifeSteal{enabled,percent,capHealth,hostileOnly}, shockwave{enabled,minFallBlocks,cooldownSeconds,radius,damage,upwardImpulse}, terrain{enabled,radius,maxBlocks}, textureStyle.
+- For Forge 1.21.1, those weapon fields are generated as executable Java. Put only truly unimplemented asks (dimensions, behavior trees, DALL-E textures) in unsupportedRequests.
 - commands: objects { name, description? }, not bare strings. Names are stubbed (registered as a literal on Fabric/Forge/NeoForge/Paper when possible). They are not a command engine.
-- unsupportedRequests: objects { feature, reason }, not bare strings. Use this for mace smash/Density/Breach, life steal, shockwaves, terrain edits, custom enchantments, AI-drawn textures, dimensions, behavior trees.
-- Schema-valid JSON is not an implemented feature. Do not claim those gaps are done.
+- unsupportedRequests: objects { feature, reason }, not bare strings.
+- Schema-valid JSON is not an implemented feature. Do not claim unimplemented abilities are working.
 - Never include file paths, shell commands, Gradle, or Java source.
 
 Minimal valid example:
@@ -67,5 +71,7 @@ export const SPEC_REPAIR_CONSTRAINTS = `Constraints (must match Zod + OLLAMA_SPE
 - recipes need resultItemId (spec item id). shaped pattern rows are 1–3 of [ A-Z#.]; keys are [{symbol,kind,id}] with symbol A–Z.
 - commands are objects {name, description?}, not strings.
 - unsupportedRequests are objects {feature, reason}, not strings.
-- Do not swap off-allowlist ingredients. Keep the asked id and add unsupportedRequests.
-- Cross-field rules Zod still checks: resultItemId exists in items; pattern letters match keys; vanilla allowlist; durability requires maxCount 1.`
+- Do not swap unknown ingredients. Keep the asked id and add unsupportedRequests.
+- Do not add mobs or chest loot the user did not ask to create.
+- items[].weapon carries smash / life steal / shockwave / terrain / enchantments when requested.
+- Cross-field rules Zod still checks: resultItemId exists in items; pattern letters match keys; 1.21.1 registry ingredients; durability requires maxCount 1.`

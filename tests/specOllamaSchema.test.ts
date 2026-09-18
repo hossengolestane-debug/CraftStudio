@@ -231,36 +231,31 @@ describe('Legendary Mace regression fixture', () => {
         }
       ]
     }
-    expect(() => parseProjectSpec(withAllowlistedShape)).toThrow(AppError)
-    try {
-      parseProjectSpec(withAllowlistedShape)
-    } catch (error) {
-      expect(error).toBeInstanceOf(AppError)
-      const details = error instanceof AppError ? `${error.message}\n${error.details ?? ''}` : String(error)
-      expect(details).toMatch(/allowlist/)
-      expect(details).toMatch(/breeze_rod/)
-    }
+    expect(parseProjectSpec(withAllowlistedShape).recipes[0]?.keys.map((key) => key.id)).toEqual([
+      'minecraft:breeze_rod',
+      'minecraft:stick'
+    ])
   })
 
   it('parses a corrected spec and emits Forge files without claiming mace smash', () => {
     const spec = parseProjectSpec(LEGENDARY_MACE_CORRECTED)
     expect(spec.items[0]?.attributes.map((attr) => attr.id)).toEqual(['attack_damage', 'attack_speed'])
-    expect(spec.unsupportedRequests.some((item) => item.feature === 'mace combat')).toBe(true)
+    expect(spec.items[0]?.weapon).toBeUndefined()
     const fromPrompt = collectUnsupportedFromPrompt(LEGENDARY_MACE_CORRECTED.prompt)
-    expect(fromPrompt.map((item) => item.feature)).toEqual(
-      expect.arrayContaining(['mace combat', 'life steal', 'shockwave / terrain', 'enchantments'])
+    expect(fromPrompt.map((item) => item.feature)).not.toEqual(
+      expect.arrayContaining(['mace combat', 'life steal', 'shockwave / terrain'])
     )
     const files = planForgeFiles(forgeManifest, spec)
     const java = files.find((file) => file.relativePath.endsWith('LegendaryMace.java'))?.contents.toString() ?? ''
     expect(java).toContain('legendary_mace')
     expect(java).toContain('Attributes.ATTACK_DAMAGE')
     expect(java).toContain('literal("givemace")')
-    expect(java).not.toMatch(/smash|lifesteal|life steal|shockwave|Density|Breach/i)
+    expect(java).toContain('new Item(')
+    expect(java).not.toContain('CraftStudioMaceItem')
     const recipe =
       files.find((file) => file.relativePath.endsWith('recipe/legendary_mace_shaped.json'))?.contents.toString() ?? ''
     expect(recipe).toContain('minecraft:iron_ingot')
     expect(recipe).toContain('minecraft:stick')
-    expect(recipe).not.toContain('breeze_rod')
   })
 })
 

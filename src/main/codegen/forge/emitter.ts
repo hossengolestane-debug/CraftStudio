@@ -33,6 +33,8 @@ import { planBiomeModifierFiles } from '../spawn/biomeTables'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
 import { planOreBiomeModifiers, planOreFeatureJson, planWorldgenDocs } from '../worldgen/oreVeins'
+import { needsForgeWeaponCode, planForgeWeaponFiles } from '../weapons/forgeWeapon'
+import { hasWeaponBehavior } from '../../../shared/weaponSpec'
 
 function propsEscape(value: string): string {
   return value.replace(/\r?\n/g, ' ').replace(/\\/g, '\\\\')
@@ -40,10 +42,16 @@ function propsEscape(value: string): string {
 
 function itemRegs(spec: ProjectSpec): string {
   return spec.items
-    .map(
-      (item) => `  public static final RegistryObject<Item> ${toConstName(item.id)} = ITEMS.register("${item.id}",
-    () -> new Item(${mojangItemProperties(item)}));`
-    )
+    .map((item) => {
+      const props = mojangItemProperties(item)
+      const ctor = item.weapon?.smash
+        ? `new CraftStudioMaceItem(${props}, CraftStudioWeaponAbilities.${toConstName(item.id)})`
+        : hasWeaponBehavior(item.weapon)
+          ? `new CraftStudioAbilityItem(${props}, CraftStudioWeaponAbilities.${toConstName(item.id)})`
+          : `new Item(${props})`
+      return `  public static final RegistryObject<Item> ${toConstName(item.id)} = ITEMS.register("${item.id}",
+    () -> ${ctor});`
+    })
     .join('\n\n')
 }
 
@@ -305,7 +313,11 @@ jar {
     .map((mob) => `      event.put(${toConstName(mob.id)}.get(), ${entityClassName(mob.id)}.createAttributes().build());`)
     .join('\n')
 
-  const creative = spec.items.map((item) => `      event.accept(${toConstName(item.id)});`).join('\n')
+  const combatItems = spec.items.filter((item) => hasWeaponBehavior(item.weapon))
+  const ingredientItems = spec.items.filter((item) => !hasWeaponBehavior(item.weapon))
+  const creativeIngredients = ingredientItems.map((item) => `      event.accept(${toConstName(item.id)});`).join('\n')
+  const creativeCombat = combatItems.map((item) => `      event.accept(${toConstName(item.id)});`).join('\n')
+  const injectLoot = spec.config.enableChestLoot
 
   files.push({
     relativePath: `src/main/java/${packagePath}/${spec.mainClass}.java`,
@@ -328,7 +340,7 @@ ${forgeNeedsSlab(spec) ? 'import net.minecraft.world.level.block.SlabBlock;' : '
 ${forgeNeedsStairs(spec) ? 'import net.minecraft.world.level.block.StairBlock;' : ''}
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;` : ''}
-${spec.items.length > 0 || spec.blocks.length > 0 ? `import net.minecraftforge.common.loot.IGlobalLootModifier;
+${injectLoot && (spec.items.length > 0 || spec.blocks.length > 0) ? `import net.minecraftforge.common.loot.IGlobalLootModifier;
 import com.mojang.serialization.MapCodec;` : ''}
 ${mojangNeedsAttributeImports(spec.items) ? `import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -348,13 +360,13 @@ public class ${spec.mainClass} {
   public static final String MOD_ID = "${javaEscape(spec.modId)}";
   public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MOD_ID);
 ${spec.blocks.length ? `  public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MOD_ID);
-  public static final DeferredRegister<MapCodec<? extends IGlobalLootModifier>> LOOT_MODIFIERS = DeferredRegister.create(ForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, MOD_ID);` : spec.items.length > 0 ? `  public static final DeferredRegister<MapCodec<? extends IGlobalLootModifier>> LOOT_MODIFIERS = DeferredRegister.create(ForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, MOD_ID);` : ''}
+${injectLoot ? `  public static final DeferredRegister<MapCodec<? extends IGlobalLootModifier>> LOOT_MODIFIERS = DeferredRegister.create(ForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, MOD_ID);` : ''}` : injectLoot && spec.items.length > 0 ? `  public static final DeferredRegister<MapCodec<? extends IGlobalLootModifier>> LOOT_MODIFIERS = DeferredRegister.create(ForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, MOD_ID);` : ''}
 ${spec.mobs.length ? `  public static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, MOD_ID);` : ''}
 ${spec.modGuis.length ? forgeLikeMenuFields(spec, 'forge') : ''}
 
 ${itemRegs(spec)}
 ${spec.blocks.length ? `\n${forgeBlockRegs(spec)}` : ''}
-${spec.items.length > 0 || spec.blocks.length > 0 ? `  public static final RegistryObject<MapCodec<? extends IGlobalLootModifier>> ADD_BONUS_CHEST = LOOT_MODIFIERS.register("add_bonus_chest", () -> AddBonusChestModifier.CODEC);` : ''}
+${injectLoot && (spec.items.length > 0 || spec.blocks.length > 0) ? `  public static final RegistryObject<MapCodec<? extends IGlobalLootModifier>> ADD_BONUS_CHEST = LOOT_MODIFIERS.register("add_bonus_chest", () -> AddBonusChestModifier.CODEC);` : ''}
 ${entityRegs}
 
   public ${spec.mainClass}(FMLJavaModLoadingContext context) {
@@ -362,7 +374,7 @@ ${entityRegs}
     IEventBus bus = context.getModEventBus();
     ${spec.blocks.length ? 'BLOCKS.register(bus);' : ''}
     ITEMS.register(bus);
-    ${spec.items.length > 0 || spec.blocks.length > 0 ? 'LOOT_MODIFIERS.register(bus);' : ''}
+    ${injectLoot && (spec.items.length > 0 || spec.blocks.length > 0) ? 'LOOT_MODIFIERS.register(bus);' : ''}
     ${spec.mobs.length ? 'ENTITIES.register(bus);' : ''}
     ${spec.modGuis.length ? 'MENUS.register(bus);' : ''}
     bus.addListener(this::addCreative);
@@ -372,8 +384,15 @@ ${entityRegs}
 
   private void addCreative(BuildCreativeModeTabContentsEvent event) {
     if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
-${creative}
+${creativeIngredients}
 ${forgeBlockCreative(spec)}
+    }
+    ${
+      combatItems.length
+        ? `if (event.getTabKey() == CreativeModeTabs.COMBAT) {
+${creativeCombat}
+    }`
+        : ''
     }
   }
 
@@ -390,6 +409,7 @@ ${forgeLikeCommandMethod(spec)}
 `
   })
 
+  files.push(...planForgeWeaponFiles(spec, packagePath))
   files.push(...planEntityFiles(spec, packagePath))
   if (spec.mobs.length > 0) {
     const clientStyle = forgeLikeClientStyle('forge', pins.minecraft)
@@ -446,9 +466,11 @@ ${forgeLikeCommandMethod(spec)}
   files.push(...planOreFeatureJson(spec))
   files.push(...planOreBiomeModifiers(spec, 'forge'))
   files.push(...planEntityLootFiles(spec))
-  files.push(...planItemLootFiles(spec))
-  files.push(...planLootDocs(spec, true))
-  files.push(...planForgeLikeLootModifierFiles(spec, packagePath, 'forge'))
+  if (injectLoot) {
+    files.push(...planItemLootFiles(spec))
+    files.push(...planForgeLikeLootModifierFiles(spec, packagePath, 'forge'))
+  }
+  files.push(...planLootDocs(spec, injectLoot))
   files.push(...planWorldgenDocs(spec, 'forge'))
   files.push(...planForgeLikeMenuFiles(spec, packagePath, 'forge'))
 
@@ -477,8 +499,13 @@ ${forgeLikeCommandMethod(spec)}
       spec.blocks.length > 0
         ? 'Custom blocks are cube_all or pillar (axis), plus optional slab/stairs. Paint a block texture in Assets. See BLOCKS.md and CONFIG.md.'
         : '',
-      spec.items.length > 0
+      injectLoot
         ? 'Chest bonus loot is injected via a Forge global loot modifier into four allowlisted vanilla chests. See LOOT.md.'
+        : spec.items.length > 0
+          ? 'Chest bonus loot is off unless enableChestLoot is explicitly requested.'
+          : '',
+      needsForgeWeaponCode(spec)
+        ? 'Weapon smash / Life Steal / shockwave / terrain are generated as Forge 1.21.1 Java. See WEAPON_REQUIREMENTS.md. Compile and in-game runtime are separate statuses.'
         : '',
       '',
       '## Permission nodes',

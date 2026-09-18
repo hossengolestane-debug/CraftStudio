@@ -109,7 +109,13 @@ const phase8Spec = parseProjectSpec({
   ],
   unsupportedRequests: [],
   source: 'editor',
-  prompt: 'phase 8'
+  prompt: 'phase 8',
+  config: {
+    enableWorldgen: true,
+    enableChestLoot: true,
+    spawnWeightScale: 1,
+    enableTerrainDestruction: true
+  }
 })
 
 describe('Phase 8 spec + emitters', () => {

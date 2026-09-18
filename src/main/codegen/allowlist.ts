@@ -24,7 +24,8 @@ export const TRUSTED_OUTPUT_PATHS = new Set([
   'LOOT.md',
   'BLOCKS.md',
   'CONFIG.md',
-  'DATAPACK.md'
+  'DATAPACK.md',
+  'WEAPON_REQUIREMENTS.md'
 ])
 
 export const BUILD_SCRIPT_PATHS = new Set([

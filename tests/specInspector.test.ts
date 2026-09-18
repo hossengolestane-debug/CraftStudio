@@ -34,10 +34,10 @@ describe('specification inspector helpers', () => {
   })
 
   it('keeps Legendary Mace generator rows honest', () => {
-    expect(LEGENDARY_MACE_GENERATOR_SUPPORT.every((row) => row.status === 'DESCRIPTION/UNSUPPORTED ONLY')).toBe(true)
+    expect(LEGENDARY_MACE_GENERATOR_SUPPORT.every((row) => row.status === 'IMPLEMENTED')).toBe(true)
     expect(HAND_PAINTED_TEXTURE_PIPELINE.status).toBe('IMPLEMENTED')
     expect(generatorSupportNote(0)).toBeNull()
-    expect(generatorSupportNote(1)).toMatch(/not the same as implemented/)
+    expect(generatorSupportNote(1)).toMatch(/remaining unsupportedRequests/)
   })
 
   it('allows a path-confined specification.json export', () => {
@@ -90,8 +90,8 @@ describe('specification export and applied status', () => {
   })
 })
 
-describe('Forge generator does not implement Legendary Mace extras', () => {
-  it('emits a generic item and records gaps without smash or life steal code', () => {
+describe('Forge generator stays generic when weapon fields are absent', () => {
+  it('emits a generic item without smash or life steal code', () => {
     const manifest: ProjectManifest = {
       id: 'bbbbbbbb-1111-4222-8333-444444444444',
       name: 'Legendary Mace',
@@ -136,15 +136,18 @@ describe('Forge generator does not implement Legendary Mace extras', () => {
       prompt: 'Legendary Mace with life steal'
     })
     const files = planForgeFiles(manifest, spec)
-    const java = files.map((file) => file.contents.toString()).join('\n')
+    const java = files
+      .filter((file) => file.relativePath.endsWith('.java'))
+      .map((file) => file.contents.toString())
+      .join('\n')
     expect(java).toContain('new Item(')
     expect(java).toContain('Attributes.ATTACK_DAMAGE')
-    expect(java).not.toMatch(/smash|lifesteal|life steal|shockwave|Enchantment|breakBlock/i)
+    expect(java).not.toMatch(/CraftStudioMaceItem|LivingDamageEvent|tryShockwave|lifeStealPercent/)
   })
 })
 
 describe('app version', () => {
-  it('is 1.0.5', () => {
-    expect(APP_VERSION).toBe('1.0.5')
+  it('is 1.0.6', () => {
+    expect(APP_VERSION).toBe('1.0.6')
   })
 })

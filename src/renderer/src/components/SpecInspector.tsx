@@ -90,21 +90,19 @@ export function SpecInspector({
           </ul>
         )}
         {supportNote ? <p className="mt-3 text-sm">{supportNote}</p> : null}
-        {draftSpec.unsupportedRequests.length > 0 ? (
-          <details className="mt-3">
-            <summary className="cursor-pointer text-sm font-medium underline-offset-2 hover:underline">
-              Generator support (Legendary Mace-style features)
-            </summary>
-            <ul className="mt-2 space-y-2 text-sm">
-              {LEGENDARY_MACE_GENERATOR_SUPPORT.map((row) => (
-                <li key={row.feature}>
-                  <span className="font-medium">{row.feature}</span>
-                  <span className="text-muted"> — {row.status}. {row.note}</span>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm font-medium underline-offset-2 hover:underline">
+            Generator support (Forge 1.21.1 weapons)
+          </summary>
+          <ul className="mt-2 space-y-2 text-sm">
+            {LEGENDARY_MACE_GENERATOR_SUPPORT.map((row) => (
+              <li key={row.feature}>
+                <span className="font-medium">{row.feature}</span>
+                <span className="text-muted"> — {row.status}. {row.note}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       </div>
 
       <div className="flex flex-wrap gap-2">

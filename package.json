@@ -1,6 +1,6 @@
 {
   "name": "craftstudio-local",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "description": "Desktop app for creating Minecraft Java Edition mods and server plugins with local Ollama.",
   "author": "CraftStudio",

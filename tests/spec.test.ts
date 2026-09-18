@@ -77,11 +77,11 @@ describe('project spec validation', () => {
             id: 'bad2',
             type: 'shapeless',
             resultItemId: 'river_stone',
-            ingredients: [{ kind: 'vanilla', id: 'minecraft:nether_star' }]
+            ingredients: [{ kind: 'vanilla', id: 'minecraft:not_a_real_item_xyz' }]
           }
         ]
       })
-    ).toThrow(/allowlist/)
+    ).toThrow(/registry/)
   })
 
   it('extracts JSON from fenced model output and rejects garbage', () => {

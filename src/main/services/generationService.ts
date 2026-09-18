@@ -5,9 +5,10 @@ import { AppError } from '../../shared/errors'
 import {
   compactTemplateHint,
   isResourceExhaustionMessage,
-  OLLAMA_PROMPT_USER_CAP,
   OLLAMA_REPAIR_ASSISTANT_CAP
 } from '../../shared/ollamaLimits'
+import { modelPromptExcerpt, preservePrompt } from '../../shared/promptPreserve'
+import { assembleGeneratedSpec } from '../../shared/specMerge'
 import {
   extractJsonObject,
   OLLAMA_SPEC_JSON_SCHEMA,
@@ -23,6 +24,7 @@ import { collectUnsupportedFromPrompt, inferSpecFromPrompt, promptLooksComplex }
 import type { AppSettings, ProjectRecord } from '../../shared/types'
 import { isBuildScriptPath } from '../codegen/allowlist'
 import { attachGeneratedTextures } from '../codegen/pack/planner'
+import { renderWeaponTexture, textureStyleForItem } from '../codegen/textures/proceduralWeapon'
 import { assertCanGenerate, planAdapterFiles } from '../codegen/plan'
 import { diffPlannedFiles, writePlannedFiles, type FileChange } from './filePlan'
 import type { ActivityService } from './activityService'
@@ -168,7 +170,7 @@ export class GenerationService {
       assertCanGenerate(record.manifest.platform, record.manifest.minecraftVersion)
 
       const settings = await this.settings.get()
-      const text = prompt.trim() || record.manifest.description || record.manifest.name
+      const text = preservePrompt(prompt.trim() || record.manifest.description || record.manifest.name)
       const human = `Requesting the ${record.manifest.name} specification.`
       options.onProgress?.({ stage: 'infer', message: human })
       this.activity?.record({
@@ -232,10 +234,13 @@ export class GenerationService {
     assertCanGenerate(record.manifest.platform, record.manifest.minecraftVersion)
     const spec = parseProjectSpec(specInput)
     const root = (await this.settings.get()).projectsPath
-    const textures = await loadProjectTextures(root, record.directoryName, [
-      ...spec.items.map((item) => item.id),
-      ...spec.blocks.map((block) => block.id)
-    ])
+    const textures = await withGeneratedItemTextures(
+      spec,
+      await loadProjectTextures(root, record.directoryName, [
+        ...spec.items.map((item) => item.id),
+        ...spec.blocks.map((block) => block.id)
+      ])
+    )
     const files = attachGeneratedTextures(planAdapterFiles(record.manifest, spec), record.manifest, spec, textures)
     const specFile = {
       relativePath: SPEC_FILENAME,
@@ -265,10 +270,13 @@ export class GenerationService {
 
     const record = await this.projects.get(projectId)
     const root = (await this.settings.get()).projectsPath
-    const textures = await loadProjectTextures(
-      root,
-      record.directoryName,
-      [...preview.spec.items.map((item) => item.id), ...preview.spec.blocks.map((block) => block.id)]
+    const textures = await withGeneratedItemTextures(
+      preview.spec,
+      await loadProjectTextures(
+        root,
+        record.directoryName,
+        [...preview.spec.items.map((item) => item.id), ...preview.spec.blocks.map((block) => block.id)]
+      )
     )
     const files = attachGeneratedTextures(
       planAdapterFiles(record.manifest, preview.spec),
@@ -340,7 +348,8 @@ export class GenerationService {
       }
     }
 
-    const userPrompt = prompt.slice(0, OLLAMA_PROMPT_USER_CAP)
+    const storedPrompt = preservePrompt(prompt)
+    const { excerpt: userPrompt } = modelPromptExcerpt(storedPrompt)
     const hint = compactTemplateHint(fallback)
     const settingsSnap = {
       model,
@@ -518,13 +527,23 @@ export class GenerationService {
       onProgress?.({ stage: 'validate', message: 'Validating the specification JSON.' })
       try {
         const spec = mergeUnsupported(
-          parseProjectSpec({
-            ...fallback,
-            ...Object(extractJsonObject(current)),
-            source: 'merged',
-            prompt
-          }),
-          collectUnsupportedFromPrompt(prompt)
+          parseProjectSpec(
+            assembleGeneratedSpec({
+              identity: {
+                modId: fallback.modId,
+                displayName: fallback.displayName,
+                description: fallback.description,
+                packageName: fallback.packageName,
+                mainClass: fallback.mainClass
+              },
+              model: extractJsonObject(current),
+              originalPrompt: storedPrompt,
+              source: 'ollama',
+              fallbackItems: fallback.items,
+              fallbackRecipes: []
+            })
+          ),
+          collectUnsupportedFromPrompt(storedPrompt)
         )
         onProgress?.({ stage: 'done', message: 'Validated specification from Ollama + schema checks.' })
         this.activity?.record({
@@ -541,7 +560,7 @@ export class GenerationService {
           repairAttempts,
           remainingProblems: spec.unsupportedRequests.map((item) => `${item.feature}: ${item.reason}`),
           ollamaNote:
-            'Model output was independently validated. Schema-valid is not the same as implemented mace smash, life steal, shockwaves, enchantments, or AI textures.',
+            'Model output was independently validated. Forge 1.21.1 weapon fields generate executable Java. Compile and Minecraft runtime stay unverified until those steps run.',
           success: true,
           requestId
         }
@@ -646,6 +665,23 @@ export class GenerationService {
       requestId
     }
   }
+}
+
+async function withGeneratedItemTextures(
+  spec: ProjectSpec,
+  existing: Record<string, Buffer>
+): Promise<Record<string, Buffer>> {
+  const textures = { ...existing }
+  for (const item of spec.items) {
+    if (textures[item.id]) {
+      continue
+    }
+    if (textureStyleForItem(item) === 'none') {
+      continue
+    }
+    textures[item.id] = renderWeaponTexture(item)
+  }
+  return textures
 }
 
 export function summarizeBuildScriptGate(changes: FileChange[]): string {

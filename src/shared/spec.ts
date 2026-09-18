@@ -6,6 +6,13 @@ import { ITEM_ATTRIBUTE_CAP, ITEM_ATTRIBUTE_SLOTS, ITEM_ATTRIBUTES } from './ite
 import { DEFAULT_MOB_SPAWN, SPAWN_BIOMES } from './spawn'
 import { normalizeSpecDraft } from './specNormalize'
 import { SPEC_FILENAME } from './types'
+import { isVanillaItemId } from './vanillaRegistry'
+import {
+  filterCompatibleEnchantments,
+  itemWeaponSchema,
+  OLLAMA_WEAPON_SCHEMA,
+  weaponKind
+} from './weaponSpec'
 import {
   isSpringFluid,
   isSurfacePatchPlant,
@@ -22,37 +29,8 @@ export { MOB_GOALS, MOB_GOAL_CAP, MOB_TARGETING } from './goals'
 
 export const SPEC_SCHEMA_VERSION = 1
 export { SPEC_FILENAME }
-
-export const VANILLA_ITEMS = [
-  'minecraft:stick',
-  'minecraft:cobblestone',
-  'minecraft:stone',
-  'minecraft:dirt',
-  'minecraft:iron_ingot',
-  'minecraft:gold_ingot',
-  'minecraft:diamond',
-  'minecraft:coal',
-  'minecraft:oak_planks',
-  'minecraft:string',
-  'minecraft:leather',
-  'minecraft:paper',
-  'minecraft:glass',
-  'minecraft:sand',
-  'minecraft:gravel',
-  'minecraft:wheat',
-  'minecraft:egg',
-  'minecraft:redstone',
-  'minecraft:iron_nugget',
-  'minecraft:gold_nugget',
-  'minecraft:flint',
-  'minecraft:bone',
-  'minecraft:slime_ball',
-  'minecraft:clay_ball',
-  'minecraft:brick',
-  'minecraft:charcoal',
-  'minecraft:copper_ingot',
-  'minecraft:amethyst_shard'
-] as const
+export { VANILLA_ITEMS, isVanillaItemId } from './vanillaRegistry'
+export type { SpecWeapon, SpecWeaponEnchantment } from './weaponSpec'
 
 const ident = z
   .string()
@@ -88,7 +66,8 @@ const itemSchema = z.object({
   modelStyle: z.enum(ITEM_MODEL_STYLES).default('generated'),
   layer1: z.boolean().default(false),
   durability: z.number().int().min(0).max(4096).default(0),
-  attributes: z.array(itemAttributeSchema).max(ITEM_ATTRIBUTE_CAP).default([])
+  attributes: z.array(itemAttributeSchema).max(ITEM_ATTRIBUTE_CAP).default([]),
+  weapon: itemWeaponSchema.optional()
 })
 
 const mobDropSchema = z.object({
@@ -220,9 +199,10 @@ const blockSchema = z.object({
 })
 
 const configSchema = z.object({
-  enableWorldgen: z.boolean().default(true),
-  enableChestLoot: z.boolean().default(true),
-  spawnWeightScale: z.number().min(0.25).max(4).default(1)
+  enableWorldgen: z.boolean().default(false),
+  enableChestLoot: z.boolean().default(false),
+  spawnWeightScale: z.number().min(0.25).max(4).default(1),
+  enableTerrainDestruction: z.boolean().default(true)
 })
 
 const worldgenSchema = z.object({
@@ -271,10 +251,15 @@ export const projectSpecSchema = z.object({
   modGuis: z.array(modGuiSchema).max(4).default([]),
   pluginGuis: z.array(pluginGuiSchema).max(4).default([]),
   worldgen: z.array(worldgenSchema).max(WORLDGEN_ENTRY_CAP).default([]),
-  config: configSchema.default({ enableWorldgen: true, enableChestLoot: true, spawnWeightScale: 1 }),
+  config: configSchema.default({
+    enableWorldgen: false,
+    enableChestLoot: false,
+    spawnWeightScale: 1,
+    enableTerrainDestruction: true
+  }),
   unsupportedRequests: z.array(unsupportedSchema).max(16).default([]),
   source: z.enum(['template', 'ollama', 'merged', 'editor']),
-  prompt: z.string().max(4000).default('')
+  prompt: z.string().max(32000).default('')
 })
 
 export type ProjectSpec = z.infer<typeof projectSpecSchema>
@@ -376,7 +361,8 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
             modelStyle: jsonEnum(ITEM_MODEL_STYLES),
             layer1: { type: 'boolean' },
             durability: { type: 'integer', minimum: 0, maximum: 4096 },
-            attributes: { type: 'array', maxItems: ITEM_ATTRIBUTE_CAP, items: attributeItem }
+            attributes: { type: 'array', maxItems: ITEM_ATTRIBUTE_CAP, items: attributeItem },
+            weapon: OLLAMA_WEAPON_SCHEMA
           }
         }
       },
@@ -559,7 +545,8 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
         properties: {
           enableWorldgen: { type: 'boolean' },
           enableChestLoot: { type: 'boolean' },
-          spawnWeightScale: { type: 'number' }
+          spawnWeightScale: { type: 'number' },
+          enableTerrainDestruction: { type: 'boolean' }
         }
       },
       unsupportedRequests: {
@@ -576,7 +563,7 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
         }
       },
       source: jsonEnum(['template', 'ollama', 'merged', 'editor']),
-      prompt: jsonString({ maxLength: 4000 })
+      prompt: jsonString({ maxLength: 8000 })
     }
   }
 }
@@ -607,12 +594,12 @@ function noteOffAllowlistIngredients(draft: unknown): unknown {
     const parts = [...(rec.keys ?? []), ...(rec.ingredients ?? [])]
     for (const part of parts) {
       const id = part.id ?? ''
-      if (part.kind === 'vanilla' && id.startsWith('minecraft:') && !(VANILLA_ITEMS as readonly string[]).includes(id)) {
+      if (part.kind === 'vanilla' && id.startsWith('minecraft:') && !isVanillaItemId(id)) {
         const feature = `ingredient ${id}`
         if (!unsupported.some((item) => item.feature === feature)) {
           unsupported.push({
             feature,
-            reason: `Recipe "${recipeId}" asked for ${id}. That id is not on the vanilla allowlist. It was not swapped for another item.`
+            reason: `Recipe "${recipeId}" asked for ${id}. That id is not in the 1.21.1 item registry. It was not swapped for another item.`
           })
         }
       }
@@ -665,11 +652,11 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
           action: 'Use self, a spec item/block id, or an allowlisted minecraft: id.'
         })
       }
-      if (vanilla && !VANILLA_ITEMS.includes(block.dropItem as (typeof VANILLA_ITEMS)[number])) {
+      if (vanilla && !isVanillaItemId(block.dropItem)) {
         throw new AppError({
           code: 'SPEC_INVALID',
-          message: `Block "${block.id}" drop "${block.dropItem}" is not on the vanilla allowlist.`,
-          action: 'Use self, a spec item id, or an allowlisted minecraft: id.'
+          message: `Block "${block.id}" drop "${block.dropItem}" is not in the 1.21.1 item registry.`,
+          action: 'Use self, a spec item id, or a registered minecraft: id. CraftStudio will not substitute another item.'
         })
       }
     }
@@ -698,6 +685,19 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
         message: `Item "${item.id}" repeats an attribute id.`,
         action: `Use each of ${ITEM_ATTRIBUTES.join(', ')} at most once (cap ${ITEM_ATTRIBUTE_CAP}).`
       })
+    }
+    if (item.weapon) {
+      const { kept, rejected } = filterCompatibleEnchantments(item.weapon.enchantments, weaponKind(item.weapon))
+      item.weapon.enchantments = kept
+      for (const entry of rejected) {
+        const feature = `enchantment ${entry.id}`
+        if (!spec.unsupportedRequests.some((row) => row.feature === feature)) {
+          spec.unsupportedRequests.push({
+            feature,
+            reason: `"${entry.id}" is not compatible with this ${weaponKind(item.weapon)} weapon. It was not silently remapped.`
+          })
+        }
+      }
     }
   }
 
@@ -749,11 +749,11 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
         continue
       }
       const vanilla = slot.ghostItemId.startsWith('minecraft:')
-      if (vanilla && !VANILLA_ITEMS.includes(slot.ghostItemId as (typeof VANILLA_ITEMS)[number])) {
+      if (vanilla && !isVanillaItemId(slot.ghostItemId)) {
         throw new AppError({
           code: 'SPEC_INVALID',
-          message: `GUI "${gui.id}" ghost item "${slot.ghostItemId}" is not on the vanilla allowlist.`,
-          action: 'Use a spec item id or an allowlisted minecraft: id.'
+          message: `GUI "${gui.id}" ghost item "${slot.ghostItemId}" is not in the 1.21.1 item registry.`,
+          action: 'Use a spec item id or a registered minecraft: id. CraftStudio will not substitute another item.'
         })
       }
       if (!vanilla && !itemIds.has(slot.ghostItemId) && !blockIds.has(slot.ghostItemId)) {
@@ -822,11 +822,11 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
 
   const assertIngredient = (recipeId: string, kind: 'vanilla' | 'mod', id: string): void => {
     if (kind === 'vanilla') {
-      if (!VANILLA_ITEMS.includes(id as (typeof VANILLA_ITEMS)[number])) {
+      if (!isVanillaItemId(id)) {
         throw new AppError({
           code: 'SPEC_INVALID',
-          message: `Vanilla ingredient "${id}" is not on the Phase 2 allowlist.`,
-          action: `Use one of: ${VANILLA_ITEMS.slice(0, 8).join(', ')}, …`
+          message: `Vanilla ingredient "${id}" is not in the 1.21.1 item registry.`,
+          action: 'Keep the requested id. CraftStudio will not replace it with iron, stick, or another default.'
         })
       }
     } else if (!itemIds.has(id)) {

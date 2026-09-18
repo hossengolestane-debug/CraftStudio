@@ -90,7 +90,13 @@ const phase9Spec = parseProjectSpec({
   ],
   unsupportedRequests: [],
   source: 'editor',
-  prompt: 'phase 9'
+  prompt: 'phase 9',
+  config: {
+    enableWorldgen: true,
+    enableChestLoot: true,
+    spawnWeightScale: 1,
+    enableTerrainDestruction: true
+  }
 })
 
 describe('Phase 9 spec + emitters', () => {

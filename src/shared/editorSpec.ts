@@ -64,7 +64,7 @@ export function defaultRecipe(resultItemId: string): SpecRecipe {
     type: 'shapeless',
     resultItemId,
     resultCount: 1,
-    ingredients: [{ kind: 'vanilla', id: VANILLA_ITEMS[0] }],
+    ingredients: [{ kind: 'vanilla', id: VANILLA_ITEMS[0] ?? 'minecraft:stick' }],
     pattern: [],
     keys: []
   }

@@ -19,7 +19,7 @@ export const JSON_SCHEMA_CROSS_FIELD_RULES = [
     enforcement: 'parseProjectSpec + padPattern normalize + repair'
   },
   {
-    rule: 'vanilla ingredient ids must be on VANILLA_ITEMS (no silent swap)',
+    rule: 'vanilla ingredient ids must exist in the 1.21.1 registry (no silent swap)',
     jsonSchema: 'enum on every ingredient id would hide the honesty path',
     enforcement: 'parseProjectSpec + noteOffAllowlistIngredients + prompt'
   },
