@@ -44,9 +44,9 @@ Automated:
 
 Manual / agent:
 
-- `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`
-- Live `./gradlew build` proof is recorded below when the environment can run it
-- Packaging is attempted with `npm run dist:win` or `dist:win:portable` when feasible
+- `npm test` (104), `npm run lint`, `npm run typecheck`, `npm run build`
+- Live `./gradlew build` for Fabric 1.21.4 + 1.21.8, Forge 1.21.1, and NeoForge 1.21.4 + 1.21.8 — see “Live notes”
+- `npm run dist:win:portable` produced an unsigned `CraftStudio Local-0.7.0-portable.exe` on Linux
 - This cloud environment still cannot finish a Minecraft client. No Tested badge was written from compile-only
 
 ## Known limitations
@@ -77,4 +77,15 @@ Manual / agent:
 
 ## Live notes
 
-Compile-only remains `true`. No `craftstudio.runtime-evidence.json` was written from this phase.
+Recorded in this cloud environment after apply + `./gradlew build --no-daemon --stacktrace`. Compile-only remains `true`. No `craftstudio.runtime-evidence.json` was written.
+
+| Project | Result |
+| --- | --- |
+| Fabric 1.21.4 item + visible render-state cube + two screens + spawn at `/tmp/cs-phase7-projects/glow-mite-fabric214` | First compile failed (`EntityModel` requires `super(root)`; Yarn `getPlayerOrThrow`). After those template fixes, **BUILD SUCCESSFUL** in 7s (`glow_mite-1.0.0.jar`). |
+| Fabric 1.21.8 same slice at `/tmp/cs-phase7-projects/glow-mite-fabric218` | First configure failed (Loom 1.10.1 needs Gradle ≥ 8.12). After pinning Gradle **8.12.1** for this pin only, **BUILD SUCCESSFUL** in 44s. |
+| Forge 1.21.1 item + HierarchicalModel renderer + two menus + spawn at `/tmp/cs-phase7-projects/glow-mite-forge` | First compile failed (`id` shadowed in `/opencustommenu` lambdas). After renaming to `windowId`, **BUILD SUCCESSFUL** in 9s. |
+| NeoForge 1.21.4 same slice at `/tmp/cs-phase7-projects/glow-mite-neo214` | Same `super(root)` + `windowId` fixes. **BUILD SUCCESSFUL** in 4s (`bus=` is deprecated on this pin, still compiles). |
+| NeoForge 1.21.8 same slice at `/tmp/cs-phase7-projects/glow-mite-neo218` | **BUILD SUCCESSFUL** in 6s (no `EventBusSubscriber.bus`). |
+| `npm run dist:win:portable` | Unsigned `release/CraftStudio Local-0.7.0-portable.exe` (~90MB). Default Electron icon. Not signed. |
+
+This environment did **not** complete a Minecraft client. Compatibility stays Experimental.

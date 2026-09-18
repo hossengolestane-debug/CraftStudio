@@ -93,9 +93,12 @@ describe('Fabric adapter generation', () => {
       expect(props).toContain(`minecraft_version=${version}`)
     }
     const loom18 = planFabricFiles(manifestFor('1.21.8'), spec)
-      .find((file) => file.relativePath === 'build.gradle')
-      ?.contents.toString()
-    expect(loom18).toContain("id 'fabric-loom' version '1.10.1'")
+    expect(loom18.find((file) => file.relativePath === 'build.gradle')?.contents.toString()).toContain(
+      "id 'fabric-loom' version '1.10.1'"
+    )
+    expect(loom18.find((file) => file.relativePath === 'gradle/wrapper/gradle-wrapper.properties')?.contents.toString()).toContain(
+      'gradle-8.12.1-bin.zip'
+    )
   })
 
   it('refuses non-Fabric manifests and unsupported Minecraft versions', () => {

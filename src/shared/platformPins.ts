@@ -109,7 +109,7 @@ export const FABRIC_PINS: Record<string, FabricVersionPins> = {
     loader: '0.16.14',
     loom: '1.10.1',
     fabricApi: '0.136.1+1.21.8',
-    gradle: '8.11.1',
+    gradle: '8.12.1',
     java: 21,
     itemRegistration: 'registry_key'
   }
