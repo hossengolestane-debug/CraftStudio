@@ -40,7 +40,7 @@ npm run lint
 npm run typecheck
 ```
 
-On some Linux containers Electron needs an extra Chromium flag:
+On some Linux containers Electron needs extra Chromium flags (`no-sandbox`, `no-zygote`). Set:
 
 ```bash
 # PowerShell
@@ -50,7 +50,7 @@ $env:CRAFTSTUDIO_NO_SANDBOX="1"; npm run dev
 CRAFTSTUDIO_NO_SANDBOX=1 npm run dev
 ```
 
-`CI=true` also enables that flag.
+`CI=true` enables the same flags. This is the OS Chromium sandbox, not the preload bridge (`nodeIntegration` stays off).
 
 ## What Phase 1 does
 

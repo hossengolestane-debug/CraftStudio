@@ -36,9 +36,14 @@ Manual / agent verification after implement:
 
 - `npm test`
 - `npm run build` (electron-vite production compile of main, preload, renderer)
-- `npm run lint`
+- `npm run lint` and `npm run typecheck`
 - Real `ProjectService.create` + `list` against a temp directory
-- Real Ollama check against `http://localhost:11434` (connected if the daemon is present; otherwise a clear “not reachable” status — never a fake generation success)
+- Live Electron window on Linux: create wizard wrote `River Stones` to
+  `~/.config/craftstudio-local/CraftStudioProjects/river-stones-aa5fd52b/craftstudio.project.json`
+  and the Projects list reloaded it
+- Real Ollama check against `http://localhost:11434` while the daemon was down: **Not connected**, with an explicit no-cloud-fallback recovery message. A mock `/api/tags` server reports connected and lists models.
+
+This Linux container needed `CRAFTSTUDIO_NO_SANDBOX=1` plus Chromium `--no-zygote` for the renderer to stay alive. That is documented; it does not disable the preload bridge.
 
 Compatibility badges: **nothing is Tested**. No Minecraft loader, plugin jar, or Gradle build was executed.
 

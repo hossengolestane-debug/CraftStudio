@@ -8,6 +8,11 @@ import { SettingsService } from './services/settingsService'
 
 if (process.platform === 'linux' && (process.env.CI === 'true' || process.env.CRAFTSTUDIO_NO_SANDBOX === '1')) {
   app.commandLine.appendSwitch('no-sandbox')
+  app.commandLine.appendSwitch('no-zygote')
+  app.commandLine.appendSwitch('disable-setuid-sandbox')
+  app.commandLine.appendSwitch('disable-dev-shm-usage')
+  app.commandLine.appendSwitch('disable-gpu')
+  app.disableHardwareAcceleration()
 }
 
 function createWindow(): void {
