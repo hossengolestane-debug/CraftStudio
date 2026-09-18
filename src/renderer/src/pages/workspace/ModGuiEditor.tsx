@@ -1,5 +1,5 @@
 import { defaultModGui } from '../../../../shared/defaults'
-import type { ProjectSpec, SpecModGui } from '../../../../shared/spec'
+import { VANILLA_ITEMS, type ProjectSpec, type SpecModGui } from '../../../../shared/spec'
 import { Button, Card, Field, TextInput } from '../../components/ui'
 
 export function ModGuiEditor({
@@ -27,8 +27,7 @@ export function ModGuiEditor({
         {menuEmission ? (
           <p className="text-sm">
             Fabric, Forge 1.21.1, and NeoForge emit a Screen + Menu/ScreenHandler pair for every screen in this
-            project. Client clicks are untrusted; the server menu validates slots and refuses illegal transfers.
-            This preview is not Minecraft-verified.
+            project. Client clicks are untrusted. Data slots sync server-owned numbers; ghost items are display-only.
           </p>
         ) : (
           <p className="text-sm">This adapter does not emit a container menu. Layouts stay labeled preview.</p>
@@ -74,6 +73,73 @@ export function ModGuiEditor({
                 </div>
               ))}
             </div>
+          </div>
+          <div className="space-y-2 border border-dashed border-line p-2">
+            <p className="text-xs text-muted">Data slots (max 4). Server authoritative. Optional ghost item when the first slot is empty.</p>
+            {gui.dataSlots.map((slot, slotIndex) => (
+              <div key={`${slot.id}-${slotIndex}`} className="grid gap-2 md:grid-cols-3">
+                <TextInput
+                  value={slot.id}
+                  onChange={(event) => {
+                    const dataSlots = gui.dataSlots.map((entry, i) =>
+                      i === slotIndex ? { ...entry, id: event.target.value } : entry
+                    )
+                    update(index, { dataSlots })
+                  }}
+                />
+                <TextInput
+                  inputMode="numeric"
+                  value={String(slot.initial)}
+                  onChange={(event) => {
+                    const dataSlots = gui.dataSlots.map((entry, i) =>
+                      i === slotIndex
+                        ? { ...entry, initial: Math.min(32767, Math.max(0, Number(event.target.value) || 0)) }
+                        : entry
+                    )
+                    update(index, { dataSlots })
+                  }}
+                />
+                <select
+                  className="border border-line bg-white px-2 py-1"
+                  value={slot.ghostItemId ?? ''}
+                  onChange={(event) => {
+                    const dataSlots = gui.dataSlots.map((entry, i) =>
+                      i === slotIndex
+                        ? { ...entry, ghostItemId: event.target.value || undefined }
+                        : entry
+                    )
+                    update(index, { dataSlots })
+                  }}
+                >
+                  <option value="">No ghost item</option>
+                  {VANILLA_ITEMS.map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                  {spec.items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={gui.dataSlots.length >= 4}
+              onClick={() =>
+                update(index, {
+                  dataSlots: [
+                    ...gui.dataSlots,
+                    { id: `data_${gui.dataSlots.length + 1}`, initial: 0, ghostItemId: 'minecraft:iron_ingot' }
+                  ]
+                })
+              }
+            >
+              Add data slot
+            </Button>
           </div>
           <Button
             type="button"

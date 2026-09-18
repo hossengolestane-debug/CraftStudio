@@ -18,7 +18,9 @@ export const TRUSTED_OUTPUT_PATHS = new Set([
   'pack.png',
   'ENTITY_RENDERING.md',
   'MOBS.md',
-  'SPAWNS.md'
+  'SPAWNS.md',
+  'WORLDGEN.md',
+  'LOOT.md'
 ])
 
 export const BUILD_SCRIPT_PATHS = new Set([

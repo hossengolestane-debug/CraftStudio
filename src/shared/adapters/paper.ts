@@ -12,7 +12,7 @@ export const PaperAdapter: PlatformAdapter = {
     clientEntities: 'unsupported',
     customGuis: 'limited',
     recipes: 'limited',
-    worldgen: 'limited',
+    worldgen: 'unsupported',
     biomeSpawns: 'unsupported',
     serverCommands: 'supported',
     textures: 'limited',

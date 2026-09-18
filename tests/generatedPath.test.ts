@@ -30,6 +30,8 @@ describe('generated path safety', () => {
     expect(isTrustedOutputPath('src/main/resources/META-INF/neoforge.mods.toml')).toBe(true)
     expect(isTrustedOutputPath('SPAWNS.md')).toBe(true)
     expect(isTrustedOutputPath('ENTITY_RENDERING.md')).toBe(true)
+    expect(isTrustedOutputPath('WORLDGEN.md')).toBe(true)
+    expect(isTrustedOutputPath('LOOT.md')).toBe(true)
     expect(isTrustedOutputPath('../craftstudio.project.json')).toBe(false)
     expect(isTrustedOutputPath('evil.sh')).toBe(false)
   })

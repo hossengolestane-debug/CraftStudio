@@ -4,6 +4,7 @@ import type { AppErrorPayload } from '../../../../shared/errors'
 import type { BuildResultDto, JavaStatusDto, RepairResultDto } from '../../../../shared/ipc'
 import { isCodegenSupported } from '../../../../shared/platformPins'
 import type { AppSettings, PlatformAdapterInfo, ProjectRecord } from '../../../../shared/types'
+import { EnvironmentDoctor } from '../../components/EnvironmentDoctor'
 import { ErrorPanel } from '../../components/ErrorPanel'
 import { Badge, Button, Card, ComingSoon, Field, TextArea } from '../../components/ui'
 import { asAppError } from '../../lib/errors'
@@ -110,8 +111,21 @@ export function TestBuildView({
           Compile success and runtime verification are separate. A Tested compatibility row requires an evidence record
           — never a compile-only build.
         </p>
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm">
+          <li>Apply a validated spec so the vendored wrapper exists.</li>
+          <li>Run Gradle build. Exit 0 is compile-only and cannot write Tested.</li>
+          <li>On a desktop, accept the Minecraft EULA, then runClient (or launch your own Paper/Spigot server).</li>
+          <li>Write what you verified in-game (item appeared, ore generated, menu opened).</li>
+          <li>Record runtime evidence. The button stays disabled until runClient exits 0 (mods) or you attest a server you launched (plugins).</li>
+        </ol>
+        <p className="mt-2 text-sm text-muted">
+          What gets recorded: platform, Minecraft version, verifiedWhat, your notes, EULA flag, compileOnly=false, and
+          runClient exit code. Compile-only builds are refused.
+        </p>
       </div>
       {error ? <ErrorPanel error={error} onDismiss={() => setError(null)} /> : null}
+
+      <EnvironmentDoctor projectId={project.manifest.id} lastBuildLogs={compile?.logs || logs} />
 
       <Card className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">

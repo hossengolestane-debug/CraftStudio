@@ -89,7 +89,9 @@ describe('Phase 5 spec + migration + models', () => {
       maxCount: 16,
       rarity: 'common',
       modelStyle: 'handheld',
-      layer1: true
+      layer1: true,
+      durability: 0,
+      attributes: []
     })
     expect(handheld).toContain('minecraft:item/handheld')
     expect(handheld).toContain('layer1')

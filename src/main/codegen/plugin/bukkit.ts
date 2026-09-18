@@ -94,6 +94,39 @@ export function pluginCommandPermissionsYml(spec: ProjectSpec): string {
   return lines.join('\n')
 }
 
+export function pluginRecipeRegistration(spec: ProjectSpec): string {
+  return spec.recipes
+    .map((recipe) => {
+      const resultMethod = `create${toConstName(recipe.resultItemId).replace(/_/g, '')}`
+      if (recipe.type === 'shaped') {
+        const shape = recipe.pattern.map((row) => `"${row}"`).join(', ')
+        const keys = recipe.keys
+          .map((key) =>
+            key.kind === 'vanilla'
+              ? `    recipe_${recipe.id}.setIngredient('${key.symbol}', org.bukkit.Material.${vanillaMaterial(key.id)});`
+              : `    // Mod-item shaped keys are not plugin materials; skipped ${key.id}`
+          )
+          .join('\n')
+        return `    org.bukkit.inventory.ShapedRecipe recipe_${recipe.id} = new org.bukkit.inventory.ShapedRecipe(new org.bukkit.NamespacedKey(this, "${recipe.id}"), ${resultMethod}());
+    recipe_${recipe.id}.shape(${shape});
+${keys}
+    getServer().addRecipe(recipe_${recipe.id});`
+      }
+      const ingredients = recipe.ingredients
+        .map((ingredient) => {
+          if (ingredient.kind !== 'vanilla') {
+            return `    // Mod-item ingredients are not plugin materials; skipped ${ingredient.id}`
+          }
+          return `    recipe_${recipe.id}.addIngredient(org.bukkit.Material.${vanillaMaterial(ingredient.id)});`
+        })
+        .join('\n')
+      return `    org.bukkit.inventory.ShapelessRecipe recipe_${recipe.id} = new org.bukkit.inventory.ShapelessRecipe(new org.bukkit.NamespacedKey(this, "${recipe.id}"), ${resultMethod}());
+${ingredients}
+    getServer().addRecipe(recipe_${recipe.id});`
+    })
+    .join('\n')
+}
+
 export function pluginTabCompleteJava(spec: ProjectSpec): string {
   const itemIds = spec.items.map((item) => `"${item.id}"`).join(', ')
   const mobIds = spec.mobs.map((mob) => `"${mob.id}"`).join(', ')

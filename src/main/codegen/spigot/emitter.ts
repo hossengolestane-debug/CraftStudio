@@ -8,11 +8,13 @@ import {
   pluginCommandPermissionsYml,
   pluginGuiClass,
   pluginGuiJava,
+  pluginRecipeRegistration,
   pluginTabCompleteJava,
-  spawnMobJava,
-  vanillaMaterial
+  spawnMobJava
 } from '../plugin/bukkit'
+import { pluginLootListenerJava, pluginLootRegister, planLootDocs } from '../loot/tables'
 import { planPluginSpawnGap } from '../spawn/biomeTables'
+import { planWorldgenDocs } from '../worldgen/oreVeins'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape, yamlEscape } from '../wrapper'
 
@@ -171,21 +173,7 @@ jar {
     )
     .join('\n')
 
-  const recipeBits = spec.recipes
-    .map((recipe) => {
-      const result = `create${toConstName(recipe.resultItemId).replace(/_/g, '')}`
-      const ings = recipe.ingredients
-        .map((ingredient) =>
-          ingredient.kind === 'vanilla'
-            ? `    recipe_${recipe.id}.addIngredient(Material.${vanillaMaterial(ingredient.id)});`
-            : `    // Mod-item ingredients are not Spigot materials; skipped ${ingredient.id}`
-        )
-        .join('\n')
-      return `    ShapelessRecipe recipe_${recipe.id} = new ShapelessRecipe(new NamespacedKey(this, "${recipe.id}"), ${result}());
-${ings}
-    getServer().addRecipe(recipe_${recipe.id});`
-    })
-    .join('\n')
+  const recipeBits = pluginRecipeRegistration(spec)
 
   files.push({
     relativePath: `src/main/java/${packagePath}/${spec.mainClass}.java`,
@@ -198,7 +186,6 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.ShapelessRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -209,11 +196,13 @@ public class ${spec.mainClass} extends JavaPlugin implements org.bukkit.command.
 
 ${itemFactory(spec)}
 ${spawnMobJava(spec, 'legacy', attr)}
+${pluginLootListenerJava(spec, spec.mainClass, 'legacy')}
 
   @Override
   public void onEnable() {
     getLogger().info("${javaEscape(spec.displayName)} enabled (Spigot). Items are vanilla paper + PDC. Mobs are vanilla disguises. Paper APIs are not used.");
 ${recipeBits}
+${spec.mobs.some((mob) => mob.drops.length > 0) ? pluginLootRegister() : ''}
 ${menuRegs}
     var giveCmd = getCommand("givecustomitem");
     if (giveCmd != null) {
@@ -288,6 +277,8 @@ ${spec.items.map((item) => `      case "${item.id}" -> create${toConstName(item.
     })
   }
   files.push(...planPluginSpawnGap(spec))
+  files.push(...planWorldgenDocs(spec, 'plugin'))
+  files.push(...planLootDocs(spec))
 
   files.push({
     relativePath: 'run-spigot/eula.txt',

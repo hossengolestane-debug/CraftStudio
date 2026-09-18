@@ -21,8 +21,8 @@ export function MobEditor({
       <div>
         <h2 className="text-lg font-semibold">Custom mobs</h2>
         <p className="mt-1 text-sm text-muted">
-          Phase 7 emits five movement presets (not a behavior tree) plus an optional biome spawn table.
-          Java stays template-authored.
+          Phase 8 emits seven movement presets (not a behavior tree) plus optional biome spawn tables, drops, and
+          follow_player / leap_melee. Java stays template-authored. Cap: 7 presets.
         </p>
         {pluginLimits ? (
           <p className="mt-2 text-sm">
@@ -152,7 +152,7 @@ export function MobEditor({
             ) : (
               <>
                 <p className="text-xs text-muted">
-                  Allowlisted biomes only. This is not a worldgen stack. {mob.spawnStub}
+                  Allowlisted biomes only. Ore veins are a separate Worldgen editor. {mob.spawnStub}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {SPAWN_BIOMES.map((biome) => (
@@ -220,6 +220,70 @@ export function MobEditor({
                 </div>
               </>
             )}
+          </div>
+          <div className="space-y-2 border border-dashed border-line p-2">
+            <p className="text-xs text-muted">Loot / drops (max 4). Mods emit JSON loot tables. Plugins drop on EntityDeathEvent.</p>
+            {mob.drops.map((drop, dropIndex) => (
+              <div key={`${drop.itemId}-${dropIndex}`} className="grid gap-2 md:grid-cols-4">
+                <TextInput
+                  value={drop.itemId}
+                  onChange={(event) => {
+                    const drops = mob.drops.map((entry, i) =>
+                      i === dropIndex ? { ...entry, itemId: event.target.value } : entry
+                    )
+                    update(index, { drops })
+                  }}
+                />
+                <TextInput
+                  inputMode="decimal"
+                  value={String(drop.chance)}
+                  onChange={(event) => {
+                    const drops = mob.drops.map((entry, i) =>
+                      i === dropIndex
+                        ? { ...entry, chance: Math.min(1, Math.max(0, Number(event.target.value) || 0)) }
+                        : entry
+                    )
+                    update(index, { drops })
+                  }}
+                />
+                <TextInput
+                  inputMode="numeric"
+                  value={`${drop.min}-${drop.max}`}
+                  onChange={(event) => {
+                    const [minRaw, maxRaw] = event.target.value.split('-')
+                    const drops = mob.drops.map((entry, i) =>
+                      i === dropIndex
+                        ? {
+                            ...entry,
+                            min: Math.min(64, Math.max(1, Number(minRaw) || 1)),
+                            max: Math.min(64, Math.max(1, Number(maxRaw) || 1))
+                          }
+                        : entry
+                    )
+                    update(index, { drops })
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => update(index, { drops: mob.drops.filter((_, i) => i !== dropIndex) })}
+                >
+                  Remove drop
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={mob.drops.length >= 4}
+              onClick={() =>
+                update(index, {
+                  drops: [...mob.drops, { itemId: spec.items[0]?.id ?? 'minecraft:bone', chance: 1, min: 1, max: 1 }]
+                })
+              }
+            >
+              Add drop
+            </Button>
           </div>
           <Button
             type="button"

@@ -1,9 +1,13 @@
 import { z } from 'zod'
 import { AppError } from './errors'
+import { ITEM_ATTRIBUTE_CAP, ITEM_ATTRIBUTE_SLOTS, ITEM_ATTRIBUTES } from './itemStats'
 import { DEFAULT_MOB_SPAWN, SPAWN_BIOMES } from './spawn'
 import { SPEC_FILENAME } from './types'
+import { WORLDGEN_BLOCKS, WORLDGEN_ENTRY_CAP, WORLDGEN_KIND } from './worldgen'
 
 export { SPAWN_BIOMES }
+export { ITEM_ATTRIBUTES, ITEM_ATTRIBUTE_SLOTS } from './itemStats'
+export { WORLDGEN_BLOCKS } from './worldgen'
 
 export const SPEC_SCHEMA_VERSION = 1
 export { SPEC_FILENAME }
@@ -49,11 +53,20 @@ export const MOB_PRESETS = [
   'hostile_melee',
   'neutral_flee',
   'avoid_players',
-  'stationary_lookout'
+  'stationary_lookout',
+  'follow_player',
+  'leap_melee'
 ] as const
+export const MOB_PRESET_CAP = MOB_PRESETS.length
 export const MOB_MODELS = ['humanoid', 'quadruped', 'vanilla_disguise'] as const
 export const VANILLA_MOB_BASES = ['minecraft:zombie', 'minecraft:pig', 'minecraft:wolf'] as const
 export const ITEM_MODEL_STYLES = ['generated', 'handheld'] as const
+
+const itemAttributeSchema = z.object({
+  id: z.enum(ITEM_ATTRIBUTES),
+  amount: z.number().min(-64).max(64),
+  slot: z.enum(ITEM_ATTRIBUTE_SLOTS).default('mainhand')
+})
 
 const itemSchema = z.object({
   id: ident,
@@ -62,7 +75,9 @@ const itemSchema = z.object({
   maxCount: z.number().int().min(1).max(64).default(64),
   rarity: z.enum(['common', 'uncommon', 'rare', 'epic']).default('common'),
   modelStyle: z.enum(ITEM_MODEL_STYLES).default('generated'),
-  layer1: z.boolean().default(false)
+  layer1: z.boolean().default(false),
+  durability: z.number().int().min(0).max(4096).default(0),
+  attributes: z.array(itemAttributeSchema).max(ITEM_ATTRIBUTE_CAP).default([])
 })
 
 const mobDropSchema = z.object({
@@ -114,12 +129,19 @@ const modGuiWidgetSchema = z.object({
   action: z.enum(['none', 'close', 'message']).default('none')
 })
 
+const dataSlotSchema = z.object({
+  id: ident,
+  initial: z.number().int().min(0).max(32767).default(0),
+  ghostItemId: z.string().trim().max(64).optional()
+})
+
 const modGuiSchema = z.object({
   id: ident,
   title: z.string().trim().min(1).max(80),
   width: z.number().int().min(100).max(400).default(176),
   height: z.number().int().min(80).max(300).default(166),
-  widgets: z.array(modGuiWidgetSchema).min(1).max(12)
+  widgets: z.array(modGuiWidgetSchema).min(1).max(12),
+  dataSlots: z.array(dataSlotSchema).max(4).default([])
 })
 
 const pluginGuiSlotSchema = z.object({
@@ -145,12 +167,31 @@ const recipeIngredientSchema = z.object({
   id: z.string().trim().min(3).max(64)
 })
 
+const recipeKeySchema = z.object({
+  symbol: z.string().regex(/^[A-Z]$/, 'Shaped key must be a single A–Z letter'),
+  kind: z.enum(['vanilla', 'mod']),
+  id: z.string().trim().min(3).max(64)
+})
+
 const recipeSchema = z.object({
   id: ident,
-  type: z.enum(['shapeless']),
+  type: z.enum(['shapeless', 'shaped']),
   resultItemId: ident,
   resultCount: z.number().int().min(1).max(64).default(1),
-  ingredients: z.array(recipeIngredientSchema).min(1).max(9)
+  ingredients: z.array(recipeIngredientSchema).max(9).default([]),
+  pattern: z.array(z.string().regex(/^[ A-Z#.]{1,3}$/)).max(3).default([]),
+  keys: z.array(recipeKeySchema).max(9).default([])
+})
+
+const worldgenSchema = z.object({
+  id: ident,
+  kind: z.literal(WORLDGEN_KIND).default(WORLDGEN_KIND),
+  block: z.enum(WORLDGEN_BLOCKS),
+  size: z.number().int().min(1).max(16).default(9),
+  count: z.number().int().min(1).max(32).default(10),
+  minY: z.number().int().min(-64).max(320).default(-24),
+  maxY: z.number().int().min(-64).max(320).default(56),
+  biomes: z.array(z.enum(SPAWN_BIOMES)).max(8).default([])
 })
 
 const commandSchema = z.object({
@@ -186,6 +227,7 @@ export const projectSpecSchema = z.object({
   mobs: z.array(mobSchema).max(4).default([]),
   modGuis: z.array(modGuiSchema).max(4).default([]),
   pluginGuis: z.array(pluginGuiSchema).max(4).default([]),
+  worldgen: z.array(worldgenSchema).max(WORLDGEN_ENTRY_CAP).default([]),
   unsupportedRequests: z.array(unsupportedSchema).max(16).default([]),
   source: z.enum(['template', 'ollama', 'merged', 'editor']),
   prompt: z.string().max(4000).default('')
@@ -197,6 +239,9 @@ export type SpecRecipe = z.infer<typeof recipeSchema>
 export type SpecMob = z.infer<typeof mobSchema>
 export type SpecModGui = z.infer<typeof modGuiSchema>
 export type SpecPluginGui = z.infer<typeof pluginGuiSchema>
+export type SpecWorldgen = z.infer<typeof worldgenSchema>
+export type SpecDataSlot = z.infer<typeof dataSlotSchema>
+export type SpecItemAttribute = z.infer<typeof itemAttributeSchema>
 
 export const OLLAMA_SPEC_JSON_SCHEMA = {
   type: 'object',
@@ -269,6 +314,65 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
   const spec = parsed.data
   const itemIds = new Set(spec.items.map((item) => item.id))
 
+  for (const item of spec.items) {
+    if (item.durability > 0 && item.maxCount > 1) {
+      throw new AppError({
+        code: 'SPEC_INVALID',
+        message: `Item "${item.id}" has durability and maxCount > 1.`,
+        action: 'Damaged items cannot stack. Set stack size to 1 when durability is greater than 0.'
+      })
+    }
+    const attrIds = item.attributes.map((attr) => attr.id)
+    if (new Set(attrIds).size !== attrIds.length) {
+      throw new AppError({
+        code: 'SPEC_INVALID',
+        message: `Item "${item.id}" repeats an attribute id.`,
+        action: `Use each of ${ITEM_ATTRIBUTES.join(', ')} at most once (cap ${ITEM_ATTRIBUTE_CAP}).`
+      })
+    }
+  }
+
+  for (const entry of spec.worldgen) {
+    if (entry.maxY < entry.minY) {
+      throw new AppError({
+        code: 'SPEC_INVALID',
+        message: `Worldgen "${entry.id}" has maxY < minY.`,
+        action: 'Set maxY at least as high as minY.'
+      })
+    }
+  }
+  const worldgenIds = spec.worldgen.map((entry) => entry.id)
+  if (new Set(worldgenIds).size !== worldgenIds.length) {
+    throw new AppError({
+      code: 'SPEC_INVALID',
+      message: 'Worldgen entry ids must be unique.',
+      action: 'Rename duplicate ore-vein ids.'
+    })
+  }
+
+  for (const gui of spec.modGuis) {
+    for (const slot of gui.dataSlots) {
+      if (!slot.ghostItemId) {
+        continue
+      }
+      const vanilla = slot.ghostItemId.startsWith('minecraft:')
+      if (vanilla && !VANILLA_ITEMS.includes(slot.ghostItemId as (typeof VANILLA_ITEMS)[number])) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `GUI "${gui.id}" ghost item "${slot.ghostItemId}" is not on the vanilla allowlist.`,
+          action: 'Use a spec item id or an allowlisted minecraft: id.'
+        })
+      }
+      if (!vanilla && !itemIds.has(slot.ghostItemId)) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `GUI "${gui.id}" ghost item "${slot.ghostItemId}" is unknown.`,
+          action: 'Use a spec item id or an allowlisted minecraft: id.'
+        })
+      }
+    }
+  }
+
   for (const mob of spec.mobs) {
     if (mob.spawn.maxGroup < mob.spawn.minGroup) {
       throw new AppError({
@@ -315,6 +419,24 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
     }
   }
 
+  const assertIngredient = (recipeId: string, kind: 'vanilla' | 'mod', id: string): void => {
+    if (kind === 'vanilla') {
+      if (!VANILLA_ITEMS.includes(id as (typeof VANILLA_ITEMS)[number])) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Vanilla ingredient "${id}" is not on the Phase 2 allowlist.`,
+          action: `Use one of: ${VANILLA_ITEMS.slice(0, 8).join(', ')}, …`
+        })
+      }
+    } else if (!itemIds.has(id)) {
+      throw new AppError({
+        code: 'SPEC_INVALID',
+        message: `Recipe "${recipeId}" references unknown mod item "${id}".`,
+        action: 'Mod ingredients must match an item id in this spec.'
+      })
+    }
+  }
+
   for (const recipe of spec.recipes) {
     if (!itemIds.has(recipe.resultItemId)) {
       throw new AppError({
@@ -323,21 +445,65 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
         action: 'Result items must be items defined in this spec.'
       })
     }
-    for (const ingredient of recipe.ingredients) {
-      if (ingredient.kind === 'vanilla') {
-        if (!VANILLA_ITEMS.includes(ingredient.id as (typeof VANILLA_ITEMS)[number])) {
-          throw new AppError({
-            code: 'SPEC_INVALID',
-            message: `Vanilla ingredient "${ingredient.id}" is not on the Phase 2 allowlist.`,
-            action: `Use one of: ${VANILLA_ITEMS.slice(0, 8).join(', ')}, …`
-          })
-        }
-      } else if (!itemIds.has(ingredient.id)) {
+    if (recipe.type === 'shapeless') {
+      if (recipe.ingredients.length < 1) {
         throw new AppError({
           code: 'SPEC_INVALID',
-          message: `Recipe "${recipe.id}" references unknown mod item "${ingredient.id}".`,
-          action: 'Mod ingredients must match an item id in this spec.'
+          message: `Shapeless recipe "${recipe.id}" needs at least one ingredient.`,
+          action: 'Add a vanilla or spec item ingredient.'
         })
+      }
+      for (const ingredient of recipe.ingredients) {
+        assertIngredient(recipe.id, ingredient.kind, ingredient.id)
+      }
+    } else {
+      if (recipe.pattern.length < 1 || recipe.pattern.length > 3) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Shaped recipe "${recipe.id}" needs a 1–3 row pattern.`,
+          action: 'Use 1–3 rows of equal length (1–3 characters). Space is empty.'
+        })
+      }
+      const width = recipe.pattern[0]?.length ?? 0
+      if (width < 1 || width > 3 || recipe.pattern.some((row) => row.length !== width)) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Shaped recipe "${recipe.id}" rows must be the same length (1–3).`,
+          action: 'Pad shorter rows with spaces.'
+        })
+      }
+      const letters = new Set(
+        recipe.pattern
+          .join('')
+          .split('')
+          .filter((ch) => /[A-Z]/.test(ch))
+      )
+      const keySymbols = recipe.keys.map((key) => key.symbol)
+      if (new Set(keySymbols).size !== keySymbols.length) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Shaped recipe "${recipe.id}" has duplicate key symbols.`,
+          action: 'Each A–Z letter may appear once in keys.'
+        })
+      }
+      for (const letter of letters) {
+        if (!keySymbols.includes(letter)) {
+          throw new AppError({
+            code: 'SPEC_INVALID',
+            message: `Shaped recipe "${recipe.id}" pattern uses "${letter}" without a key.`,
+            action: 'Add a key for every letter in the pattern.'
+          })
+        }
+      }
+      for (const key of recipe.keys) {
+        if (!letters.has(key.symbol)) {
+          throw new AppError({
+            code: 'SPEC_INVALID',
+            message: `Shaped recipe "${recipe.id}" key "${key.symbol}" is unused.`,
+            action: 'Remove unused keys or put the letter in the pattern.'
+          })
+        }
+        assertIngredient(recipe.id, key.kind, key.id)
       }
     }
   }

@@ -23,6 +23,7 @@ export function defaultModGui(id = 'example_screen'): SpecModGui {
     title: 'Example Screen',
     width: 176,
     height: 166,
+    dataSlots: [],
     widgets: [
       { id: 'title_label', kind: 'label', x: 8, y: 6, width: 160, height: 12, text: 'Preview only', action: 'none' },
       { id: 'slot_0', kind: 'slot', x: 80, y: 60, width: 18, height: 18, text: '', action: 'none' },

@@ -1,4 +1,5 @@
 import { defaultMob, defaultModGui, defaultPluginGui } from './defaults'
+import { defaultWorldgen } from './worldgen'
 import type { ProjectManifest } from './types'
 import {
   parseProjectSpec,
@@ -12,17 +13,17 @@ const UNSUPPORTED_PATTERNS: { pattern: RegExp; feature: string; reason: string }
   {
     pattern: /\b(boss|golem|behavior tree|pathfinding tree)\b/i,
     feature: 'advanced entities',
-    reason: 'Phase 7 emits five movement presets only. Full behavior trees are out of scope.'
+    reason: 'Phase 8 emits seven movement presets only (cap documented). Full behavior trees are out of scope.'
   },
   {
-    pattern: /\b(dimension|worldgen|ore gen|structure)\b/i,
-    feature: 'worldgen',
-    reason: 'Full world generation is not emitted. Dedicated biome spawn tables are a separate Phase 7 MVP.'
+    pattern: /\b(dimension|nether dimension|end dimension|custom structure|jigsaw)\b/i,
+    feature: 'worldgen stack',
+    reason: 'Phase 8 emits ore-vein configured/placed features only. Dimensions and structures stay unsupported.'
   },
   {
     pattern: /\b(custom block|new block|ore block)\b/i,
     feature: 'custom blocks',
-    reason: 'Block registration is not part of the Phase 7 slice.'
+    reason: 'Block registration is not part of the Phase 8 slice. Ore veins place allowlisted vanilla ores only.'
   }
 ]
 
@@ -50,10 +51,12 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
   const text = prompt.trim() || manifest.description || manifest.name
   const itemName = extractQuotedName(text) ?? manifest.name
   const itemId = (toModId(itemName).replace(/^m(?=\d)/, '') || 'custom_item').slice(0, 24)
-  const wantsRecipe = /\b(recipe|craft|crafting|shapeless)\b/i.test(text)
+  const wantsRecipe = /\b(recipe|craft|crafting|shapeless|shaped)\b/i.test(text)
+  const wantsShaped = /\bshaped\b/i.test(text)
   const wantsMob = /\b(mob|entity|entities|creature)\b/i.test(text)
   const wantsGui = /\b(gui|screen|inventory menu|container|menu)\b/i.test(text)
   const wantsSpawn = /\b(spawn|spawns in|biome spawn)\b/i.test(text)
+  const wantsOre = /\b(ore|vein|ore gen|worldgen)\b/i.test(text)
   const unsupportedRequests = UNSUPPORTED_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => ({
     feature: entry.feature,
     reason: entry.reason
@@ -70,6 +73,12 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
       reason: `${manifest.platform} cannot register biome spawn tables. Custom mobs stay summon/command disguises.`
     })
   }
+  if (wantsOre && (manifest.platform === 'paper' || manifest.platform === 'spigot')) {
+    unsupportedRequests.push({
+      feature: 'worldgen',
+      reason: `${manifest.platform} cannot emit configured/placed ore features. This is an honest gap, not fake worldgen.`
+    })
+  }
 
   return parseProjectSpec({
     schemaVersion: 1,
@@ -84,18 +93,33 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
         displayName: titleCase(itemName),
         description: text.slice(0, 400),
         maxCount: 64,
-        rarity: 'common'
+        rarity: 'common',
+        durability: 0,
+        attributes: []
       }
     ],
     recipes: wantsRecipe
       ? [
-          {
-            id: `${itemId.slice(0, 18)}_cobble`,
-            type: 'shapeless',
-            resultItemId: itemId,
-            resultCount: 1,
-            ingredients: [{ kind: 'vanilla', id: 'minecraft:cobblestone' }]
-          }
+          wantsShaped
+            ? {
+                id: `${itemId.slice(0, 18)}_shaped`,
+                type: 'shaped',
+                resultItemId: itemId,
+                resultCount: 1,
+                ingredients: [],
+                pattern: [' X ', ' X ', ' S '],
+                keys: [
+                  { symbol: 'X', kind: 'vanilla', id: 'minecraft:iron_ingot' },
+                  { symbol: 'S', kind: 'vanilla', id: 'minecraft:stick' }
+                ]
+              }
+            : {
+                id: `${itemId.slice(0, 18)}_cobble`,
+                type: 'shapeless',
+                resultItemId: itemId,
+                resultCount: 1,
+                ingredients: [{ kind: 'vanilla', id: 'minecraft:cobblestone' }]
+              }
         ]
       : [],
     commands: [],
@@ -114,6 +138,8 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
       : [],
     modGuis: wantsGui && manifest.type === 'mod' ? [defaultModGui()] : [],
     pluginGuis: wantsGui && manifest.type === 'plugin' ? [defaultPluginGui()] : [],
+    worldgen:
+      wantsOre && manifest.type === 'mod' ? [defaultWorldgen(`${itemId.slice(0, 16)}_vein`)] : [],
     unsupportedRequests,
     source: 'template',
     prompt: text
@@ -123,6 +149,12 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
 function inferMobPreset(text: string): ReturnType<typeof defaultMob>['preset'] {
   if (/\b(lookout|sentry|stationary|guard)\b/i.test(text)) {
     return 'stationary_lookout'
+  }
+  if (/\b(follow player|follows players|companion)\b/i.test(text)) {
+    return 'follow_player'
+  }
+  if (/\b(leap|pounce|jump attack)\b/i.test(text)) {
+    return 'leap_melee'
   }
   if (/\b(avoid players|skittish|shy)\b/i.test(text)) {
     return 'avoid_players'

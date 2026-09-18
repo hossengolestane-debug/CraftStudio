@@ -1,5 +1,5 @@
-import { defaultItem, defaultRecipe, EDITOR_VANILLA_ITEMS } from '../../../../shared/editorSpec'
-import type { ProjectSpec, SpecItem, SpecRecipe } from '../../../../shared/spec'
+import { defaultItem, defaultRecipe, defaultShapedRecipe, EDITOR_VANILLA_ITEMS } from '../../../../shared/editorSpec'
+import { ITEM_ATTRIBUTES, ITEM_ATTRIBUTE_SLOTS, type ProjectSpec, type SpecItem, type SpecRecipe } from '../../../../shared/spec'
 import { Button, Card, Field, TextInput } from '../../components/ui'
 
 export function ItemEditor({
@@ -35,8 +35,8 @@ export function ItemEditor({
       <div>
         <h2 className="text-lg font-semibold">Item editor</h2>
         <p className="mt-1 text-sm text-muted">
-          Edit name, id, stack size, and a shapeless recipe without Ollama. Apply still shows diffs. Java and Gradle stay
-          template-authored.
+          Edit name, id, stack size, durability, a few attributes, and shapeless or shaped recipes without Ollama. Apply
+          still shows diffs. Java and Gradle stay template-authored.
         </p>
         {paperLimits ? (
           <p className="mt-2 text-sm">
@@ -111,6 +111,93 @@ export function ItemEditor({
               />
               Include layer1 texture slot
             </label>
+            <Field
+              label="Durability"
+              htmlFor={`item-dur-${index}`}
+              hint="0 = none. Mods emit maxDamage/durability. Plugins cannot add real tool durability on paper disguises."
+            >
+              <TextInput
+                id={`item-dur-${index}`}
+                inputMode="numeric"
+                value={String(item.durability)}
+                onChange={(event) => {
+                  const durability = Math.min(4096, Math.max(0, Number(event.target.value) || 0))
+                  updateItem(index, { durability, maxCount: durability > 0 ? 1 : item.maxCount })
+                }}
+              />
+            </Field>
+          </div>
+          <div className="space-y-2 border border-dashed border-line p-2">
+            <p className="text-xs text-muted">Attributes (max 4). Conservative subset only — not a full equipment system.</p>
+            {item.attributes.map((attr, attrIndex) => (
+              <div key={`${attr.id}-${attrIndex}`} className="grid gap-2 md:grid-cols-4">
+                <select
+                  className="border border-line bg-white px-2 py-1"
+                  value={attr.id}
+                  onChange={(event) => {
+                    const attributes = item.attributes.map((entry, i) =>
+                      i === attrIndex ? { ...entry, id: event.target.value as typeof attr.id } : entry
+                    )
+                    updateItem(index, { attributes })
+                  }}
+                >
+                  {ITEM_ATTRIBUTES.map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </select>
+                <TextInput
+                  inputMode="decimal"
+                  value={String(attr.amount)}
+                  onChange={(event) => {
+                    const attributes = item.attributes.map((entry, i) =>
+                      i === attrIndex
+                        ? { ...entry, amount: Math.min(64, Math.max(-64, Number(event.target.value) || 0)) }
+                        : entry
+                    )
+                    updateItem(index, { attributes })
+                  }}
+                />
+                <select
+                  className="border border-line bg-white px-2 py-1"
+                  value={attr.slot}
+                  onChange={(event) => {
+                    const attributes = item.attributes.map((entry, i) =>
+                      i === attrIndex ? { ...entry, slot: event.target.value as typeof attr.slot } : entry
+                    )
+                    updateItem(index, { attributes })
+                  }}
+                >
+                  {ITEM_ATTRIBUTE_SLOTS.map((slot) => (
+                    <option key={slot} value={slot}>
+                      {slot}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() =>
+                    updateItem(index, { attributes: item.attributes.filter((_, i) => i !== attrIndex) })
+                  }
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={item.attributes.length >= 4}
+              onClick={() =>
+                updateItem(index, {
+                  attributes: [...item.attributes, { id: 'attack_damage', amount: 1, slot: 'mainhand' }]
+                })
+              }
+            >
+              Add attribute
+            </Button>
           </div>
           {spec.items.length > 1 ? (
             <Button
@@ -146,7 +233,7 @@ export function ItemEditor({
         Add item
       </Button>
 
-      <h3 className="font-semibold">Shapeless recipes</h3>
+      <h3 className="font-semibold">Recipes</h3>
       {spec.recipes.map((recipe, index) => (
         <div key={`${recipe.id}-${index}`} className="space-y-3 border border-line p-3">
           <div className="grid gap-3 md:grid-cols-2">
@@ -156,6 +243,33 @@ export function ItemEditor({
                 value={recipe.id}
                 onChange={(event) => updateRecipe(index, { id: event.target.value })}
               />
+            </Field>
+            <Field label="Type" htmlFor={`recipe-type-${index}`}>
+              <select
+                id={`recipe-type-${index}`}
+                className="w-full border border-line bg-white px-3 py-2"
+                value={recipe.type}
+                onChange={(event) => {
+                  const type = event.target.value as SpecRecipe['type']
+                  if (type === 'shaped') {
+                    updateRecipe(index, {
+                      ...defaultShapedRecipe(recipe.resultItemId),
+                      id: recipe.id,
+                      resultCount: recipe.resultCount
+                    })
+                  } else {
+                    updateRecipe(index, {
+                      type: 'shapeless',
+                      ingredients: [{ kind: 'vanilla', id: EDITOR_VANILLA_ITEMS[0] }],
+                      pattern: [],
+                      keys: []
+                    })
+                  }
+                }}
+              >
+                <option value="shapeless">shapeless</option>
+                <option value="shaped">shaped</option>
+              </select>
             </Field>
             <Field label="Result item" htmlFor={`recipe-result-${index}`}>
               <select
@@ -171,22 +285,40 @@ export function ItemEditor({
                 ))}
               </select>
             </Field>
-            <Field label="Vanilla ingredient" htmlFor={`recipe-ing-${index}`}>
-              <select
-                id={`recipe-ing-${index}`}
-                className="w-full border border-line bg-white px-3 py-2"
-                value={recipe.ingredients[0]?.id ?? EDITOR_VANILLA_ITEMS[0]}
-                onChange={(event) =>
-                  updateRecipe(index, { ingredients: [{ kind: 'vanilla', id: event.target.value }] })
-                }
+            {recipe.type === 'shapeless' ? (
+              <Field label="Vanilla ingredient" htmlFor={`recipe-ing-${index}`}>
+                <select
+                  id={`recipe-ing-${index}`}
+                  className="w-full border border-line bg-white px-3 py-2"
+                  value={recipe.ingredients[0]?.id ?? EDITOR_VANILLA_ITEMS[0]}
+                  onChange={(event) =>
+                    updateRecipe(index, { ingredients: [{ kind: 'vanilla', id: event.target.value }] })
+                  }
+                >
+                  {EDITOR_VANILLA_ITEMS.map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : (
+              <Field
+                label="Pattern (3 rows)"
+                htmlFor={`recipe-pattern-${index}`}
+                hint="A–Z letters plus spaces. Keys must cover every letter."
               >
-                {EDITOR_VANILLA_ITEMS.map((id) => (
-                  <option key={id} value={id}>
-                    {id}
-                  </option>
-                ))}
-              </select>
-            </Field>
+                <TextInput
+                  id={`recipe-pattern-${index}`}
+                  value={recipe.pattern.join('|')}
+                  onChange={(event) =>
+                    updateRecipe(index, {
+                      pattern: event.target.value.split('|').slice(0, 3).map((row) => row.slice(0, 3))
+                    })
+                  }
+                />
+              </Field>
+            )}
             <Field label="Result count" htmlFor={`recipe-count-${index}`}>
               <TextInput
                 id={`recipe-count-${index}`}
@@ -198,6 +330,11 @@ export function ItemEditor({
               />
             </Field>
           </div>
+          {recipe.type === 'shaped' ? (
+            <p className="text-xs text-muted">
+              Keys: {recipe.keys.map((key) => `${key.symbol}=${key.id}`).join(', ') || 'none'}
+            </p>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -214,20 +351,36 @@ export function ItemEditor({
         </div>
       ))}
 
-      <Button
-        type="button"
-        variant="secondary"
-        disabled={spec.recipes.length >= 8 || spec.items.length === 0}
-        onClick={() =>
-          onChange({
-            ...spec,
-            recipes: [...spec.recipes, defaultRecipe(spec.items[0]?.id ?? 'custom_item')],
-            source: 'editor'
-          })
-        }
-      >
-        Add shapeless recipe
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={spec.recipes.length >= 8 || spec.items.length === 0}
+          onClick={() =>
+            onChange({
+              ...spec,
+              recipes: [...spec.recipes, defaultRecipe(spec.items[0]?.id ?? 'custom_item')],
+              source: 'editor'
+            })
+          }
+        >
+          Add shapeless recipe
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={spec.recipes.length >= 8 || spec.items.length === 0}
+          onClick={() =>
+            onChange({
+              ...spec,
+              recipes: [...spec.recipes, defaultShapedRecipe(spec.items[0]?.id ?? 'custom_item')],
+              source: 'editor'
+            })
+          }
+        >
+          Add shaped recipe
+        </Button>
+      </div>
     </Card>
   )
 }

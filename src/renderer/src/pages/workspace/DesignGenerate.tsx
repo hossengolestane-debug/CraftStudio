@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSpecHistory } from '../../lib/specHistory'
 import type { AppErrorPayload } from '../../../../shared/errors'
 import type {
   ApplyResultDto,
@@ -17,6 +18,7 @@ import { ItemEditor } from './ItemEditor'
 import { MobEditor } from './MobEditor'
 import { ModGuiEditor } from './ModGuiEditor'
 import { PluginGuiEditor } from './PluginGuiEditor'
+import { WorldgenEditor } from './WorldgenEditor'
 
 const api = window.craftstudio
 const SPEC_HINT = 'craftstudio.spec.json'
@@ -44,7 +46,9 @@ export function DesignGenerate({
   const [progress, setProgress] = useState<GenerationProgress[]>([])
   const [generation, setGeneration] = useState<GenerationResultDto | null>(null)
   const [preview, setPreview] = useState<ApplyResultDto | null>(null)
-  const [spec, setSpec] = useState<ProjectSpec | null>(null)
+  const specHistory = useSpecHistory(null)
+  const spec = specHistory.current
+  const replaceSpec = specHistory.replaceCurrent
   const [versionTarget, setVersionTarget] = useState(project.manifest.minecraftVersion)
   const [assessment, setAssessment] = useState<MigrationAssessmentDto | null>(null)
   const [snapshots, setSnapshots] = useState<SnapshotRecordDto[]>([])
@@ -56,6 +60,24 @@ export function DesignGenerate({
   }, [project.manifest.description, project.manifest.name])
 
   useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+        return
+      }
+      if (event.key === 'z' && !event.shiftKey) {
+        event.preventDefault()
+        specHistory.undo()
+      }
+      if (event.key === 'y' || (event.key === 'z' && event.shiftKey)) {
+        event.preventDefault()
+        specHistory.redo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [specHistory])
+
+  useEffect(() => {
     if (settings?.ollamaModel) {
       setModel(settings.ollamaModel)
     }
@@ -65,14 +87,14 @@ export function DesignGenerate({
     const off = api.onGenerationProgress((event) => {
       setProgress((list) => [...list.slice(-20), event])
     })
-    void api.getSpec(project.manifest.id).then(setSpec).catch(() => undefined)
+    void api.getSpec(project.manifest.id).then((loaded) => replaceSpec(loaded)).catch(() => undefined)
     void api.listSnapshots(project.manifest.id).then(setSnapshots).catch(() => undefined)
     return off
-  }, [project.manifest.id])
+  }, [project.manifest.id, replaceSpec])
 
   const codegenReady = isCodegenSupported(project.manifest.platform, project.manifest.minecraftVersion)
   const pluginLimits = project.manifest.platform === 'paper' || project.manifest.platform === 'spigot'
-  const workingSpec = generation?.spec ?? spec
+  const workingSpec = spec ?? generation?.spec
   const versionChoices = adapter?.compatibility.map((row) => row.minecraftVersion) ?? [project.manifest.minecraftVersion]
 
   const refreshModels = async (): Promise<OllamaStatus> => {
@@ -86,7 +108,7 @@ export function DesignGenerate({
 
   const applyWorking = (next: ProjectSpec): void => {
     const draft = { ...next, source: 'editor' as const }
-    setSpec(draft)
+    specHistory.setCurrent(draft)
     setGeneration((current) =>
       current
         ? { ...current, spec: draft }
@@ -95,7 +117,7 @@ export function DesignGenerate({
             usedOllama: false,
             repairAttempts: 0,
             remainingProblems: [],
-            ollamaNote: 'Edited in the item editor. Apply still validates with Zod.',
+            ollamaNote: 'Edited in the Design editors. Apply still validates with Zod.',
             success: true
           }
     )
@@ -227,7 +249,7 @@ export function DesignGenerate({
         <h2 className="text-lg font-semibold">Generate specification</h2>
         {!codegenReady ? (
           <p>
-            Phase 7 codegen is Fabric 1.21.x, Paper 1.21.x, NeoForge 1.21.1/1.21.4/1.21.8, Forge 1.21.1, and Spigot
+            Phase 8 codegen is Fabric 1.21.x, Paper 1.21.x, NeoForge 1.21.1/1.21.4/1.21.8, Forge 1.21.1, and Spigot
             1.21/1.21.1/1.21.4. This {project.manifest.platform} {project.manifest.minecraftVersion} project cannot emit
             Gradle files. The adapter will not pretend otherwise.
             {project.manifest.platform === 'spigot' ? ' Spigot is not inferred from Paper success.' : ''}
@@ -305,7 +327,7 @@ export function DesignGenerate({
                     })
                     .then((result) => {
                       setGeneration(result)
-                      setSpec(result.spec)
+                      specHistory.replaceCurrent(result.spec)
                     })
                     .catch((err) => setError(asAppError(err)))
                     .finally(() => setBusy(false))
@@ -332,8 +354,18 @@ export function DesignGenerate({
 
       {workingSpec ? (
         <>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" disabled={!specHistory.canUndo} onClick={specHistory.undo}>
+              Undo
+            </Button>
+            <Button type="button" variant="ghost" disabled={!specHistory.canRedo} onClick={specHistory.redo}>
+              Redo
+            </Button>
+            <p className="self-center text-xs text-muted">Design editors keep a 20-step history. Autosave still writes on Apply.</p>
+          </div>
           <ItemEditor spec={workingSpec} paperLimits={pluginLimits} onChange={applyWorking} />
           <MobEditor spec={workingSpec} pluginLimits={pluginLimits} onChange={applyWorking} />
+          <WorldgenEditor spec={workingSpec} pluginLimits={pluginLimits} onChange={applyWorking} />
           {project.manifest.type === 'mod' ? (
             <ModGuiEditor
               spec={workingSpec}
@@ -373,7 +405,9 @@ export function DesignGenerate({
             ))}
           </ul>
           {generation.spec.recipes.length > 0 ? (
-            <p className="text-sm">{generation.spec.recipes.length} shapeless recipe(s).</p>
+            <p className="text-sm">
+              {generation.spec.recipes.length} recipe(s) ({generation.spec.recipes.filter((recipe) => recipe.type === 'shaped').length} shaped).
+            </p>
           ) : null}
         </Card>
       ) : spec ? (
@@ -474,7 +508,7 @@ export function DesignGenerate({
                   setBusy(true)
                   void api
                     .restoreSnapshot(project.manifest.id, snapshot.id)
-                    .then(() => api.getSpec(project.manifest.id).then(setSpec))
+                    .then(() => api.getSpec(project.manifest.id).then((loaded) => specHistory.replaceCurrent(loaded)))
                     .catch((err) => setError(asAppError(err)))
                     .finally(() => setBusy(false))
                 }}
@@ -492,7 +526,8 @@ export function DesignGenerate({
           <p className="mt-2 text-sm text-muted">
             Gradle emission: {adapter.capabilities.gradleProject}. Client entities: {adapter.capabilities.clientEntities}.
             Custom items: {adapter.capabilities.customItems}. Custom entities: {adapter.capabilities.customEntities}.
-            GUIs: {adapter.capabilities.customGuis}.
+            GUIs: {adapter.capabilities.customGuis}. Worldgen: {adapter.capabilities.worldgen}. Recipes:{' '}
+            {adapter.capabilities.recipes}.
           </p>
         </Card>
       ) : null}

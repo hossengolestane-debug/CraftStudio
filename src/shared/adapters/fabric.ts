@@ -12,7 +12,7 @@ export const FabricAdapter: PlatformAdapter = {
     clientEntities: 'supported',
     customGuis: 'supported',
     recipes: 'supported',
-    worldgen: 'supported',
+    worldgen: 'limited',
     biomeSpawns: 'limited',
     serverCommands: 'supported',
     textures: 'supported',

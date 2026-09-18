@@ -13,10 +13,14 @@ import { defaultCommandPermission } from '../../../shared/spawn'
 import { fabricSpawnDoc, placeholderEntityPng } from '../fabric/extras'
 import { isHostilePreset, mojangGoalBlock, mojangParent } from '../mobs/presets'
 import { forgeLikeCommandMethod, forgeLikeMenuFields, planForgeLikeMenuFiles } from '../modgui/forgeLike'
+import { mojangItemProperties, mojangNeedsAttributeImports } from '../items/settings'
+import { planEntityLootFiles, planItemLootFiles, planLootDocs } from '../loot/tables'
 import { entityClassName } from '../naming'
+import { planRecipeFiles } from '../recipes/json'
 import { planBiomeModifierFiles } from '../spawn/biomeTables'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
+import { planOreBiomeModifiers, planOreFeatureJson, planWorldgenDocs } from '../worldgen/oreVeins'
 
 function itemRegistrations(spec: ProjectSpec): string {
   return spec.items
@@ -24,7 +28,7 @@ function itemRegistrations(spec: ProjectSpec): string {
       const constant = toConstName(item.id)
       return `  public static final DeferredItem<Item> ${constant} = ITEMS.registerSimpleItem(
     "${item.id}",
-    new Item.Properties().stacksTo(${item.maxCount})
+    ${mojangItemProperties(item)}
   );`
     })
     .join('\n\n')
@@ -80,6 +84,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.AvoidEntityGoal;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
+import net.minecraft.world.entity.ai.goal.LeapAtTargetGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.world.entity.ai.goal.PanicGoal;
@@ -130,6 +135,11 @@ function mainJava(spec: ProjectSpec, pins: NeoForgeVersionPins): string {
 
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
+${mojangNeedsAttributeImports(spec.items) ? `import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.resources.ResourceLocation;` : ''}
 ${needsRegistries ? 'import net.minecraft.core.registries.Registries;' : ''}
 ${emitEntities ? `import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -390,6 +400,13 @@ jar {
     encoding: 'utf8',
     contents: mainJava(spec, pins)
   })
+  files.push(...planRecipeFiles(spec))
+  files.push(...planOreFeatureJson(spec))
+  files.push(...planOreBiomeModifiers(spec, 'neoforge'))
+  files.push(...planEntityLootFiles(spec))
+  files.push(...planItemLootFiles(spec))
+  files.push(...planLootDocs(spec))
+  files.push(...planWorldgenDocs(spec, 'neoforge'))
 
   if (pins.entityRegistration && spec.mobs.length > 0) {
     files.push(...planNeoForgeEntityFiles(spec, packagePath))

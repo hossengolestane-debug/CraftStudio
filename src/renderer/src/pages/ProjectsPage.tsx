@@ -45,6 +45,14 @@ export function ProjectsPage({
     )
   }, [projects, query])
 
+  const recent = useMemo(() => {
+    const lastId = settings?.lastOpenedProjectId
+    const byUpdated = [...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    const last = lastId ? projects.find((project) => project.id === lastId) : undefined
+    const rest = byUpdated.filter((project) => project.id !== lastId).slice(0, 4)
+    return last ? [last, ...rest] : byUpdated.slice(0, 5)
+  }, [projects, settings?.lastOpenedProjectId])
+
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -61,6 +69,29 @@ export function ProjectsPage({
       </div>
 
       <FirstRunChecklist settings={settings} />
+
+      {recent.length > 0 ? (
+        <Card className="space-y-2">
+          <h2 className="text-lg font-semibold">Recent</h2>
+          <p className="text-sm text-muted">Last opened plus newest by updated time.</p>
+          <ul className="flex flex-wrap gap-2">
+            {recent.map((project) => (
+              <li key={`recent-${project.id}`}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    void onOpen(project.id).catch((err) => setError(asAppError(err)))
+                  }}
+                >
+                  {project.name} · {project.platform} {project.minecraftVersion}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       {error ? <ErrorPanel error={error} onDismiss={() => setError(null)} /> : null}
 

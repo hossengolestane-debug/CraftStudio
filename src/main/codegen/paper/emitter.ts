@@ -4,14 +4,12 @@ import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
 import { defaultCommandPermission, defaultMenuPermission } from '../../../shared/spawn'
-import { pluginGuiClass, pluginGuiJava, pluginCommandPermissionsYml, pluginTabCompleteJava, spawnMobJava } from '../plugin/bukkit'
+import { pluginGuiClass, pluginGuiJava, pluginCommandPermissionsYml, pluginRecipeRegistration, pluginTabCompleteJava, spawnMobJava } from '../plugin/bukkit'
+import { pluginLootListenerJava, pluginLootRegister, planLootDocs } from '../loot/tables'
 import { planPluginSpawnGap } from '../spawn/biomeTables'
+import { planWorldgenDocs } from '../worldgen/oreVeins'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape, yamlEscape } from '../wrapper'
-
-function vanillaToMaterial(id: string): string {
-  return id.replace(/^minecraft:/, '').toUpperCase()
-}
 
 function pluginName(spec: ProjectSpec): string {
   return spec.mainClass.replace(/[^A-Za-z0-9]/g, '') || 'CraftStudioPlugin'
@@ -44,25 +42,6 @@ ${applyCustomModelData(pins, index)}
   }`
     })
     .join('\n\n')
-}
-
-function recipeRegistration(spec: ProjectSpec): string {
-  return spec.recipes
-    .map((recipe) => {
-      const resultMethod = `create${toConstName(recipe.resultItemId).replace(/_/g, '')}`
-      const ingredients = recipe.ingredients
-        .map((ingredient) => {
-          if (ingredient.kind !== 'vanilla') {
-            return `    // Mod-item ingredients are not registered as Paper materials; skipped ${ingredient.id}`
-          }
-          return `    recipe_${recipe.id}.addIngredient(Material.${vanillaToMaterial(ingredient.id)});`
-        })
-        .join('\n')
-      return `    ShapelessRecipe recipe_${recipe.id} = new ShapelessRecipe(new NamespacedKey(this, "${recipe.id}"), ${resultMethod}());
-${ingredients}
-    getServer().addRecipe(recipe_${recipe.id});`
-    })
-    .join('\n')
 }
 
 function permissionNode(spec: ProjectSpec, commandName: string): string {
@@ -112,7 +91,6 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.ShapelessRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -124,11 +102,13 @@ public class ${spec.mainClass} extends JavaPlugin implements org.bukkit.command.
 
 ${itemFactory(spec, pins)}
 ${spawnMobJava(spec, 'adventure', attr)}
+${pluginLootListenerJava(spec, spec.mainClass, 'adventure')}
 
   @Override
   public void onEnable() {
     getLogger().info("${javaEscape(spec.displayName)} enabled (Paper). Custom items are vanilla paper + PDC — clients do not see a new item id. Custom mobs are vanilla disguises, not new client entity types.");
-${recipeRegistration(spec)}
+${pluginRecipeRegistration(spec)}
+${spec.mobs.some((mob) => mob.drops.length > 0) ? pluginLootRegister() : ''}
 ${menuRegs}
     var giveCmd = getCommand("givecustomitem");
     if (giveCmd != null) {
@@ -333,6 +313,8 @@ jar {
     })
   }
   files.push(...planPluginSpawnGap(spec))
+  files.push(...planWorldgenDocs(spec, 'plugin'))
+  files.push(...planLootDocs(spec))
 
   if (spec.mobs.length > 0) {
     files.push({

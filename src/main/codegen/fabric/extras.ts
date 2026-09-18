@@ -51,6 +51,7 @@ import ${parent.importName};
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.ai.goal.ActiveTargetGoal;
 import net.minecraft.entity.ai.goal.FleeEntityGoal;
+import net.minecraft.entity.ai.goal.LeapAtTargetGoal;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.entity.ai.goal.RevengeGoal;
@@ -141,6 +142,17 @@ export function fabricSpawnInit(spec: ProjectSpec): string {
   return lines.join('\n')
 }
 
+export function fabricWorldgenInit(spec: ProjectSpec): string {
+  return spec.worldgen
+    .map((entry) => {
+      const biomes = entry.biomes.length
+        ? `BiomeSelectors.includeByKey(${entry.biomes.map((biome) => `BiomeKeys.${yarnBiomeKey(biome)}`).join(', ')})`
+        : 'BiomeSelectors.foundInOverworld()'
+      return `    BiomeModifications.addFeature(${biomes}, GenerationStep.Feature.UNDERGROUND_ORES, RegistryKey.of(RegistryKeys.PLACED_FEATURE, Identifier.of(MOD_ID, "${entry.id}")));`
+    })
+    .join('\n')
+}
+
 function customSlotCount(gui: SpecModGui): number {
   return Math.max(1, gui.widgets.filter((widget) => widget.kind === 'slot').length)
 }
@@ -149,6 +161,7 @@ function fabricHandlerJava(spec: ProjectSpec, gui: SpecModGui): string {
   const handler = fabricHandlerClass(gui.id)
   const field = menuFieldName(gui.id)
   const slots = customSlotCount(gui)
+  const dataCount = Math.max(1, gui.dataSlots.length)
   const slotAdds = Array.from({ length: slots }, (_, index) => {
     const widget = gui.widgets.filter((entry) => entry.kind === 'slot')[index]
     const x = widget?.x ?? 80
@@ -160,22 +173,28 @@ function fabricHandlerJava(spec: ProjectSpec, gui: SpecModGui): string {
       }
     });`
   }).join('\n')
+  const dataInits = gui.dataSlots
+    .map((slot, index) => `    this.data.set(${index}, ${slot.initial});`)
+    .join('\n')
   return `package ${spec.packageName};
 
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.inventory.SimpleInventory;
 import net.minecraft.item.ItemStack;
+import net.minecraft.screen.ArrayPropertyDelegate;
+import net.minecraft.screen.PropertyDelegate;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 
 /**
  * Server-side container for "${javaEscape(gui.title)}".
- * Client clicks are not trusted. Illegal shift-transfers are refused here.
+ * Client clicks are not trusted. Data slots are server-owned PropertyDelegate values.
  */
 public class ${handler} extends ScreenHandler {
   private static final int CUSTOM_SLOTS = ${slots};
   private final SimpleInventory container = new SimpleInventory(CUSTOM_SLOTS);
+  private final PropertyDelegate data = new ArrayPropertyDelegate(${dataCount});
 
   public ${handler}(int syncId, PlayerInventory inventory) {
     super(${spec.mainClass}.${field}, syncId);
@@ -188,6 +207,12 @@ ${slotAdds}
     for (int col = 0; col < 9; col++) {
       this.addSlot(new Slot(inventory, col, 8 + col * 18, 142));
     }
+    this.addProperties(this.data);
+${dataInits || `    this.data.set(0, 0);`}
+  }
+
+  public int getSyncedData(int index) {
+    return this.data.get(index);
   }
 
   @Override
@@ -229,6 +254,13 @@ ${slotAdds}
 `
 }
 
+function fabricGhostStack(spec: ProjectSpec, itemId: string): string {
+  if (itemId.startsWith('minecraft:')) {
+    return `new ItemStack(Items.${itemId.slice('minecraft:'.length).toUpperCase()})`
+  }
+  return `new ItemStack(${spec.mainClass}.${toConstName(itemId)})`
+}
+
 function fabricScreenJava(spec: ProjectSpec, gui: SpecModGui): string {
   const screen = fabricScreenClass(gui.id)
   const handler = fabricHandlerClass(gui.id)
@@ -243,17 +275,32 @@ function fabricScreenJava(spec: ProjectSpec, gui: SpecModGui): string {
       return `    // Slot preview at ${widget.x},${widget.y}. Server must validate item movement; this screen does not trust the client.`
     })
     .join('\n')
+  const dataLabels = gui.dataSlots
+    .map(
+      (slot, index) =>
+        `    context.drawText(this.textRenderer, "${javaEscape(slot.id)}=" + this.handler.getSyncedData(${index}), 8, ${18 + index * 10}, 0x305030, false);`
+    )
+    .join('\n')
+  const firstSlot = gui.widgets.find((widget) => widget.kind === 'slot')
+  const ghost = gui.dataSlots.find((slot) => slot.ghostItemId)
+  const ghostDraw =
+    ghost?.ghostItemId && firstSlot
+      ? `    if (!this.handler.getSlot(0).hasStack()) {
+      context.drawItem(${fabricGhostStack(spec, ghost.ghostItemId)}, this.x + ${firstSlot.x}, this.y + ${firstSlot.y});
+    }`
+      : ''
+  const needsItems = Boolean(ghost?.ghostItemId)
   return `package ${spec.packageName};
 
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.text.Text;
+${needsItems ? 'import net.minecraft.item.ItemStack;\nimport net.minecraft.item.Items;\n' : ''}import net.minecraft.text.Text;
 
 /**
  * Client preview for "${javaEscape(gui.title)}" (${gui.width}x${gui.height}).
- * This is a layout preview, not a Minecraft-verified GUI. Server-side validation lives in ${handler}.
+ * Ghost items are display-only. Data slot numbers come from the server PropertyDelegate.
  */
 public class ${screen} extends HandledScreen<${handler}> {
   public ${screen}(${handler} handler, PlayerInventory inventory, Text title) {
@@ -274,6 +321,8 @@ public class ${screen} extends HandledScreen<${handler}> {
   protected void drawBackground(DrawContext context, float delta, int mouseX, int mouseY) {
     context.fill(this.x, this.y, this.x + this.backgroundWidth, this.y + this.backgroundHeight, 0xC0101010);
 ${widgets}
+${dataLabels}
+${ghostDraw}
   }
 }
 `
@@ -654,7 +703,7 @@ export function fabricSpawnDoc(spec: ProjectSpec, pluginUnsupported = false): st
     '',
     pluginUnsupported
       ? 'This adapter cannot register biome spawn tables. Plugin mobs stay vanilla disguises summoned by command.'
-      : 'Phase 7 MVP: dedicated biome spawn entries only. This is not a worldgen stack (no ores, dimensions, or structures).',
+      : 'Dedicated biome spawn entries only. Ore-vein worldgen is a separate Phase 8 MVP (see WORLDGEN.md).',
     rows || '- No mobs in this spec.',
     ''
   ].join('\n')

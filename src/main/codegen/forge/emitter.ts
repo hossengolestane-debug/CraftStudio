@@ -13,10 +13,14 @@ import {
 import { fabricSpawnDoc, placeholderEntityPng } from '../fabric/extras'
 import { isHostilePreset, mojangGoalBlock, mojangParent } from '../mobs/presets'
 import { forgeLikeCommandMethod, forgeLikeMenuFields, planForgeLikeMenuFiles } from '../modgui/forgeLike'
+import { mojangItemProperties, mojangNeedsAttributeImports } from '../items/settings'
+import { planEntityLootFiles, planItemLootFiles, planLootDocs } from '../loot/tables'
 import { entityClassName } from '../naming'
+import { planRecipeFiles } from '../recipes/json'
 import { planBiomeModifierFiles } from '../spawn/biomeTables'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
+import { planOreBiomeModifiers, planOreFeatureJson, planWorldgenDocs } from '../worldgen/oreVeins'
 
 function propsEscape(value: string): string {
   return value.replace(/\r?\n/g, ' ').replace(/\\/g, '\\\\')
@@ -26,7 +30,7 @@ function itemRegs(spec: ProjectSpec): string {
   return spec.items
     .map(
       (item) => `  public static final RegistryObject<Item> ${toConstName(item.id)} = ITEMS.register("${item.id}",
-    () -> new Item(new Item.Properties().stacksTo(${item.maxCount})));`
+    () -> new Item(${mojangItemProperties(item)}));`
     )
     .join('\n\n')
 }
@@ -49,6 +53,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.AvoidEntityGoal;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
+import net.minecraft.world.entity.ai.goal.LeapAtTargetGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.world.entity.ai.goal.PanicGoal;
@@ -303,6 +308,11 @@ ${spec.modGuis.length > 0 || spec.commands.length > 0 ? `import net.minecraftfor
 import net.minecraftforge.event.RegisterCommandsEvent;` : ''}
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
+${mojangNeedsAttributeImports(spec.items) ? `import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.resources.ResourceLocation;` : ''}
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
@@ -398,6 +408,13 @@ ${forgeLikeCommandMethod(spec)}
     })
   }
 
+  files.push(...planRecipeFiles(spec))
+  files.push(...planOreFeatureJson(spec))
+  files.push(...planOreBiomeModifiers(spec, 'forge'))
+  files.push(...planEntityLootFiles(spec))
+  files.push(...planItemLootFiles(spec))
+  files.push(...planLootDocs(spec))
+  files.push(...planWorldgenDocs(spec, 'forge'))
   files.push(...planForgeLikeMenuFiles(spec, packagePath, 'forge'))
 
   files.push({

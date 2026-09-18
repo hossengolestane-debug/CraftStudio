@@ -1,5 +1,7 @@
+import { vanillaItemConstant } from '../../../shared/itemStats'
 import { defaultCommandPermission } from '../../../shared/spawn'
 import type { ProjectSpec, SpecModGui } from '../../../shared/spec'
+import { toConstName } from '../../../shared/spec'
 import { forgeMenuClass, forgeScreenClass, menuFieldName, menuRegistryName } from '../naming'
 import type { PlannedFile } from '../types'
 import { javaEscape } from '../wrapper'
@@ -39,6 +41,7 @@ function menuJava(spec: ProjectSpec, gui: SpecModGui): string {
   const menu = forgeMenuClass(gui.id)
   const field = menuFieldName(gui.id)
   const slots = customSlotCount(gui)
+  const dataCount = Math.max(1, gui.dataSlots.length)
   const slotComments = gui.widgets
     .filter((widget) => widget.kind === 'slot')
     .map((widget) => `    // Designer slot "${widget.id}" at ${widget.x},${widget.y} — server validates mayPlace; client clicks are untrusted.`)
@@ -54,22 +57,28 @@ function menuJava(spec: ProjectSpec, gui: SpecModGui): string {
       }
     });`
   }).join('\n')
+  const dataInits = gui.dataSlots
+    .map((slot, index) => `    this.dataSlots.set(${index}, ${slot.initial});`)
+    .join('\n')
   return `package ${spec.packageName};
 
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerData;
+import net.minecraft.world.inventory.SimpleContainerData;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 /**
  * Server-side container for "${javaEscape(gui.title)}".
- * Client clicks are not trusted. Slot movement is validated here; illegal shift-clicks are refused.
+ * Client clicks are not trusted. Data slots are server-owned ContainerData values.
  */
 public class ${menu} extends AbstractContainerMenu {
   private static final int CUSTOM_SLOTS = ${slots};
   private final SimpleContainer container = new SimpleContainer(CUSTOM_SLOTS);
+  private final ContainerData dataSlots = new SimpleContainerData(${dataCount});
 
   public ${menu}(int id, Inventory playerInventory) {
     super(${spec.mainClass}.${field}.get(), id);
@@ -83,6 +92,12 @@ ${slotAdds}
     for (int col = 0; col < 9; col++) {
       this.addSlot(new Slot(playerInventory, col, 8 + col * 18, 142));
     }
+    this.addDataSlots(this.dataSlots);
+${dataInits || `    this.dataSlots.set(0, 0);`}
+  }
+
+  public int getSyncedData(int index) {
+    return this.dataSlots.get(index);
   }
 
   @Override
@@ -124,6 +139,13 @@ ${slotAdds}
 `
 }
 
+function forgeGhostStack(spec: ProjectSpec, itemId: string): string {
+  if (itemId.startsWith('minecraft:')) {
+    return `new ItemStack(Items.${vanillaItemConstant(itemId)})`
+  }
+  return `new ItemStack(${spec.mainClass}.${toConstName(itemId)}.get())`
+}
+
 function screenJava(spec: ProjectSpec, gui: SpecModGui): string {
   const menu = forgeMenuClass(gui.id)
   const screen = forgeScreenClass(gui.id)
@@ -134,6 +156,21 @@ function screenJava(spec: ProjectSpec, gui: SpecModGui): string {
         `    graphics.drawString(this.font, "${javaEscape(widget.text || widget.id)}", this.leftPos + ${widget.x}, this.topPos + ${widget.y}, 0x404040, false);`
     )
     .join('\n')
+  const dataLabels = gui.dataSlots
+    .map(
+      (slot, index) =>
+        `    graphics.drawString(this.font, "${javaEscape(slot.id)}=" + this.menu.getSyncedData(${index}), this.leftPos + 8, this.topPos + ${18 + index * 10}, 0x305030, false);`
+    )
+    .join('\n')
+  const firstSlot = gui.widgets.find((widget) => widget.kind === 'slot')
+  const ghost = gui.dataSlots.find((slot) => slot.ghostItemId)
+  const ghostDraw =
+    ghost?.ghostItemId && firstSlot
+      ? `    if (!this.menu.getSlot(0).hasItem()) {
+      graphics.renderItem(${forgeGhostStack(spec, ghost.ghostItemId)}, this.leftPos + ${firstSlot.x}, this.topPos + ${firstSlot.y});
+    }`
+      : ''
+  const needsItems = Boolean(ghost?.ghostItemId)
   const closeY = Math.max(20, gui.height - 36)
   return `package ${spec.packageName};
 
@@ -142,10 +179,10 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-
+${needsItems ? 'import net.minecraft.world.item.ItemStack;\nimport net.minecraft.world.item.Items;\n' : ''}
 /**
  * Client preview for "${javaEscape(gui.title)}" (${gui.width}x${gui.height}).
- * This is a layout preview, not a Minecraft-verified GUI. Server-side validation lives in ${menu}.
+ * Ghost items are display-only. Data slot numbers come from the server ContainerData.
  */
 public class ${screen} extends AbstractContainerScreen<${menu}> {
   public ${screen}(${menu} menu, Inventory inventory, Component title) {
@@ -166,6 +203,8 @@ public class ${screen} extends AbstractContainerScreen<${menu}> {
   protected void renderBg(GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
     graphics.fill(this.leftPos, this.topPos, this.leftPos + this.imageWidth, this.topPos + this.imageHeight, 0xC0101010);
 ${labels}
+${dataLabels}
+${ghostDraw}
   }
 }
 `

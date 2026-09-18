@@ -34,8 +34,19 @@ export function assertCanGenerate(platform: PlatformId, minecraftVersion: string
   })
 }
 
+export function assertSpecCapabilities(manifest: ProjectManifest, spec: ProjectSpec): void {
+  if (spec.worldgen.length > 0 && (manifest.platform === 'paper' || manifest.platform === 'spigot')) {
+    throw new AppError({
+      code: 'ADAPTER_UNSUPPORTED',
+      message: `${manifest.platform} cannot emit worldgen ore features.`,
+      action: 'Remove worldgen entries or use Fabric / Forge / NeoForge. Paper/Spigot stay honest: no fake worldgen.'
+    })
+  }
+}
+
 export function planAdapterFiles(manifest: ProjectManifest, spec: ProjectSpec): PlannedFile[] {
   assertCanGenerate(manifest.platform, manifest.minecraftVersion)
+  assertSpecCapabilities(manifest, spec)
   if (manifest.platform === 'fabric') {
     return planFabricFiles(manifest, spec)
   }

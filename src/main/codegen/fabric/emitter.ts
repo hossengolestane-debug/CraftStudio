@@ -7,6 +7,10 @@ import type { ProjectManifest } from '../../../shared/types'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
 import { defaultCommandPermission } from '../../../shared/spawn'
+import { fabricItemSettings, fabricNeedsAttributeImports } from '../items/settings'
+import { planEntityLootFiles, planItemLootFiles, planLootDocs } from '../loot/tables'
+import { planRecipeFiles } from '../recipes/json'
+import { planOreFeatureJson, planWorldgenDocs } from '../worldgen/oreVeins'
 import {
   fabricAttributeLines,
   fabricCommandBlocks,
@@ -16,6 +20,7 @@ import {
   fabricRendererStyle,
   fabricSpawnDoc,
   fabricSpawnInit,
+  fabricWorldgenInit,
   planFabricClientFiles,
   planFabricEntityRenderers,
   planFabricGuiFiles,
@@ -30,7 +35,7 @@ function itemJavaClassic(spec: ProjectSpec): string {
       return `  public static final Item ${constant} = Registry.register(
     Registries.ITEM,
     Identifier.of(MOD_ID, "${item.id}"),
-    new Item(new Item.Settings().maxCount(${item.maxCount}))
+    new Item(${fabricItemSettings(item, true)})
   );`
     })
     .join('\n\n')
@@ -55,7 +60,7 @@ function itemJavaRegistryKey(spec: ProjectSpec): string {
       return `  public static final Item ${constant} = Items.register(
     ${constant}_KEY,
     Item::new,
-    new Item.Settings().maxCount(${item.maxCount})
+    ${fabricItemSettings(item, false)}
   );`
     })
     .join('\n\n')
@@ -73,12 +78,19 @@ function fabricImports(
   const hasMobs = spec.mobs.length > 0
   const hasGuis = spec.modGuis.length > 0
   const hasSpawn = spec.mobs.some((mob) => mob.spawn.enabled && mob.spawn.biomes.length > 0)
+  const hasWorldgen = spec.worldgen.length > 0
   const lines = [
     'import net.fabricmc.api.ModInitializer;',
     'import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;',
     'import net.minecraft.item.Item;',
     'import net.minecraft.item.ItemGroups;'
   ]
+  if (fabricNeedsAttributeImports(spec.items)) {
+    lines.push('import net.minecraft.component.type.AttributeModifierSlot;')
+    lines.push('import net.minecraft.component.type.AttributeModifiersComponent;')
+    lines.push('import net.minecraft.entity.attribute.EntityAttributeModifier;')
+    lines.push('import net.minecraft.entity.attribute.EntityAttributes;')
+  }
   if (style === 'registry_key') {
     lines.push('import net.minecraft.item.Items;')
     lines.push('import net.minecraft.registry.RegistryKey;')
@@ -94,10 +106,17 @@ function fabricImports(
     lines.push('import net.minecraft.entity.EntityType;')
     lines.push('import net.minecraft.entity.SpawnGroup;')
   }
-  if (hasSpawn) {
+  if (hasSpawn || hasWorldgen) {
     lines.push('import net.fabricmc.fabric.api.biome.v1.BiomeModifications;')
     lines.push('import net.fabricmc.fabric.api.biome.v1.BiomeSelectors;')
+  }
+  if (hasSpawn || (hasWorldgen && spec.worldgen.some((entry) => entry.biomes.length > 0))) {
     lines.push('import net.minecraft.world.biome.BiomeKeys;')
+  }
+  if (hasWorldgen) {
+    lines.push('import net.minecraft.registry.RegistryKey;')
+    lines.push('import net.minecraft.registry.RegistryKeys;')
+    lines.push('import net.minecraft.world.gen.GenerationStep;')
   }
   if (hasGuis) {
     lines.push('import net.minecraft.resource.featuretoggle.FeatureFlags;')
@@ -134,6 +153,7 @@ ${commandBody}
     : ''
   const attrs = spec.mobs.length ? `\n${fabricAttributeLines(spec)}` : ''
   const spawns = fabricSpawnInit(spec)
+  const ores = fabricWorldgenInit(spec)
 
   return `package ${spec.packageName};
 
@@ -147,12 +167,13 @@ ${items}${entities}${menu}
 
   @Override
   public void onInitialize() {
-    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 7");
+    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 8");
     ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
 ${itemAdds(spec)}
     });
 ${attrs}
 ${spawns}
+${ores}
 ${commands}
   }
 }
@@ -326,27 +347,12 @@ jar {
     })
   }
 
-  for (const recipe of spec.recipes) {
-    const ingredients = recipe.ingredients.map((ingredient) =>
-      ingredient.kind === 'vanilla' ? { item: ingredient.id } : { item: `${spec.modId}:${ingredient.id}` }
-    )
-    files.push({
-      relativePath: `src/main/resources/data/${spec.modId}/recipe/${recipe.id}.json`,
-      encoding: 'utf8',
-      contents: `${JSON.stringify(
-        {
-          type: 'minecraft:crafting_shapeless',
-          ingredients,
-          result: {
-            id: `${spec.modId}:${recipe.resultItemId}`,
-            count: recipe.resultCount
-          }
-        },
-        null,
-        2
-      )}\n`
-    })
-  }
+  files.push(...planRecipeFiles(spec))
+  files.push(...planOreFeatureJson(spec))
+  files.push(...planEntityLootFiles(spec))
+  files.push(...planItemLootFiles(spec))
+  files.push(...planLootDocs(spec))
+  files.push(...planWorldgenDocs(spec, 'fabric'))
 
   files.push({
     relativePath: `src/main/java/${packagePath}/${spec.mainClass}.java`,
@@ -423,7 +429,7 @@ jar {
       '',
       spec.description || '_No description._',
       '',
-      `Generated by CraftStudio Local Phase 3 for **Fabric ${pins.minecraft}** (${pins.itemRegistration} item registration).`,
+      `Generated by CraftStudio Local Phase 8 for **Fabric ${pins.minecraft}** (${pins.itemRegistration} item registration).`,
       'Build files come from trusted templates. The model never writes Gradle or Java directly.',
       '',
       '## Build',

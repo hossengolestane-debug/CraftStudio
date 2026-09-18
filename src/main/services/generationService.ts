@@ -52,11 +52,12 @@ const SYSTEM_PROMPT = `You emit ONLY a JSON object for CraftStudio Local.
 Rules:
 - schemaVersion must be 1
 - items: 1-8 simple custom items (id lowercase [a-z0-9_])
-- recipes: shapeless only; vanilla ingredients must be minecraft: ids from a small allowlist (stick, cobblestone, stone, dirt, iron_ingot, ...)
+- recipes: shapeless or shaped; vanilla ingredients must be minecraft: ids from a small allowlist (stick, cobblestone, stone, dirt, iron_ingot, ...)
 - commands: names only; they will not be implemented
-- mobs: optional; only presets passive_wanderer | hostile_melee | neutral_flee | avoid_players | stationary_lookout
-- modGuis / pluginGuis: optional simple layouts (labels, buttons, slots)
-- Put blocks, worldgen, full behavior trees in unsupportedRequests
+- mobs: optional; only presets passive_wanderer | hostile_melee | neutral_flee | avoid_players | stationary_lookout | follow_player | leap_melee (7-preset cap, not a tree)
+- worldgen: optional ore_vein entries of allowlisted vanilla ores only (no dimensions/structures)
+- modGuis / pluginGuis: optional simple layouts (labels, buttons, slots, optional dataSlots)
+- Put custom blocks, dimensions, structures, and full behavior trees in unsupportedRequests
 - Never include file paths, shell commands, Gradle, or Java source
 - source must be "ollama"
 - packageName like local.craftstudio.mod_id

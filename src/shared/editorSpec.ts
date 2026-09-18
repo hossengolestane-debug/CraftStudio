@@ -1,4 +1,5 @@
-import { parseProjectSpec, VANILLA_ITEMS, type ProjectSpec, type SpecItem, type SpecRecipe } from './spec'
+import { parseProjectSpec, VANILLA_ITEMS, type ProjectSpec, type SpecItem, type SpecRecipe, type SpecWorldgen } from './spec'
+import { defaultWorldgen } from './worldgen'
 
 export function withEditorSource(spec: ProjectSpec): ProjectSpec {
   return parseProjectSpec({ ...spec, source: 'editor' })
@@ -50,7 +51,9 @@ export function defaultItem(id = 'custom_item'): SpecItem {
     maxCount: 64,
     rarity: 'common',
     modelStyle: 'generated',
-    layer1: false
+    layer1: false,
+    durability: 0,
+    attributes: []
   }
 }
 
@@ -60,8 +63,29 @@ export function defaultRecipe(resultItemId: string): SpecRecipe {
     type: 'shapeless',
     resultItemId,
     resultCount: 1,
-    ingredients: [{ kind: 'vanilla', id: VANILLA_ITEMS[0] }]
+    ingredients: [{ kind: 'vanilla', id: VANILLA_ITEMS[0] }],
+    pattern: [],
+    keys: []
   }
+}
+
+export function defaultShapedRecipe(resultItemId: string): SpecRecipe {
+  return {
+    id: `${resultItemId.slice(0, 18)}_shaped`,
+    type: 'shaped',
+    resultItemId,
+    resultCount: 1,
+    ingredients: [],
+    pattern: [' X ', ' X ', ' S '],
+    keys: [
+      { symbol: 'X', kind: 'vanilla', id: 'minecraft:iron_ingot' },
+      { symbol: 'S', kind: 'vanilla', id: 'minecraft:stick' }
+    ]
+  }
+}
+
+export function defaultWorldgenEntry(id = 'iron_vein'): SpecWorldgen {
+  return defaultWorldgen(id)
 }
 
 export const EDITOR_VANILLA_ITEMS = VANILLA_ITEMS

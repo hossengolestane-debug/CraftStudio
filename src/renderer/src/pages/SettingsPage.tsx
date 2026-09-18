@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import type { AppErrorPayload } from '../../../shared/errors'
 import type { AppSettings, OllamaStatus } from '../../../shared/types'
 import type { AppDefaults } from '../../../shared/ipc'
+import { EnvironmentDoctor } from '../components/EnvironmentDoctor'
 import { ErrorPanel } from '../components/ErrorPanel'
 import { Badge, Button, Card, Field, TextInput } from '../components/ui'
 import { asAppError } from '../lib/errors'
@@ -191,6 +192,8 @@ export function SettingsPage({
             Accepted at: {settings.runtimeTermsAcceptedAt ?? 'never'}
           </p>
         </div>
+
+        <EnvironmentDoctor requiredJava={21} />
 
         {status ? (
           <div className="border border-line p-4">
