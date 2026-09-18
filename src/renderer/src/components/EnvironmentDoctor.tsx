@@ -20,7 +20,7 @@ export function EnvironmentDoctor({
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const nextJava = await api.checkJava(projectId).catch(() => null)
+      const nextJava = await (projectId ? api.checkJava(projectId) : api.checkJava()).catch(() => null)
       let hasGradlew = false
       let hasWrapperJar = false
       let hasWrapperProps = false
@@ -35,11 +35,15 @@ export function EnvironmentDoctor({
         return
       }
       setJava(nextJava)
+      if (!nextJava) {
+        setFindings([])
+        return
+      }
       setFindings(
         assessDoctor({
-          javaAvailable: Boolean(nextJava?.available),
-          javaVersion: nextJava?.version ?? null,
-          requiredJava: nextJava?.required ?? requiredJava,
+          javaAvailable: Boolean(nextJava.available),
+          javaVersion: nextJava.version ?? null,
+          requiredJava: nextJava.required ?? requiredJava,
           hasGradlew: projectId ? hasGradlew : true,
           hasWrapperJar: projectId ? hasWrapperJar : true,
           hasWrapperProps: projectId ? hasWrapperProps : true,
