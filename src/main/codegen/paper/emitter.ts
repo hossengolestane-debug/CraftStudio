@@ -3,6 +3,7 @@ import { customModelDataFor, paperPinsFor, type PaperVersionPins } from '../../.
 import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
+import { pluginGuiClass, pluginGuiJava, spawnMobJava } from '../plugin/bukkit'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape, yamlEscape } from '../wrapper'
 
@@ -79,6 +80,18 @@ function paperMain(spec: ProjectSpec, pins: PaperVersionPins): string {
         `    // Spec command /${javaEscape(command.name)} is listed in plugin.yml. Handler shares givecustomitem.`
     )
     .join('\n')
+  const attr = pins.minecraft === '1.21.4' || pins.minecraft === '1.21.8' ? 'MAX_HEALTH' : 'GENERIC_MAX_HEALTH'
+  const menuRegs = spec.pluginGuis
+    .map((gui) => `    getServer().getPluginManager().registerEvents(new ${pluginGuiClass(gui.id)}(this), this);`)
+    .join('\n')
+  const menuOpen = spec.pluginGuis
+    .map(
+      (gui) => `      case "${gui.id}" -> {
+        new ${pluginGuiClass(gui.id)}(this).open(player);
+        return true;
+      }`
+    )
+    .join('\n')
 
   return `package ${spec.packageName};
 
@@ -97,13 +110,16 @@ import org.jetbrains.annotations.NotNull;
 
 public class ${spec.mainClass} extends JavaPlugin {
   public static final NamespacedKey ITEM_KEY = new NamespacedKey("craftstudio", "custom_item");
+  public static final NamespacedKey MOB_KEY = new NamespacedKey("craftstudio", "custom_mob");
 
 ${itemFactory(spec, pins)}
+${spawnMobJava(spec, 'adventure', attr)}
 
   @Override
   public void onEnable() {
-    getLogger().info("${javaEscape(spec.displayName)} enabled (Paper). Custom items are vanilla paper + PDC — clients do not see a new item id.");
+    getLogger().info("${javaEscape(spec.displayName)} enabled (Paper). Custom items are vanilla paper + PDC — clients do not see a new item id. Custom mobs are vanilla disguises, not new client entity types.");
 ${recipeRegistration(spec)}
+${menuRegs}
 ${extraCommands}
   }
 
@@ -111,6 +127,20 @@ ${extraCommands}
   public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
     if (!(sender instanceof Player player)) {
       sender.sendMessage("Players only.");
+      return true;
+    }
+    if (label.equalsIgnoreCase("summoncustom")) {
+      String id = args.length > 0 ? args[0] : "${spec.mobs[0]?.id ?? 'none'}";
+      var spawned = spawnCustomMob(player.getWorld(), player.getLocation(), id);
+      player.sendMessage(spawned == null ? "Unknown mob id." : "Spawned vanilla disguise for " + id + ". Clients do not see a new entity type.");
+      return true;
+    }
+    if (label.equalsIgnoreCase("opencustommenu")) {
+      String id = args.length > 0 ? args[0] : "${spec.pluginGuis[0]?.id ?? 'none'}";
+      switch (id) {
+${menuOpen}
+        default -> player.sendMessage("Unknown menu id.");
+      }
       return true;
     }
     String id = args.length > 0 ? args[0] : "${spec.items[0]?.id ?? 'custom_item'}";
@@ -132,6 +162,16 @@ ${commandSwitch(spec)}
 
 function pluginYml(spec: ProjectSpec, apiVersion: string): string {
   const commands = [`  givecustomitem:\n    description: Give a CraftStudio custom item (vanilla paper + PDC)\n    usage: /givecustomitem [item_id]`]
+  if (spec.mobs.length) {
+    commands.push(
+      `  summoncustom:\n    description: Spawn a vanilla-disguise CraftStudio mob (not a new client entity type)\n    usage: /summoncustom [mob_id]`
+    )
+  }
+  if (spec.pluginGuis.length) {
+    commands.push(
+      `  opencustommenu:\n    description: Open a CraftStudio inventory menu preview\n    usage: /opencustommenu [menu_id]`
+    )
+  }
   for (const command of spec.commands) {
     commands.push(
       `  ${command.name}:\n    description: ${yamlEscape(command.description || command.name)}\n    usage: /${command.name}`
@@ -244,6 +284,30 @@ jar {
     encoding: 'utf8',
     contents: paperMain(spec, pins)
   })
+
+  for (const gui of spec.pluginGuis) {
+    files.push({
+      relativePath: `src/main/java/${packagePath}/${pluginGuiClass(gui.id)}.java`,
+      encoding: 'utf8',
+      contents: pluginGuiJava(spec, gui, 'adventure')
+    })
+  }
+
+  if (spec.mobs.length > 0) {
+    files.push({
+      relativePath: 'MOBS.md',
+      encoding: 'utf8',
+      contents: [
+        '# Paper custom mobs',
+        '',
+        'Paper cannot register a new client entity type.',
+        'CraftStudio customizes an existing vanilla mob (zombie / pig / wolf) with a name, health, and PDC tag.',
+        'Players still see the vanilla model unless they install a resource pack that restyles that vanilla entity.',
+        'This is not a new client mob and is not Spigot-inferred from Paper.',
+        ''
+      ].join('\n')
+    })
+  }
 
   files.push({
     relativePath: 'run-paper/eula.txt',

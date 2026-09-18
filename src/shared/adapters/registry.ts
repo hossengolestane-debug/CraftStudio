@@ -51,7 +51,16 @@ export function describeCapabilityGap(adapter: PlatformAdapter, feature: keyof P
       return 'Paper emits a real Gradle plugin for 1.21 / 1.21.1 / 1.21.4 / 1.21.8. Spigot is not inferred from that.'
     }
     if (adapter.id === 'neoforge' && feature === 'gradleProject') {
-      return 'NeoForge emits a real ModDevGradle project for 1.21.1. That is not a Forge compatibility claim.'
+      return 'NeoForge emits a real ModDevGradle project for 1.21.1 / 1.21.4 / 1.21.8. That is not a Forge compatibility claim. Entity registration is 1.21.1 only.'
+    }
+    if (adapter.id === 'forge' && feature === 'gradleProject') {
+      return 'Forge emits a real ForgeGradle project for 1.21.1 only. That is not a NeoForge compatibility claim.'
+    }
+    if (adapter.id === 'spigot' && feature === 'gradleProject') {
+      return 'Spigot emits a real Gradle plugin for 1.21 / 1.21.1 / 1.21.4 using spigot-api only. Paper success is not Spigot compatibility.'
+    }
+    if ((adapter.id === 'paper' || adapter.id === 'spigot') && feature === 'customEntities') {
+      return `${adapter.displayName} customizes existing vanilla mobs (zombie / pig / wolf). It cannot register a new client entity type.`
     }
     if (adapter.id === 'paper' && feature === 'textures') {
       return 'Paper items stay vanilla paper + CustomModelData. Clients must install the exported resource pack; the plugin jar cannot register a new item id.'

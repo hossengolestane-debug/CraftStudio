@@ -1,3 +1,4 @@
+import { defaultMob, defaultModGui, defaultPluginGui } from './defaults'
 import type { ProjectManifest } from './types'
 import {
   parseProjectSpec,
@@ -9,29 +10,19 @@ import {
 
 const UNSUPPORTED_PATTERNS: { pattern: RegExp; feature: string; reason: string }[] = [
   {
-    pattern: /\b(mob|entity|entities|boss|golem)\b/i,
-    feature: 'custom entities',
-    reason: 'Phase 2 does not emit entity/mob code. Items and shapeless recipes only.'
-  },
-  {
-    pattern: /\b(gui|screen|inventory menu|container)\b/i,
-    feature: 'custom GUIs',
-    reason: 'GUI editors are not in Phase 2.'
+    pattern: /\b(boss|golem|behavior tree|pathfinding tree)\b/i,
+    feature: 'advanced entities',
+    reason: 'Phase 5 only emits 2–3 movement presets. Full behavior trees are out of scope.'
   },
   {
     pattern: /\b(dimension|biome|worldgen|ore gen|structure)\b/i,
     feature: 'worldgen',
-    reason: 'World generation is not emitted in Phase 2.'
+    reason: 'World generation is not emitted in Phase 5.'
   },
   {
     pattern: /\b(custom block|new block|ore block)\b/i,
     feature: 'custom blocks',
-    reason: 'Block registration is not part of the Phase 2 Fabric slice.'
-  },
-  {
-    pattern: /\btexture\s+pack|paint texture|pixel art\b/i,
-    feature: 'texture editor',
-    reason: 'No texture painter. A placeholder item model is used.'
+    reason: 'Block registration is not part of the Phase 5 slice.'
   }
 ]
 
@@ -60,10 +51,18 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
   const itemName = extractQuotedName(text) ?? manifest.name
   const itemId = (toModId(itemName).replace(/^m(?=\d)/, '') || 'custom_item').slice(0, 24)
   const wantsRecipe = /\b(recipe|craft|crafting|shapeless)\b/i.test(text)
+  const wantsMob = /\b(mob|entity|entities|creature)\b/i.test(text)
+  const wantsGui = /\b(gui|screen|inventory menu|container|menu)\b/i.test(text)
   const unsupportedRequests = UNSUPPORTED_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => ({
     feature: entry.feature,
     reason: entry.reason
   }))
+  if (wantsMob && (manifest.platform === 'paper' || manifest.platform === 'spigot')) {
+    unsupportedRequests.push({
+      feature: 'new client entity types',
+      reason: `${manifest.platform} can only disguise existing vanilla mobs. Clients do not see a new entity type.`
+    })
+  }
 
   return parseProjectSpec({
     schemaVersion: 1,
@@ -93,6 +92,16 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
         ]
       : [],
     commands: [],
+    mobs: wantsMob
+      ? [
+          {
+            ...defaultMob(`${itemId.slice(0, 20)}_mob`),
+            displayName: `${titleCase(itemName)} Mob`
+          }
+        ]
+      : [],
+    modGuis: wantsGui && manifest.type === 'mod' ? [defaultModGui()] : [],
+    pluginGuis: wantsGui && manifest.type === 'plugin' ? [defaultPluginGui()] : [],
     unsupportedRequests,
     source: 'template',
     prompt: text

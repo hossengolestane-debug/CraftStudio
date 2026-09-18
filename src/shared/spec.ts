@@ -41,12 +41,81 @@ const ident = z
   .trim()
   .regex(/^[a-z][a-z0-9_]{1,30}$/, 'Must be lowercase [a-z0-9_], start with a letter, 2–31 chars')
 
+export const MOB_PRESETS = ['passive_wanderer', 'hostile_melee', 'neutral_flee'] as const
+export const MOB_MODELS = ['humanoid', 'quadruped', 'vanilla_disguise'] as const
+export const VANILLA_MOB_BASES = ['minecraft:zombie', 'minecraft:pig', 'minecraft:wolf'] as const
+export const ITEM_MODEL_STYLES = ['generated', 'handheld'] as const
+
 const itemSchema = z.object({
   id: ident,
   displayName: z.string().trim().min(1).max(80),
   description: z.string().trim().max(400).default(''),
   maxCount: z.number().int().min(1).max(64).default(64),
-  rarity: z.enum(['common', 'uncommon', 'rare', 'epic']).default('common')
+  rarity: z.enum(['common', 'uncommon', 'rare', 'epic']).default('common'),
+  modelStyle: z.enum(ITEM_MODEL_STYLES).default('generated'),
+  layer1: z.boolean().default(false)
+})
+
+const mobDropSchema = z.object({
+  itemId: z.string().trim().min(3).max(64),
+  chance: z.number().min(0).max(1).default(1),
+  min: z.number().int().min(1).max(64).default(1),
+  max: z.number().int().min(1).max(64).default(1)
+})
+
+const mobSchema = z.object({
+  id: ident,
+  displayName: z.string().trim().min(1).max(80),
+  health: z.number().min(1).max(200).default(20),
+  movementSpeed: z.number().min(0.05).max(1).default(0.25),
+  attackDamage: z.number().min(0).max(40).default(3),
+  preset: z.enum(MOB_PRESETS).default('passive_wanderer'),
+  targeting: z.enum(['none', 'players', 'hostiles']).default('none'),
+  spawnStub: z.string().trim().max(200).default('No custom biome spawn table in Phase 5 — summon/command only.'),
+  drops: z.array(mobDropSchema).max(4).default([]),
+  appearance: z
+    .object({
+      model: z.enum(MOB_MODELS).default('humanoid'),
+      vanillaBase: z.enum(VANILLA_MOB_BASES).default('minecraft:zombie')
+    })
+    .default({ model: 'humanoid', vanillaBase: 'minecraft:zombie' })
+})
+
+const modGuiWidgetSchema = z.object({
+  id: ident,
+  kind: z.enum(['label', 'button', 'slot']),
+  x: z.number().int().min(0).max(400).default(8),
+  y: z.number().int().min(0).max(400).default(8),
+  width: z.number().int().min(8).max(400).default(80),
+  height: z.number().int().min(8).max(80).default(16),
+  text: z.string().trim().max(80).default(''),
+  action: z.enum(['none', 'close', 'message']).default('none')
+})
+
+const modGuiSchema = z.object({
+  id: ident,
+  title: z.string().trim().min(1).max(80),
+  width: z.number().int().min(100).max(400).default(176),
+  height: z.number().int().min(80).max(300).default(166),
+  widgets: z.array(modGuiWidgetSchema).min(1).max(12)
+})
+
+const pluginGuiSlotSchema = z.object({
+  index: z.number().int().min(0).max(53),
+  iconKind: z.enum(['vanilla', 'mod']).default('vanilla'),
+  iconId: z.string().trim().min(3).max(64).default('minecraft:paper'),
+  label: z.string().trim().min(1).max(40),
+  action: z.enum(['none', 'close', 'message', 'give']).default('none'),
+  giveItemId: ident.optional(),
+  permission: z.string().trim().max(80).optional()
+})
+
+const pluginGuiSchema = z.object({
+  id: ident,
+  title: z.string().trim().min(1).max(32),
+  rows: z.number().int().min(1).max(6).default(3),
+  pagination: z.boolean().default(false),
+  slots: z.array(pluginGuiSlotSchema).min(1).max(27)
 })
 
 const recipeIngredientSchema = z.object({
@@ -92,6 +161,9 @@ export const projectSpecSchema = z.object({
   items: z.array(itemSchema).min(1).max(8),
   recipes: z.array(recipeSchema).max(8).default([]),
   commands: z.array(commandSchema).max(4).default([]),
+  mobs: z.array(mobSchema).max(4).default([]),
+  modGuis: z.array(modGuiSchema).max(4).default([]),
+  pluginGuis: z.array(pluginGuiSchema).max(4).default([]),
   unsupportedRequests: z.array(unsupportedSchema).max(16).default([]),
   source: z.enum(['template', 'ollama', 'merged', 'editor']),
   prompt: z.string().max(4000).default('')
@@ -100,6 +172,9 @@ export const projectSpecSchema = z.object({
 export type ProjectSpec = z.infer<typeof projectSpecSchema>
 export type SpecItem = z.infer<typeof itemSchema>
 export type SpecRecipe = z.infer<typeof recipeSchema>
+export type SpecMob = z.infer<typeof mobSchema>
+export type SpecModGui = z.infer<typeof modGuiSchema>
+export type SpecPluginGui = z.infer<typeof pluginGuiSchema>
 
 export const OLLAMA_SPEC_JSON_SCHEMA = {
   type: 'object',
@@ -135,12 +210,17 @@ export const OLLAMA_SPEC_JSON_SCHEMA = {
           displayName: { type: 'string' },
           description: { type: 'string' },
           maxCount: { type: 'integer' },
-          rarity: { type: 'string', enum: ['common', 'uncommon', 'rare', 'epic'] }
+          rarity: { type: 'string', enum: ['common', 'uncommon', 'rare', 'epic'] },
+          modelStyle: { type: 'string', enum: ['generated', 'handheld'] },
+          layer1: { type: 'boolean' }
         }
       }
     },
     recipes: { type: 'array' },
     commands: { type: 'array' },
+    mobs: { type: 'array' },
+    modGuis: { type: 'array' },
+    pluginGuis: { type: 'array' },
     unsupportedRequests: { type: 'array' },
     source: { type: 'string', enum: ['template', 'ollama', 'merged'] },
     prompt: { type: 'string' }
@@ -166,6 +246,45 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
 
   const spec = parsed.data
   const itemIds = new Set(spec.items.map((item) => item.id))
+
+  for (const mob of spec.mobs) {
+    if (mob.drops.some((drop) => drop.max < drop.min)) {
+      throw new AppError({
+        code: 'SPEC_INVALID',
+        message: `Mob "${mob.id}" has a drop with max < min.`,
+        action: 'Set drop max at least as high as min.'
+      })
+    }
+    for (const drop of mob.drops) {
+      const vanilla = drop.itemId.startsWith('minecraft:')
+      if (!vanilla && !itemIds.has(drop.itemId)) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Mob "${mob.id}" drops unknown item "${drop.itemId}".`,
+          action: 'Use a spec item id or a minecraft: vanilla id.'
+        })
+      }
+    }
+  }
+
+  for (const gui of spec.pluginGuis) {
+    for (const slot of gui.slots) {
+      if (slot.index >= gui.rows * 9) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Plugin GUI "${gui.id}" slot ${slot.index} is outside ${gui.rows} rows.`,
+          action: 'Use an index below rows × 9.'
+        })
+      }
+      if (slot.action === 'give' && slot.giveItemId && !itemIds.has(slot.giveItemId)) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Plugin GUI "${gui.id}" give action references unknown item "${slot.giveItemId}".`,
+          action: 'Give actions must use a spec item id.'
+        })
+      }
+    }
+  }
 
   for (const recipe of spec.recipes) {
     if (!itemIds.has(recipe.resultItemId)) {

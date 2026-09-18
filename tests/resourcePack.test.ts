@@ -61,6 +61,7 @@ describe('resource pack path safety', () => {
     })
     const paths = files.map((file) => file.relativePath)
     expect(paths).toContain('pack.mcmeta')
+    expect(paths).toContain('pack.png')
     expect(paths).toContain('assets/harbor_tokens/textures/item/harbor_token.png')
     expect(paths).toContain('assets/harbor_tokens/models/item/harbor_token.json')
     const meta = JSON.parse(files.find((file) => file.relativePath === 'pack.mcmeta')!.contents.toString())
@@ -69,6 +70,34 @@ describe('resource pack path safety', () => {
       files.find((file) => file.relativePath.endsWith('harbor_token.json'))!.contents.toString()
     )
     expect(model.textures.layer0).toBe('harbor_tokens:item/harbor_token')
+    expect(model.parent).toBe('minecraft:item/generated')
+  })
+
+  it('exports handheld + layer1 models and Forge/Spigot packs', () => {
+    const styled = parseProjectSpec({
+      ...spec,
+      items: [
+        {
+          id: 'harbor_token',
+          displayName: 'Harbor Token',
+          maxCount: 16,
+          rarity: 'common',
+          modelStyle: 'handheld',
+          layer1: true
+        }
+      ]
+    })
+    const files = planStandaloneResourcePack(manifest('forge', '1.21.1'), styled, { harbor_token: texturePng() })
+    const model = JSON.parse(
+      files.find((file) => file.relativePath.endsWith('harbor_token.json'))!.contents.toString()
+    )
+    expect(model.parent).toBe('minecraft:item/handheld')
+    expect(model.textures.layer1).toBe('harbor_tokens:item/harbor_token_layer1')
+    expect(files.some((file) => file.relativePath.endsWith('harbor_token_layer1.png'))).toBe(true)
+    expect(files.some((file) => file.relativePath === 'pack.png')).toBe(true)
+
+    const spigot = planStandaloneResourcePack(manifest('spigot', '1.21.1'), spec, { harbor_token: texturePng() })
+    expect(spigot.some((file) => file.relativePath === 'assets/minecraft/models/item/paper.json')).toBe(true)
   })
 
   it('exports Paper CustomModelData overrides for 1.21.1 and range_dispatch for 1.21.4', () => {

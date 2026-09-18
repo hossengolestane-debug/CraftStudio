@@ -40,7 +40,7 @@ export function ItemEditor({
         </p>
         {paperLimits ? (
           <p className="mt-2 text-sm">
-            Paper cannot add a new client item id. The generated plugin uses vanilla <code>paper</code> plus persistent
+            Plugins cannot add a new client item id. The generated plugin uses vanilla <code>paper</code> plus persistent
             data and CustomModelData. Players must install the exported resource pack on their client.
           </p>
         ) : null}
@@ -90,6 +90,27 @@ export function ItemEditor({
                 <option value="epic">epic</option>
               </select>
             </Field>
+            <Field label="Model style" htmlFor={`item-model-${index}`} hint="Preview parent only — not Minecraft-verified.">
+              <select
+                id={`item-model-${index}`}
+                className="w-full border border-line bg-white px-3 py-2"
+                value={item.modelStyle}
+                onChange={(event) =>
+                  updateItem(index, { modelStyle: event.target.value as SpecItem['modelStyle'] })
+                }
+              >
+                <option value="generated">generated</option>
+                <option value="handheld">handheld</option>
+              </select>
+            </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={item.layer1}
+                onChange={(event) => updateItem(index, { layer1: event.target.checked })}
+              />
+              Include layer1 texture slot
+            </label>
           </div>
           {spec.items.length > 1 ? (
             <Button

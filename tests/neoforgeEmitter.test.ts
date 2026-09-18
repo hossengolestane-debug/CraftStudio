@@ -84,9 +84,37 @@ describe('NeoForge adapter generation', () => {
     expect(written).toContain('[[mods]]')
   })
 
-  it('refuses Forge inference and unsupported versions', () => {
+  it('widens Experimental 1.21.4 / 1.21.8 pins and refuses Forge inference', () => {
     expect(() => planNeoForgeFiles({ ...manifest, platform: 'forge' }, spec)).toThrow(/NeoForge/)
-    expect(() => planNeoForgeFiles({ ...manifest, minecraftVersion: '1.21.8' }, spec)).toThrow(/NeoForge codegen/)
     expect(() => planNeoForgeFiles({ ...manifest, minecraftVersion: '1.20.1' }, spec)).toThrow(/NeoForge codegen/)
+    const v214 = planNeoForgeFiles({ ...manifest, minecraftVersion: '1.21.4' }, spec)
+    expect(v214.find((file) => file.relativePath === 'gradle.properties')?.contents.toString()).toContain(
+      'neo_version=21.4.157'
+    )
+    const v218 = planNeoForgeFiles({ ...manifest, minecraftVersion: '1.21.8' }, spec)
+    expect(v218.find((file) => file.relativePath === 'gradle.properties')?.contents.toString()).toContain(
+      'neo_version=21.8.54'
+    )
+  })
+
+  it('emits entities on 1.21.1 only and writes MOBS.md on later pins', () => {
+    const withMob = parseProjectSpec({
+      ...spec,
+      mobs: [
+        {
+          id: 'stone_mite',
+          displayName: 'Stone Mite',
+          health: 10,
+          preset: 'passive_wanderer',
+          targeting: 'none',
+          appearance: { model: 'humanoid', vanillaBase: 'minecraft:zombie' }
+        }
+      ]
+    })
+    const v211 = planNeoForgeFiles(manifest, withMob)
+    expect(v211.some((file) => file.relativePath.endsWith('StoneMiteEntity.java'))).toBe(true)
+    const v214 = planNeoForgeFiles({ ...manifest, minecraftVersion: '1.21.4' }, withMob)
+    expect(v214.some((file) => file.relativePath.endsWith('StoneMiteEntity.java'))).toBe(false)
+    expect(v214.some((file) => file.relativePath === 'MOBS.md')).toBe(true)
   })
 })

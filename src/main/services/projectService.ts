@@ -17,8 +17,10 @@ import {
   type ProjectSummary,
   type UpdateProjectInput
 } from '../../shared/types'
+import { assessVersionChange, type MigrationAssessment } from '../../shared/migration'
 import { resolveContainedPath, resolveProjectsRoot, toProjectDirectoryName } from './pathSafety'
 import type { SettingsService } from './settingsService'
+import { createProjectSnapshot, removeOldestSnapshots } from './snapshotService'
 
 function nowIso(clock: () => Date): string {
   return clock().toISOString()
@@ -159,13 +161,47 @@ export class ProjectService {
     return record
   }
 
+  async assessMinecraftVersion(id: string, toVersion: string): Promise<MigrationAssessment> {
+    const record = await this.get(id)
+    return assessVersionChange(
+      record.manifest.platform,
+      record.manifest.minecraftVersion,
+      toVersion,
+      record.manifest.features
+    )
+  }
+
   async update(id: string, input: UpdateProjectInput): Promise<ProjectRecord> {
     const record = await this.get(id)
+    const nextVersion = input.minecraftVersion?.trim()
+    if (nextVersion && nextVersion !== record.manifest.minecraftVersion) {
+      const assessment = assessVersionChange(
+        record.manifest.platform,
+        record.manifest.minecraftVersion,
+        nextVersion,
+        record.manifest.features
+      )
+      if (!assessment.canApply) {
+        throw new AppError({
+          code: 'UNSUPPORTED_COMBINATION',
+          message: `Cannot change ${record.manifest.platform} from ${record.manifest.minecraftVersion} to ${nextVersion}.`,
+          action: assessment.incompatible.join(' ') || 'Pick a version this adapter can emit.',
+          details: [...assessment.incompatible, ...assessment.notes].join('\n')
+        })
+      }
+      const root = await this.root()
+      await createProjectSnapshot(root, record.directoryName, 'before-version-change', {
+        platform: record.manifest.platform,
+        minecraftVersion: record.manifest.minecraftVersion
+      })
+      await removeOldestSnapshots(root, record.directoryName)
+    }
     const next = validateManifest({
       ...record.manifest,
       name: input.name?.trim() ?? record.manifest.name,
       description:
         input.description !== undefined ? input.description.trim() : record.manifest.description,
+      minecraftVersion: nextVersion || record.manifest.minecraftVersion,
       features: input.features
         ? { ...record.manifest.features, ...input.features }
         : record.manifest.features,
@@ -255,7 +291,7 @@ export class ProjectService {
       '',
       'This folder was created by CraftStudio Local.',
       'A create-time snapshot of the manifest is stored in `snapshots/created.manifest.json`.',
-      'Use Design → Generate to emit Fabric, Paper, or NeoForge Gradle files from a validated spec.',
+      'Use Design → Generate to emit Fabric, Paper, NeoForge, Forge, or Spigot Gradle files from a validated spec.',
       ''
     ].join('\n')
   }

@@ -249,7 +249,7 @@ export function CreateWizard({
           </dl>
           <p className="text-sm text-muted">
             Create writes `craftstudio.project.json`, a README, and a create-time snapshot. Open Design next to
-            generate Fabric (1.21–1.21.8 pins) or Paper (1.21 / 1.21.1 / 1.21.4 / 1.21.8) from a validated spec.
+            generate Fabric, Paper, NeoForge, Forge 1.21.1, or Spigot 1.21/1.21.1/1.21.4 from a validated spec.
           </p>
         </Card>
       ) : null}
@@ -268,8 +268,9 @@ export function CreateWizard({
             <div className="border border-line p-4">
               <h3 className="font-semibold">Build & Test</h3>
               <p className="mt-2 text-sm text-muted">
-                After you generate files in Design, the Test tab can run a real `./gradlew build` for supported Fabric
-                and Paper versions. This wizard step does not start a build and will not fake success.
+                After you generate files in Design, the Test tab can run a real `./gradlew build` for supported
+                Fabric, Paper, NeoForge, Forge, and Spigot pins. This wizard step does not start a build and will not
+                fake success.
               </p>
               <Button className="mt-3" disabled>
                 Build from wizard (use Test tab)
@@ -278,8 +279,8 @@ export function CreateWizard({
             <div className="border border-line p-4">
               <h3 className="font-semibold">Export</h3>
               <p className="mt-2 text-sm text-muted">
-                Use the Export tab after generate/apply: source ZIP anytime, JAR after a successful Gradle build.
-                Resource-pack export is not implemented.
+                Use the Export tab after generate/apply: source ZIP anytime, JAR after a successful Gradle build, and a
+                resource pack after you paint textures.
               </p>
               <Button className="mt-3" disabled>
                 Export from wizard (use Export tab)

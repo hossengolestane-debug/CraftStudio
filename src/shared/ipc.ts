@@ -1,4 +1,5 @@
 import type { RuntimeEvidenceRecord, VerifiedWhat } from './evidence'
+import type { MigrationAssessment } from './migration'
 import type { AppErrorPayload } from './errors'
 import type { PixelSpec } from './pixelSpec'
 import type { ProjectSpec } from './spec'
@@ -49,7 +50,10 @@ export const IPC_CHANNELS = {
   TEXTURE_SAVE: 'texture:save',
   TEXTURE_PALETTE: 'texture:palette',
   EVIDENCE_LIST: 'evidence:list',
-  EVIDENCE_RECORD: 'evidence:record'
+  EVIDENCE_RECORD: 'evidence:record',
+  SNAPSHOTS_LIST: 'snapshots:list',
+  SNAPSHOTS_RESTORE: 'snapshots:restore',
+  PROJECTS_ASSESS_VERSION: 'projects:assess-version'
 } as const
 
 export const IPC_EVENTS = {
@@ -179,6 +183,18 @@ export interface PaletteSuggestionDto {
   note: string
 }
 
+export interface SnapshotRecordDto {
+  id: string
+  reason: 'before-apply' | 'before-version-change'
+  createdAt: string
+  platform: string
+  minecraftVersion: string
+  fileCount: number
+  relativePath: string
+}
+
+export type MigrationAssessmentDto = MigrationAssessment
+
 export interface RecordEvidenceInput {
   projectId: string
   verifiedWhat: VerifiedWhat
@@ -231,6 +247,9 @@ export interface CraftStudioAPI {
   suggestTexturePalette: (projectId: string, prompt?: string) => Promise<PaletteSuggestionDto>
   listEvidence: () => Promise<RuntimeEvidenceRecord[]>
   recordEvidence: (input: RecordEvidenceInput) => Promise<RuntimeEvidenceRecord>
+  listSnapshots: (projectId: string) => Promise<SnapshotRecordDto[]>
+  restoreSnapshot: (projectId: string, snapshotId: string) => Promise<SnapshotRecordDto>
+  assessVersionChange: (projectId: string, toVersion: string) => Promise<MigrationAssessmentDto>
   onGenerationProgress: (handler: (event: GenerationProgress) => void) => () => void
   onBuildLog: (handler: (event: BuildLogEvent) => void) => () => void
 }

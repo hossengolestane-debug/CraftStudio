@@ -12,7 +12,12 @@ export const TRUSTED_OUTPUT_PATHS = new Set([
   'gradle/wrapper/gradle-wrapper.jar',
   'run-paper/README.md',
   'run-paper/eula.txt',
-  'pack.mcmeta'
+  'run-spigot/README.md',
+  'run-spigot/eula.txt',
+  'pack.mcmeta',
+  'pack.png',
+  'ENTITY_RENDERING.md',
+  'MOBS.md'
 ])
 
 export const BUILD_SCRIPT_PATHS = new Set([
@@ -26,7 +31,9 @@ const TRUSTED_PREFIXES = [
   'src/main/java/',
   'src/main/resources/',
   'craftstudio/textures/',
-  'resource-pack/'
+  'resource-pack/',
+  'snapshots/',
+  'run-spigot/'
 ]
 
 const EDITABLE_SUFFIXES = [

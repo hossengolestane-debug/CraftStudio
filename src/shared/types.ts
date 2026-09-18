@@ -69,6 +69,7 @@ export interface UpdateProjectInput {
   name?: string
   description?: string
   features?: Partial<ProjectFeatures>
+  minecraftVersion?: string
 }
 
 export interface AppSettings {

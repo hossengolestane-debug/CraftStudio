@@ -68,6 +68,11 @@ const api: CraftStudioAPI = {
   suggestTexturePalette: (projectId: string, prompt?: string) => invoke(IPC_CHANNELS.TEXTURE_PALETTE, projectId, prompt),
   listEvidence: () => invoke(IPC_CHANNELS.EVIDENCE_LIST),
   recordEvidence: (input: RecordEvidenceInput) => invoke(IPC_CHANNELS.EVIDENCE_RECORD, input),
+  listSnapshots: (projectId: string) => invoke(IPC_CHANNELS.SNAPSHOTS_LIST, projectId),
+  restoreSnapshot: (projectId: string, snapshotId: string) =>
+    invoke(IPC_CHANNELS.SNAPSHOTS_RESTORE, projectId, snapshotId),
+  assessVersionChange: (projectId: string, toVersion: string) =>
+    invoke(IPC_CHANNELS.PROJECTS_ASSESS_VERSION, projectId, toVersion),
   onGenerationProgress: (handler: (event: GenerationProgress) => void) => {
     const listener = (_event: unknown, payload: GenerationProgress): void => handler(payload)
     ipcRenderer.on(IPC_EVENTS.GENERATION_PROGRESS, listener)

@@ -48,7 +48,9 @@ export function defaultItem(id = 'custom_item'): SpecItem {
     displayName: 'Custom Item',
     description: '',
     maxCount: 64,
-    rarity: 'common'
+    rarity: 'common',
+    modelStyle: 'generated',
+    layer1: false
   }
 }
 

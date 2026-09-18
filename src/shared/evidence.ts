@@ -6,7 +6,13 @@ import { PLATFORM_IDS } from './types'
 export const EVIDENCE_SCHEMA_VERSION = 1
 export const EVIDENCE_FILENAME = 'craftstudio.runtime-evidence.json'
 
-export const VERIFIED_WHAT = ['fabric_run_client', 'neoforge_run_client', 'paper_user_server'] as const
+export const VERIFIED_WHAT = [
+  'fabric_run_client',
+  'neoforge_run_client',
+  'forge_run_client',
+  'paper_user_server',
+  'spigot_user_server'
+] as const
 export type VerifiedWhat = (typeof VERIFIED_WHAT)[number]
 
 export const runtimeEvidenceRecordSchema = z.object({
@@ -72,10 +78,14 @@ export function canMarkTested(record: RuntimeEvidenceRecord): boolean {
   if (!record.eulaAccepted) {
     return false
   }
-  if (record.verifiedWhat === 'fabric_run_client' || record.verifiedWhat === 'neoforge_run_client') {
+  if (
+    record.verifiedWhat === 'fabric_run_client' ||
+    record.verifiedWhat === 'neoforge_run_client' ||
+    record.verifiedWhat === 'forge_run_client'
+  ) {
     return record.runtimeExitCode === 0
   }
-  if (record.verifiedWhat === 'paper_user_server') {
+  if (record.verifiedWhat === 'paper_user_server' || record.verifiedWhat === 'spigot_user_server') {
     return record.userAttestedLaunch === true && record.notes.trim().length > 0
   }
   return false
@@ -86,7 +96,7 @@ export function assertCanRecordEvidence(draft: EvidenceDraft, lastRuntime?: Last
     throw new AppError({
       code: 'EVIDENCE_REQUIRED',
       message: 'A compile-only Gradle build cannot mark a compatibility row Tested.',
-      action: 'Run a verified Fabric/NeoForge client or attest a Paper server you launched yourself.'
+      action: 'Run a verified Fabric/NeoForge/Forge client or attest a Paper/Spigot server you launched yourself.'
     })
   }
   if (!draft.eulaAccepted) {
@@ -104,13 +114,22 @@ export function assertCanRecordEvidence(draft: EvidenceDraft, lastRuntime?: Last
     })
   }
 
-  if (draft.verifiedWhat === 'fabric_run_client' || draft.verifiedWhat === 'neoforge_run_client') {
-    const expectedPlatform = draft.verifiedWhat === 'fabric_run_client' ? 'fabric' : 'neoforge'
+  if (
+    draft.verifiedWhat === 'fabric_run_client' ||
+    draft.verifiedWhat === 'neoforge_run_client' ||
+    draft.verifiedWhat === 'forge_run_client'
+  ) {
+    const expectedPlatform =
+      draft.verifiedWhat === 'fabric_run_client'
+        ? 'fabric'
+        : draft.verifiedWhat === 'forge_run_client'
+          ? 'forge'
+          : 'neoforge'
     if (draft.platform !== expectedPlatform) {
       throw new AppError({
         code: 'EVIDENCE_REQUIRED',
         message: `${draft.verifiedWhat} evidence is only valid for ${expectedPlatform}.`,
-        action: 'Record the matching platform. NeoForge success is not Forge compatibility.'
+        action: 'Record the matching platform. NeoForge success is not Forge compatibility, and the reverse is also true.'
       })
     }
     if (!lastRuntime || lastRuntime.task !== 'runClient') {
@@ -130,19 +149,20 @@ export function assertCanRecordEvidence(draft: EvidenceDraft, lastRuntime?: Last
     return
   }
 
-  if (draft.verifiedWhat === 'paper_user_server') {
-    if (draft.platform !== 'paper') {
+  if (draft.verifiedWhat === 'paper_user_server' || draft.verifiedWhat === 'spigot_user_server') {
+    const expected = draft.verifiedWhat === 'paper_user_server' ? 'paper' : 'spigot'
+    if (draft.platform !== expected) {
       throw new AppError({
         code: 'EVIDENCE_REQUIRED',
-        message: 'Paper server evidence is only valid for Paper projects.',
+        message: `${expected === 'paper' ? 'Paper' : 'Spigot'} server evidence is only valid for ${expected} projects.`,
         action: 'Do not treat Paper success as Spigot compatibility.'
       })
     }
     if (draft.userAttestedLaunch !== true) {
       throw new AppError({
         code: 'EVIDENCE_REQUIRED',
-        message: 'Paper Tested status requires you to attest that you launched your own Paper server.',
-        action: 'Download Paper yourself, load the plugin, then check the attestation box. CraftStudio will not launch a server.'
+        message: `${expected} Tested status requires you to attest that you launched your own ${expected} server.`,
+        action: `Download ${expected} yourself, load the plugin, then check the attestation box. CraftStudio will not launch a server.`
       })
     }
     return
@@ -151,7 +171,7 @@ export function assertCanRecordEvidence(draft: EvidenceDraft, lastRuntime?: Last
   throw new AppError({
     code: 'EVIDENCE_REQUIRED',
     message: 'Unknown verification kind.',
-    action: 'Use fabric_run_client, neoforge_run_client, or paper_user_server.'
+    action: 'Use fabric_run_client, neoforge_run_client, forge_run_client, paper_user_server, or spigot_user_server.'
   })
 }
 

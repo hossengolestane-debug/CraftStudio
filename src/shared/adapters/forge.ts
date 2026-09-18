@@ -15,19 +15,20 @@ export const ForgeAdapter: PlatformAdapter = {
     worldgen: 'supported',
     serverCommands: 'supported',
     textures: 'supported',
-    gradleProject: 'unsupported'
+    gradleProject: 'supported'
   },
   javaRequirements: {
     minVersion: 17,
     recommendedVersion: 21,
-    notes: 'Java 17 for 1.18–1.20.4; Java 21 for 1.21+. Confirm the official Forge MDK for the chosen version before generating a project later.'
+    notes: 'Java 17 for 1.18–1.20.4; Java 21 for 1.21+. Phase 5 emits ForgeGradle only for 1.21.1. NeoForge is a separate adapter.'
   },
   templates: [
     {
-      id: 'forge-gradle-stub',
-      displayName: 'Forge Gradle project',
-      description: 'Real Gradle emission is not implemented in Phase 1.',
-      status: 'stub'
+      id: 'forge-item-gradle',
+      displayName: 'Forge Gradle + custom item',
+      description:
+        'Trusted ForgeGradle 6 templates for Minecraft 1.21.1 (Forge 52.1.16, official mappings). Not inferred from NeoForge. Entity registration is included when the spec has preset mobs.',
+      status: 'available'
     }
   ],
   validationRules: [
@@ -41,8 +42,9 @@ export const ForgeAdapter: PlatformAdapter = {
     {
       id: 'forge-client-run',
       displayName: 'Run client via Gradle',
-      description: 'Not implemented. Phase 3+ will invoke the Forge runClient task.',
-      status: 'stub'
+      description:
+        'Runs `./gradlew build` for Forge 1.21.1. Compile success is not a Tested row and is not NeoForge compatibility.',
+      status: 'available'
     }
   ]
 }

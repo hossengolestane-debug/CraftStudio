@@ -21,7 +21,7 @@ describe('item editor spec round-trip', () => {
   it('edits name, id, stack size and binds a recipe', () => {
     const renamed = upsertItem(
       base,
-      { id: 'polished_pebble', displayName: 'Polished Pebble', description: '', maxCount: 16, rarity: 'uncommon' },
+      { id: 'polished_pebble', displayName: 'Polished Pebble', description: '', maxCount: 16, rarity: 'uncommon', modelStyle: 'generated', layer1: false },
       0
     )
     expect(renamed.source).toBe('editor')

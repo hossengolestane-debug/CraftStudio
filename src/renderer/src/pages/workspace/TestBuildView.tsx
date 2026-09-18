@@ -24,8 +24,10 @@ export function TestBuildView({
   const supported = isCodegenSupported(project.manifest.platform, project.manifest.minecraftVersion)
   const fabric = project.manifest.platform === 'fabric'
   const neoforge = project.manifest.platform === 'neoforge'
+  const forge = project.manifest.platform === 'forge'
   const paper = project.manifest.platform === 'paper'
-  const canRunClient = fabric || neoforge
+  const spigot = project.manifest.platform === 'spigot'
+  const canRunClient = fabric || neoforge || forge
   const [java, setJava] = useState<JavaStatusDto | null>(null)
   const [compile, setCompile] = useState<BuildResultDto | null>(null)
   const [runtime, setRuntime] = useState<BuildResultDto | null>(null)
@@ -141,13 +143,16 @@ export function TestBuildView({
 
       {canRunClient ? (
         <Card className="space-y-3">
-          <h2 className="text-lg font-semibold">{fabric ? 'Fabric' : 'NeoForge'} runClient (optional)</h2>
+          <h2 className="text-lg font-semibold">
+            {fabric ? 'Fabric' : forge ? 'Forge' : 'NeoForge'} runClient (optional)
+          </h2>
           <p className="text-sm">
             Runs allowlisted <code>./gradlew runClient --no-daemon --stacktrace</code> only after you accept the Minecraft
             EULA. CraftStudio does not distribute game files, does not bypass auth, and does not silent-accept terms.
             Exit 0 is not an automatic Tested badge — record evidence below after you verify the client.
           </p>
           {neoforge ? <p className="text-sm">NeoForge success is not Forge compatibility.</p> : null}
+          {forge ? <p className="text-sm">Forge success is not NeoForge compatibility.</p> : null}
           <p className="text-sm">
             Terms:{' '}
             <a className="underline" href="https://www.minecraft.net/eula" target="_blank" rel="noreferrer">
@@ -196,7 +201,11 @@ export function TestBuildView({
               void api
                 .recordEvidence({
                   projectId: project.manifest.id,
-                  verifiedWhat: fabric ? 'fabric_run_client' : 'neoforge_run_client',
+                  verifiedWhat: fabric
+                    ? 'fabric_run_client'
+                    : forge
+                      ? 'forge_run_client'
+                      : 'neoforge_run_client',
                   notes
                 })
                 .then((record) => {
@@ -216,16 +225,19 @@ export function TestBuildView({
         </Card>
       ) : null}
 
-      {paper ? (
+      {paper || spigot ? (
         <Card className="space-y-3">
-          <h2 className="text-lg font-semibold">Paper test-server prep</h2>
+          <h2 className="text-lg font-semibold">{paper ? 'Paper' : 'Spigot'} test-server prep</h2>
           <p className="text-sm">
-            After apply, the project includes <code>run-paper/README.md</code> and <code>run-paper/eula.txt</code> with{' '}
-            <code>eula=false</code>. CraftStudio will not download Paper, launch a server, or set eula=true. You must
-            accept Minecraft/Paper terms yourself and fetch an official Paper build.
+            After apply, the project includes{' '}
+            <code>{paper ? 'run-paper' : 'run-spigot'}/README.md</code> and{' '}
+            <code>{paper ? 'run-paper' : 'run-spigot'}/eula.txt</code> with <code>eula=false</code>. CraftStudio will not
+            download a server, launch it, or set eula=true.
           </p>
           <p className="text-sm">
-            Do not install the plugin on Spigot. Paper compile success is not Spigot compatibility.
+            {paper
+              ? 'Do not install the plugin on Spigot. Paper compile success is not Spigot compatibility.'
+              : 'Do not install the plugin on Paper and expect it to be a Paper plugin. Spigot compile success is not Paper compatibility.'}
           </p>
           <p className="text-sm">
             Terms:{' '}
@@ -244,7 +256,8 @@ export function TestBuildView({
           </Button>
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" checked={attested} onChange={(event) => setAttested(event.target.checked)} />
-            I launched a Paper server I downloaded myself and confirmed this plugin loaded. CraftStudio did not start it.
+            I launched a {paper ? 'Paper' : 'Spigot'} server I downloaded myself and confirmed this plugin loaded.
+            CraftStudio did not start it.
           </label>
           <Field label="What did you verify?" htmlFor="paper-notes">
             <TextArea
@@ -262,7 +275,7 @@ export function TestBuildView({
               void api
                 .recordEvidence({
                   projectId: project.manifest.id,
-                  verifiedWhat: 'paper_user_server',
+                  verifiedWhat: paper ? 'paper_user_server' : 'spigot_user_server',
                   notes,
                   userAttestedLaunch: attested
                 })
@@ -278,7 +291,7 @@ export function TestBuildView({
                 .catch((err) => setError(asAppError(err)))
             }}
           >
-            Record Paper runtime attestation
+            Record {paper ? 'Paper' : 'Spigot'} runtime attestation
           </Button>
         </Card>
       ) : null}

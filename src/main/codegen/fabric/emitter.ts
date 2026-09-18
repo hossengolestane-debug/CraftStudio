@@ -1,10 +1,20 @@
 import { AppError } from '../../../shared/errors'
+import { itemModelJson } from '../../../shared/itemModels'
 import { fabricPinsFor, type FabricItemRegistration } from '../../../shared/platformPins'
 import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
+import {
+  fabricAttributeLines,
+  fabricEntityFields,
+  fabricMenuField,
+  planFabricClientFiles,
+  planFabricEntityRenderers,
+  planFabricGuiFiles,
+  planFabricMobFiles
+} from './extras'
 
 function itemJavaClassic(spec: ProjectSpec): string {
   return spec.items
@@ -63,7 +73,13 @@ function commandBlocks(spec: ProjectSpec): string {
     .join('\n')
 }
 
-function fabricImports(style: FabricItemRegistration, hasCommands: boolean): string {
+function fabricImports(
+  style: FabricItemRegistration,
+  spec: ProjectSpec
+): string {
+  const hasCommands = spec.commands.length > 0
+  const hasMobs = spec.mobs.length > 0
+  const hasGuis = spec.modGuis.length > 0
   const lines = [
     'import net.fabricmc.api.ModInitializer;',
     'import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;',
@@ -74,11 +90,21 @@ function fabricImports(style: FabricItemRegistration, hasCommands: boolean): str
     lines.push('import net.minecraft.item.Items;')
     lines.push('import net.minecraft.registry.RegistryKey;')
     lines.push('import net.minecraft.registry.RegistryKeys;')
-  } else {
+  }
+  if (style === 'classic' || hasMobs || hasGuis) {
     lines.push('import net.minecraft.registry.Registries;')
     lines.push('import net.minecraft.registry.Registry;')
   }
   lines.push('import net.minecraft.util.Identifier;')
+  if (hasMobs) {
+    lines.push('import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;')
+    lines.push('import net.minecraft.entity.EntityType;')
+    lines.push('import net.minecraft.entity.SpawnGroup;')
+  }
+  if (hasGuis) {
+    lines.push('import net.minecraft.resource.featuretoggle.FeatureFlags;')
+    lines.push('import net.minecraft.screen.ScreenHandlerType;')
+  }
   if (hasCommands) {
     lines.push('import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;')
     lines.push('import net.minecraft.server.command.CommandManager;')
@@ -86,7 +112,7 @@ function fabricImports(style: FabricItemRegistration, hasCommands: boolean): str
   }
   lines.push('import org.slf4j.Logger;')
   lines.push('import org.slf4j.LoggerFactory;')
-  return lines.join('\n')
+  return [...new Set(lines)].join('\n')
 }
 
 function mainJava(spec: ProjectSpec, style: FabricItemRegistration): string {
@@ -94,29 +120,33 @@ function mainJava(spec: ProjectSpec, style: FabricItemRegistration): string {
     style === 'registry_key'
       ? `${itemKeys(spec)}\n\n${itemJavaRegistryKey(spec)}`
       : itemJavaClassic(spec)
+  const entities = spec.mobs.length ? `\n\n${fabricEntityFields(spec, style)}` : ''
+  const menu = spec.modGuis.length ? `\n\n${fabricMenuField(spec, style)}` : ''
   const commands = spec.commands.length
     ? `
     CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
 ${commandBlocks(spec)}
     });`
     : ''
+  const attrs = spec.mobs.length ? `\n${fabricAttributeLines(spec)}` : ''
 
   return `package ${spec.packageName};
 
-${fabricImports(style, spec.commands.length > 0)}
+${fabricImports(style, spec)}
 
 public class ${spec.mainClass} implements ModInitializer {
   public static final String MOD_ID = "${javaEscape(spec.modId)}";
   public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-${items}
+${items}${entities}${menu}
 
   @Override
   public void onInitialize() {
-    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 3");
+    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 5");
     ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
 ${itemAdds(spec)}
     });
+${attrs}
 ${commands}
   }
 }
@@ -244,7 +274,10 @@ jar {
         license: 'MIT',
         environment: '*',
         entrypoints: {
-          main: [`${spec.packageName}.${spec.mainClass}`]
+          main: [`${spec.packageName}.${spec.mainClass}`],
+          ...(spec.modGuis.length > 0 || (spec.mobs.length > 0 && pins.itemRegistration === 'classic')
+            ? { client: [`${spec.packageName}.${spec.mainClass}Client`] }
+            : {})
         },
         depends: {
           fabricloader: `>=${pins.loader}`,
@@ -264,6 +297,12 @@ jar {
   for (const item of spec.items) {
     lang[`item.${spec.modId}.${item.id}`] = item.displayName
   }
+  for (const mob of spec.mobs) {
+    lang[`entity.${spec.modId}.${mob.id}`] = mob.displayName
+  }
+  for (const gui of spec.modGuis) {
+    lang[`container.${spec.modId}.${gui.id}`] = gui.title
+  }
   files.push({
     relativePath: `src/main/resources/assets/${spec.modId}/lang/en_us.json`,
     encoding: 'utf8',
@@ -274,16 +313,10 @@ jar {
     files.push({
       relativePath: `src/main/resources/assets/${spec.modId}/models/item/${item.id}.json`,
       encoding: 'utf8',
-      contents: `${JSON.stringify(
-        {
-          parent: 'minecraft:item/generated',
-          textures: {
-            layer0: 'minecraft:item/flint'
-          }
-        },
-        null,
-        2
-      )}\n`
+      contents: itemModelJson(spec.modId, item).replace(
+        `${spec.modId}:item/${item.id}`,
+        'minecraft:item/flint'
+      )
     })
   }
 
@@ -314,6 +347,26 @@ jar {
     encoding: 'utf8',
     contents: mainJava(spec, pins.itemRegistration)
   })
+
+  const classic = pins.itemRegistration === 'classic'
+  files.push(...planFabricMobFiles(spec, packagePath, classic))
+  files.push(...planFabricGuiFiles(spec, packagePath))
+  files.push(...planFabricEntityRenderers(spec, packagePath, classic))
+  files.push(...planFabricClientFiles(spec, packagePath, classic))
+  if (spec.mobs.length > 0 && !classic) {
+    files.push({
+      relativePath: 'ENTITY_RENDERING.md',
+      encoding: 'utf8',
+      contents: [
+        '# Entity rendering note',
+        '',
+        `Fabric ${pins.minecraft} uses the 1.21.2+ entity render-state API.`,
+        'CraftStudio registers the entity and attributes. A client renderer is not emitted for this pin.',
+        'That is not a Minecraft-verified custom model. Spawn is summon/command only.',
+        ''
+      ].join('\n')
+    })
+  }
 
   files.push({
     relativePath: 'INSTALL.md',

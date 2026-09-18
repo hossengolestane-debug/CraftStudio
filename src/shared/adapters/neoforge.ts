@@ -27,7 +27,7 @@ export const NeoForgeAdapter: PlatformAdapter = {
       id: 'neoforge-item-gradle',
       displayName: 'NeoForge Gradle + custom item',
       description:
-        'Trusted ModDevGradle templates for Minecraft 1.21.1 (NeoForge 21.1.250). Forge is a separate stub and is not inferred from this slice.',
+        'Trusted ModDevGradle templates for Minecraft 1.21.1 (NeoForge 21.1.250), 1.21.4 (21.4.157), and 1.21.8 (21.8.54). Entity registration is emitted for 1.21.1 only. Forge is a separate adapter and is not inferred from this slice.',
       status: 'available'
     }
   ],
@@ -47,7 +47,7 @@ export const NeoForgeAdapter: PlatformAdapter = {
     {
       id: 'neoforge-gradle-build',
       displayName: 'Gradle build',
-      description: 'Runs `./gradlew build` for NeoForge 1.21.1. Compile success is not a Tested row and is not Forge compatibility.',
+      description: 'Runs `./gradlew build` for NeoForge 1.21.1 / 1.21.4 / 1.21.8. Compile success is not a Tested row and is not Forge compatibility.',
       status: 'available'
     },
     {

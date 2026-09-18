@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { AppErrorPayload } from '../../../../shared/errors'
-import type { ApplyResultDto, GenerationProgress, GenerationResultDto } from '../../../../shared/ipc'
+import type {
+  ApplyResultDto,
+  GenerationProgress,
+  GenerationResultDto,
+  MigrationAssessmentDto,
+  SnapshotRecordDto
+} from '../../../../shared/ipc'
 import { isCodegenSupported } from '../../../../shared/platformPins'
 import { parseProjectSpec, type ProjectSpec } from '../../../../shared/spec'
 import type { AppSettings, OllamaStatus, PlatformAdapterInfo, ProjectRecord } from '../../../../shared/types'
@@ -8,6 +14,9 @@ import { ErrorPanel } from '../../components/ErrorPanel'
 import { Badge, Button, Card, Field, TextArea, TextInput } from '../../components/ui'
 import { asAppError } from '../../lib/errors'
 import { ItemEditor } from './ItemEditor'
+import { MobEditor } from './MobEditor'
+import { ModGuiEditor } from './ModGuiEditor'
+import { PluginGuiEditor } from './PluginGuiEditor'
 
 const api = window.craftstudio
 const SPEC_HINT = 'craftstudio.spec.json'
@@ -21,7 +30,7 @@ export function DesignGenerate({
   project: ProjectRecord
   adapter?: PlatformAdapterInfo
   settings: AppSettings | null
-  onSaved: (id: string, input: { name?: string; description?: string }) => Promise<void>
+  onSaved: (id: string, input: { name?: string; description?: string; minecraftVersion?: string }) => Promise<void>
 }) {
   const [name, setName] = useState(project.manifest.name)
   const [description, setDescription] = useState(project.manifest.description)
@@ -36,6 +45,9 @@ export function DesignGenerate({
   const [generation, setGeneration] = useState<GenerationResultDto | null>(null)
   const [preview, setPreview] = useState<ApplyResultDto | null>(null)
   const [spec, setSpec] = useState<ProjectSpec | null>(null)
+  const [versionTarget, setVersionTarget] = useState(project.manifest.minecraftVersion)
+  const [assessment, setAssessment] = useState<MigrationAssessmentDto | null>(null)
+  const [snapshots, setSnapshots] = useState<SnapshotRecordDto[]>([])
 
   useEffect(() => {
     setName(project.manifest.name)
@@ -54,12 +66,14 @@ export function DesignGenerate({
       setProgress((list) => [...list.slice(-20), event])
     })
     void api.getSpec(project.manifest.id).then(setSpec).catch(() => undefined)
+    void api.listSnapshots(project.manifest.id).then(setSnapshots).catch(() => undefined)
     return off
   }, [project.manifest.id])
 
   const codegenReady = isCodegenSupported(project.manifest.platform, project.manifest.minecraftVersion)
-  const paperLimits = project.manifest.platform === 'paper'
+  const pluginLimits = project.manifest.platform === 'paper' || project.manifest.platform === 'spigot'
   const workingSpec = generation?.spec ?? spec
+  const versionChoices = adapter?.compatibility.map((row) => row.minecraftVersion) ?? [project.manifest.minecraftVersion]
 
   const refreshModels = async (): Promise<OllamaStatus> => {
     const status = await api.checkOllama()
@@ -138,24 +152,93 @@ export function DesignGenerate({
         </Button>
         {saved ? <p role="status">Metadata saved.</p> : null}
         <p className="text-sm text-muted">Folder: {project.directoryPath}</p>
+        <Field
+          label="Minecraft version"
+          htmlFor="design-version"
+          hint="A snapshot is taken before a version change. Incompatible features are listed first."
+        >
+          <div className="flex flex-wrap gap-2">
+            <select
+              id="design-version"
+              className="border border-line bg-white px-3 py-2"
+              value={versionTarget}
+              onChange={(event) => {
+                setVersionTarget(event.target.value)
+                setAssessment(null)
+              }}
+            >
+              {versionChoices.map((version) => (
+                <option key={version} value={version}>
+                  {version}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy || versionTarget === project.manifest.minecraftVersion}
+              onClick={() => {
+                setBusy(true)
+                void api
+                  .assessVersionChange(project.manifest.id, versionTarget)
+                  .then(setAssessment)
+                  .catch((err) => setError(asAppError(err)))
+                  .finally(() => setBusy(false))
+              }}
+            >
+              Assess change
+            </Button>
+            <Button
+              type="button"
+              disabled={busy || !assessment?.canApply || versionTarget === project.manifest.minecraftVersion}
+              onClick={() => {
+                setBusy(true)
+                void onSaved(project.manifest.id, { minecraftVersion: versionTarget })
+                  .then(() => api.listSnapshots(project.manifest.id).then(setSnapshots))
+                  .then(() => setSaved(true))
+                  .catch((err) => setError(asAppError(err)))
+                  .finally(() => setBusy(false))
+              }}
+            >
+              Apply version
+            </Button>
+          </div>
+        </Field>
+        {assessment ? (
+          <div className="space-y-1 text-sm">
+            <p>
+              {assessment.canApply ? 'This version change can be applied.' : 'This version change is blocked.'}
+            </p>
+            {assessment.incompatible.map((item) => (
+              <p key={item} className="text-sm font-medium">
+                {item}
+              </p>
+            ))}
+            {assessment.notes.map((item) => (
+              <p key={item} className="text-muted">
+                {item}
+              </p>
+            ))}
+          </div>
+        ) : null}
       </Card>
 
       <Card className="space-y-4">
         <h2 className="text-lg font-semibold">Generate specification</h2>
         {!codegenReady ? (
           <p>
-            Phase 4 codegen is Fabric 1.21.x, Paper 1.21.x, and NeoForge 1.21.1. This {project.manifest.platform}{' '}
-            {project.manifest.minecraftVersion} project cannot emit Gradle files. The adapter will not pretend otherwise.
-            {project.manifest.platform === 'spigot'
-              ? ' Spigot is not inferred from Paper success.'
-              : ''}
+            Phase 5 codegen is Fabric 1.21.x, Paper 1.21.x, NeoForge 1.21.1/1.21.4/1.21.8, Forge 1.21.1, and Spigot
+            1.21/1.21.1/1.21.4. This {project.manifest.platform} {project.manifest.minecraftVersion} project cannot emit
+            Gradle files. The adapter will not pretend otherwise.
+            {project.manifest.platform === 'spigot' ? ' Spigot is not inferred from Paper success.' : ''}
+            {project.manifest.platform === 'forge' ? ' Forge is not inferred from NeoForge success.' : ''}
           </p>
         ) : (
           <>
-            {paperLimits ? (
+            {pluginLimits ? (
               <p className="text-sm">
-                Paper plugins cannot register new client item types. Generated items are vanilla paper with PDC and
-                CustomModelData. Clients must install the resource pack from Export.
+                Plugins cannot register new client item or entity types. Generated items are vanilla paper with PDC.
+                Custom mobs are vanilla disguises. Clients must install the resource pack from Export.
               </p>
             ) : null}
             <Field
@@ -248,11 +331,19 @@ export function DesignGenerate({
       </Card>
 
       {workingSpec ? (
-        <ItemEditor
-          spec={workingSpec}
-          paperLimits={paperLimits}
-          onChange={applyWorking}
-        />
+        <>
+          <ItemEditor spec={workingSpec} paperLimits={pluginLimits} onChange={applyWorking} />
+          <MobEditor spec={workingSpec} pluginLimits={pluginLimits} onChange={applyWorking} />
+          {project.manifest.type === 'mod' ? (
+            <ModGuiEditor
+              spec={workingSpec}
+              fabricEmission={project.manifest.platform === 'fabric'}
+              onChange={applyWorking}
+            />
+          ) : (
+            <PluginGuiEditor spec={workingSpec} onChange={applyWorking} />
+          )}
+        </>
       ) : null}
 
       {generation ? (
@@ -317,7 +408,10 @@ export function DesignGenerate({
                 setBusy(true)
                 void api
                   .applySpec(project.manifest.id, workingSpec, true)
-                  .then(setPreview)
+                  .then((result) => {
+                    setPreview(result)
+                    return api.listSnapshots(project.manifest.id).then(setSnapshots)
+                  })
                   .catch((err) => setError(asAppError(err)))
                   .finally(() => setBusy(false))
               }}
@@ -356,12 +450,45 @@ export function DesignGenerate({
         </Card>
       ) : null}
 
+      <Card className="space-y-3">
+        <h2 className="text-lg font-semibold">Recoverable snapshots</h2>
+        <p className="text-sm text-muted">
+          Apply and version changes write a snapshot first. Restore copies files back into the project folder.
+        </p>
+        {snapshots.length === 0 ? <p className="text-sm">No apply / version snapshots yet.</p> : null}
+        <ul className="space-y-2 text-sm">
+          {snapshots.map((snapshot) => (
+            <li key={snapshot.id} className="flex flex-wrap items-center justify-between gap-2 border border-line p-2">
+              <span>
+                {snapshot.reason} · {snapshot.minecraftVersion} · {snapshot.fileCount} files · {snapshot.createdAt}
+              </span>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true)
+                  void api
+                    .restoreSnapshot(project.manifest.id, snapshot.id)
+                    .then(() => api.getSpec(project.manifest.id).then(setSpec))
+                    .catch((err) => setError(asAppError(err)))
+                    .finally(() => setBusy(false))
+                }}
+              >
+                Restore
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
       {adapter ? (
         <Card>
           <h2 className="text-lg font-semibold">Adapter capabilities</h2>
           <p className="mt-2 text-sm text-muted">
             Gradle emission: {adapter.capabilities.gradleProject}. Client entities: {adapter.capabilities.clientEntities}.
-            Custom items: {adapter.capabilities.customItems}.
+            Custom items: {adapter.capabilities.customItems}. Custom entities: {adapter.capabilities.customEntities}.
+            GUIs: {adapter.capabilities.customGuis}.
           </p>
         </Card>
       ) : null}

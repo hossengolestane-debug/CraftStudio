@@ -17,7 +17,7 @@ export function WorkspacePage({
   tab: WorkspaceTab
   adapters: PlatformAdapterInfo[]
   settings: AppSettings | null
-  onSave: (id: string, input: { name?: string; description?: string }) => Promise<void>
+  onSave: (id: string, input: { name?: string; description?: string; minecraftVersion?: string }) => Promise<void>
   onSettingsPatch?: (patch: SettingsPatch) => Promise<void>
 }) {
   const adapter = adapters.find((item) => item.id === project.manifest.platform)

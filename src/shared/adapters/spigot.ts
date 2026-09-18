@@ -14,8 +14,8 @@ export const SpigotAdapter: PlatformAdapter = {
     recipes: 'limited',
     worldgen: 'unsupported',
     serverCommands: 'supported',
-    textures: 'unsupported',
-    gradleProject: 'unsupported'
+    textures: 'limited',
+    gradleProject: 'supported'
   },
   javaRequirements: {
     minVersion: 17,
@@ -24,10 +24,11 @@ export const SpigotAdapter: PlatformAdapter = {
   },
   templates: [
     {
-      id: 'spigot-gradle-stub',
-      displayName: 'Spigot plugin Gradle project',
-      description: 'Spigot codegen is not implemented. Paper success is not Spigot compatibility.',
-      status: 'stub'
+      id: 'spigot-item-gradle',
+      displayName: 'Spigot Gradle + PDC item',
+      description:
+        'Trusted Java plugin + plugin.yml for Spigot 1.21 / 1.21.1 / 1.21.4 using org.spigotmc:spigot-api only. Not copied from Paper. Custom items are vanilla paper + PDC. Custom mobs are vanilla disguises. 1.21.8 is unsupported.',
+      status: 'available'
     }
   ],
   validationRules: [
@@ -46,8 +47,9 @@ export const SpigotAdapter: PlatformAdapter = {
     {
       id: 'spigot-server-run',
       displayName: 'Start a local Spigot server',
-      description: 'Not implemented. A later phase would build Spigot via BuildTools — that is out of Phase 1 scope.',
-      status: 'stub'
+      description:
+        'Runs `./gradlew build` against spigot-api. Compile success is not a Tested row. Paper success is not Spigot compatibility.',
+      status: 'available'
     }
   ]
 }

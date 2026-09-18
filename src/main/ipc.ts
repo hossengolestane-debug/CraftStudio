@@ -18,6 +18,7 @@ import type { CreateProjectInput, SettingsPatch, UpdateProjectInput } from '../s
 import { DEFAULT_OLLAMA_ENDPOINT } from '../shared/types'
 import { isCodegenSupported, requiredJava } from '../shared/platformPins'
 import { EvidenceService } from './services/evidenceService'
+import { listProjectSnapshots, restoreProjectSnapshot } from './services/snapshotService'
 import { exportBuiltJar, exportResourcePackZip, exportSourceZip } from './services/exportService'
 import { GenerationService } from './services/generationService'
 import { GradleService } from './services/gradleService'
@@ -58,6 +59,9 @@ export function registerIpc(deps: {
   ipcMain.handle(IPC_CHANNELS.PROJECTS_OPEN, (_event, id: string) => wrap(() => deps.projects.open(id)))
   ipcMain.handle(IPC_CHANNELS.PROJECTS_UPDATE, (_event, id: string, input: UpdateProjectInput) =>
     wrap(() => deps.projects.update(id, input))
+  )
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_ASSESS_VERSION, (_event, id: string, toVersion: string) =>
+    wrap(() => deps.projects.assessMinecraftVersion(id, toVersion))
   )
   ipcMain.handle(IPC_CHANNELS.PROJECTS_DELETE, (_event, id: string) => wrap(() => deps.projects.delete(id)))
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => wrap(() => deps.settings.get()))
@@ -168,15 +172,19 @@ export function registerIpc(deps: {
         throw new AppError({
           code: 'ADAPTER_UNSUPPORTED',
           message: `Build/Test is not implemented for ${record.manifest.platform} ${record.manifest.minecraftVersion}.`,
-          action: 'Use a supported Fabric, Paper, or NeoForge 1.21.1 project. This button will not fake success.'
+          action: 'Use a supported Fabric, Paper, NeoForge, Forge 1.21.1, or Spigot 1.21.x project. This button will not fake success.'
         })
       }
       if (task === 'runClient') {
-        if (record.manifest.platform !== 'fabric' && record.manifest.platform !== 'neoforge') {
+        if (
+          record.manifest.platform !== 'fabric' &&
+          record.manifest.platform !== 'neoforge' &&
+          record.manifest.platform !== 'forge'
+        ) {
           throw new AppError({
             code: 'ADAPTER_UNSUPPORTED',
-            message: 'runClient is a Fabric Loom or NeoForge ModDev task only.',
-            action: 'Paper projects get test-server prep notes, not a launched server.'
+            message: 'runClient is a Fabric Loom, NeoForge ModDev, or ForgeGradle task only.',
+            action: 'Paper and Spigot projects get test-server prep notes, not a launched server.'
           })
         }
         const settings = await deps.settings.get()
@@ -371,6 +379,21 @@ export function registerIpc(deps: {
     })
   )
 
+  ipcMain.handle(IPC_CHANNELS.SNAPSHOTS_LIST, async (_event, projectId: string) =>
+    wrap(async () => {
+      const record = await deps.projects.get(projectId)
+      const settings = await deps.settings.get()
+      return listProjectSnapshots(settings.projectsPath, record.directoryName)
+    })
+  )
+  ipcMain.handle(IPC_CHANNELS.SNAPSHOTS_RESTORE, async (_event, projectId: string, snapshotId: string) =>
+    wrap(async () => {
+      const record = await deps.projects.get(projectId)
+      const settings = await deps.settings.get()
+      return restoreProjectSnapshot(settings.projectsPath, record.directoryName, snapshotId)
+    })
+  )
+
   ipcMain.handle(IPC_CHANNELS.EVIDENCE_LIST, () => wrap(() => deps.evidence.list()))
   ipcMain.handle(IPC_CHANNELS.EVIDENCE_RECORD, (_event, input: RecordEvidenceInput) =>
     wrap(async () => {
@@ -388,7 +411,7 @@ export function registerIpc(deps: {
         runtimeExitCode: last?.exitCode ?? null,
         userAttestedLaunch: input.userAttestedLaunch
       }
-      if (input.verifiedWhat === 'paper_user_server') {
+      if (input.verifiedWhat === 'paper_user_server' || input.verifiedWhat === 'spigot_user_server') {
         draft.compileOnly = false
       }
       return deps.evidence.record(

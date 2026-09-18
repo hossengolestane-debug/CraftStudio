@@ -99,11 +99,11 @@ describe('project spec validation', () => {
     expect(toModId('River Stones')).toBe('river_stones')
   })
 
-  it('records unsupported mob/GUI requests without inventing those features', () => {
+  it('infers preset mobs and a preview GUI from a prompt', () => {
     const spec = inferSpecFromPrompt(manifest, 'Add a custom mob and a GUI')
-    expect(spec.unsupportedRequests.map((item) => item.feature)).toEqual(
-      expect.arrayContaining(['custom entities', 'custom GUIs'])
-    )
+    expect(spec.mobs.length).toBe(1)
+    expect(spec.mobs[0]?.preset).toBe('passive_wanderer')
+    expect(spec.modGuis.length).toBe(1)
     expect(spec.items.length).toBe(1)
   })
 })

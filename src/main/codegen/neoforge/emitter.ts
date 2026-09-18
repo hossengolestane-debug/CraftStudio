@@ -1,10 +1,18 @@
 import { AppError } from '../../../shared/errors'
-import { neoforgePinsFor } from '../../../shared/platformPins'
+import { itemModelJson } from '../../../shared/itemModels'
+import { neoforgePinsFor, type NeoForgeVersionPins } from '../../../shared/platformPins'
 import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
+
+function entityClassName(id: string): string {
+  return id
+    .split('_')
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join('') + 'Entity'
+}
 
 function itemRegistrations(spec: ProjectSpec): string {
   return spec.items
@@ -22,11 +30,112 @@ function creativeAccepts(spec: ProjectSpec): string {
   return spec.items.map((item) => `      event.accept(${toConstName(item.id)});`).join('\n')
 }
 
-function mainJava(spec: ProjectSpec): string {
+function entityRegistrations(spec: ProjectSpec): string {
+  return spec.mobs
+    .map((mob) => {
+      const cls = entityClassName(mob.id)
+      const size = mob.appearance.model === 'quadruped' ? '0.9f, 0.9f' : '0.6f, 1.95f'
+      const category = mob.preset === 'hostile_melee' ? 'MobCategory.MONSTER' : 'MobCategory.CREATURE'
+      return `  public static final DeferredHolder<EntityType<?>, EntityType<${cls}>> ${toConstName(mob.id)} = ENTITIES.register("${mob.id}",
+    () -> EntityType.Builder.of(${cls}::new, ${category}).sized(${size}).build("${mob.id}"));`
+    })
+    .join('\n\n')
+}
+
+function planNeoForgeEntityFiles(spec: ProjectSpec, packagePath: string): PlannedFile[] {
+  return spec.mobs.map((mob) => {
+    const cls = entityClassName(mob.id)
+    const parent =
+      mob.preset === 'hostile_melee' ? 'Monster' : mob.preset === 'neutral_flee' ? 'PathfinderMob' : 'Animal'
+    const parentImport =
+      parent === 'Monster'
+        ? 'net.minecraft.world.entity.monster.Monster'
+        : parent === 'Animal'
+          ? 'net.minecraft.world.entity.animal.Animal'
+          : 'net.minecraft.world.entity.PathfinderMob'
+    const animalBits =
+      parent === 'Animal'
+        ? `@Nullable
+  @Override
+  public AgeableMob getBreedOffspring(ServerLevel level, AgeableMob other) {
+    return null;
+  }
+
+  @Override
+  public boolean isFood(ItemStack stack) {
+    return false;
+  }`
+        : ''
+    return {
+      relativePath: `src/main/java/${packagePath}/${cls}.java`,
+      encoding: 'utf8' as const,
+      contents: `package ${spec.packageName};
+
+import ${parentImport};
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.AgeableMob;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.FloatGoal;
+import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
+import net.minecraft.world.entity.ai.goal.PanicGoal;
+import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
+import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
+import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.Nullable;
+
+public class ${cls} extends ${parent} {
+  public ${cls}(EntityType<? extends ${cls}> type, Level level) {
+    super(type, level);
+  }
+
+  public static AttributeSupplier.Builder createAttributes() {
+    return ${parent}.createMobAttributes()
+      .add(Attributes.MAX_HEALTH, ${mob.health}d)
+      .add(Attributes.MOVEMENT_SPEED, ${mob.movementSpeed}d)
+      .add(Attributes.ATTACK_DAMAGE, ${mob.attackDamage}d);
+  }
+
+  @Override
+  protected void registerGoals() {
+    this.goalSelector.addGoal(0, new FloatGoal(this));
+    ${
+      mob.preset === 'hostile_melee'
+        ? 'this.goalSelector.addGoal(1, new MeleeAttackGoal(this, 1.1d, true));\n    this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, Player.class, true));'
+        : mob.preset === 'neutral_flee'
+          ? 'this.goalSelector.addGoal(1, new PanicGoal(this, 1.4d));'
+          : 'this.goalSelector.addGoal(1, new WaterAvoidingRandomStrollGoal(this, 1.0d));'
+    }
+    this.goalSelector.addGoal(2, new LookAtPlayerGoal(this, Player.class, 8.0f));
+    this.goalSelector.addGoal(3, new RandomLookAroundGoal(this));
+  }
+
+  ${animalBits}
+}
+`
+    }
+  })
+}
+
+function mainJava(spec: ProjectSpec, pins: NeoForgeVersionPins): string {
+  const emitEntities = pins.entityRegistration && spec.mobs.length > 0
+  const attrRegs = spec.mobs
+    .map((mob) => `      event.put(${toConstName(mob.id)}.get(), ${entityClassName(mob.id)}.createAttributes().build());`)
+    .join('\n')
   return `package ${spec.packageName};
 
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
+${emitEntities ? `import net.minecraft.core.registries.Registries;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobCategory;
+import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
+import net.neoforged.neoforge.registries.DeferredHolder;` : ''}
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
@@ -37,18 +146,30 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 public class ${spec.mainClass} {
   public static final String MOD_ID = "${javaEscape(spec.modId)}";
   public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MOD_ID);
+${emitEntities ? `  public static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(Registries.ENTITY_TYPE, MOD_ID);` : ''}
 
 ${itemRegistrations(spec)}
+${emitEntities ? `\n${entityRegistrations(spec)}` : ''}
 
   public ${spec.mainClass}(IEventBus modEventBus) {
     ITEMS.register(modEventBus);
+    ${emitEntities ? 'ENTITIES.register(modEventBus);' : ''}
     modEventBus.addListener(this::addCreative);
+    ${emitEntities ? 'modEventBus.addListener(this::registerAttributes);' : ''}
   }
 
   private void addCreative(BuildCreativeModeTabContentsEvent event) {
     if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
 ${creativeAccepts(spec)}
     }
+  }
+
+  ${
+    emitEntities
+      ? `private void registerAttributes(EntityAttributeCreationEvent event) {
+${attrRegs}
+  }`
+      : ''
   }
 }
 `
@@ -63,7 +184,7 @@ export function planNeoForgeFiles(manifest: ProjectManifest, spec: ProjectSpec):
     throw new AppError({
       code: 'ADAPTER_UNSUPPORTED',
       message: 'This emitter only generates Gradle projects for NeoForge mods.',
-      action: 'Create a NeoForge 1.21.1 project. Forge is a separate stub and is not inferred from NeoForge.'
+      action: 'Create a NeoForge 1.21.1 / 1.21.4 / 1.21.8 project. Forge is a separate adapter and is not inferred from NeoForge.'
     })
   }
 
@@ -229,6 +350,11 @@ jar {
   for (const item of spec.items) {
     lang[`item.${spec.modId}.${item.id}`] = item.displayName
   }
+  if (pins.entityRegistration) {
+    for (const mob of spec.mobs) {
+      lang[`entity.${spec.modId}.${mob.id}`] = mob.displayName
+    }
+  }
   files.push({
     relativePath: `src/main/resources/assets/${spec.modId}/lang/en_us.json`,
     encoding: 'utf8',
@@ -239,24 +365,53 @@ jar {
     files.push({
       relativePath: `src/main/resources/assets/${spec.modId}/models/item/${item.id}.json`,
       encoding: 'utf8',
-      contents: `${JSON.stringify(
-        {
-          parent: 'minecraft:item/generated',
-          textures: {
-            layer0: 'minecraft:item/flint'
-          }
-        },
-        null,
-        2
-      )}\n`
+      contents: itemModelJson(spec.modId, item).replace(
+        `${spec.modId}:item/${item.id}`,
+        'minecraft:item/flint'
+      )
     })
   }
 
   files.push({
     relativePath: `src/main/java/${packagePath}/${spec.mainClass}.java`,
     encoding: 'utf8',
-    contents: mainJava(spec)
+    contents: mainJava(spec, pins)
   })
+
+  if (pins.entityRegistration && spec.mobs.length > 0) {
+    files.push(...planNeoForgeEntityFiles(spec, packagePath))
+  } else if (spec.mobs.length > 0) {
+    files.push({
+      relativePath: 'MOBS.md',
+      encoding: 'utf8',
+      contents: [
+        '# Custom mobs not emitted',
+        '',
+        `NeoForge entity registration is pinned for 1.21.1 only. This project is ${pins.minecraft}.`,
+        'Items and GUIs still generate. Spec mobs stay in craftstudio.spec.json until a later pin.',
+        'This is not a Forge compatibility claim.',
+        ''
+      ].join('\n')
+    })
+  }
+
+  if (spec.modGuis.length > 0) {
+    files.push({
+      relativePath: `src/main/java/${packagePath}/ModScreens.java`,
+      encoding: 'utf8',
+      contents: `package ${spec.packageName};
+
+/**
+ * NeoForge GUI preview stub.
+ * Fabric emits HandledScreen / ScreenHandler. NeoForge container sync is not generated in Phase 5.
+ * Layouts stay preview-only until a client run is recorded as evidence.
+ */
+public final class ModScreens {
+  private ModScreens() {}
+}
+`
+    })
+  }
 
   files.push({
     relativePath: 'INSTALL.md',
