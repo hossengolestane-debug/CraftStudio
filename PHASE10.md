@@ -36,7 +36,7 @@ Inventory BlockEntities and custom dimensions were not shipped. Pillar + slab/st
 
 ## Version
 
-App version is **0.10.0** until a live `./gradlew build` for the Phase 10 slice (pillar + slab/stairs + spring + config + priorities) is recorded below. Then it may become **1.0.0**. Tested stays evidence-gated either way.
+App version is **1.0.0** after the live compile notes below. Tested stays evidence-gated.
 
 ## Post-1.0 recommendations
 
@@ -51,4 +51,11 @@ App version is **0.10.0** until a live `./gradlew build` for the Phase 10 slice 
 
 ## Live notes
 
-Compile-only remains `true`. No `craftstudio.runtime-evidence.json` is written from compile-only. This section is filled after a real `./gradlew build`.
+Recorded in this cloud environment after emit + `./gradlew build --no-daemon --stacktrace`. Compile-only remains `true`. No `craftstudio.runtime-evidence.json` was written from compile-only.
+
+| Project | Result |
+| --- | --- |
+| Fabric 1.21.1 Phase 10 slice (pillar + slab/stairs, water spring, goal priorities/`both`, CraftStudioConfig) at `/tmp/cs-phase10-projects/fabric1211` | **BUILD SUCCESSFUL** in 19s. Deprecation notes only. Jars: `river_stones-1.0.0.jar` and sources. |
+| Forge 1.21.1 same slice at `/tmp/cs-phase10-projects/forge1211` | **BUILD SUCCESSFUL** in 8s (`RotatedPillarBlock` + `SlabBlock` + `StairBlock` + `fluid_springs` biome modifier + GLM config gate). |
+
+This environment did **not** complete a Minecraft client. Compatibility stays Experimental.

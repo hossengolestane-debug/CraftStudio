@@ -6,7 +6,7 @@ Desktop app that helps beginners create **Minecraft Java Edition** mods and serv
 | --- | --- |
 | Fabric, NeoForge, Forge | Paper, Spigot |
 
-**Phase 10** is implemented: Phase 9 plus pillar/axis blocks, auto slab+stairs, `minecraft:spring_feature` worldgen, goal priorities and `both` targeting, a loader-norm JSON config, and standalone datapack ZIP export. A compile-only Gradle build never flips **Tested**. App version stays **0.10.0** until a live `./gradlew build` for the Phase 10 slice is recorded; then it may become 1.0.0. See [SMOKE.md](SMOKE.md) and [PHASE10.md](PHASE10.md).
+**Phase 10 / 1.0.0** is implemented: Phase 9 plus pillar/axis blocks, auto slab+stairs, `minecraft:spring_feature` worldgen, goal priorities and `both` targeting, a loader-norm JSON config, and standalone datapack ZIP export. A compile-only Gradle build never flips **Tested**. See [SMOKE.md](SMOKE.md) and [PHASE10.md](PHASE10.md).
 
 ## Quick start
 

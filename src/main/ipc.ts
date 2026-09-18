@@ -462,7 +462,7 @@ export function registerIpc(deps: {
         })
       }
       const contents = formatEvidenceSummary(records, {
-        appVersion: '0.10.0',
+        appVersion: '1.0.0',
         generatedAt: new Date().toISOString()
       })
       await writeFile(result.filePath, contents, 'utf8')

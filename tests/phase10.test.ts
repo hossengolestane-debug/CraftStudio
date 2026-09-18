@@ -223,7 +223,7 @@ describe('Phase 10 spec + emitters', () => {
   })
 
   it('formats an exportable evidence summary without inventing Tested', () => {
-    const text = formatEvidenceSummary([], { appVersion: '0.10.0', generatedAt: '2026-09-18T05:00:00.000Z' })
+    const text = formatEvidenceSummary([], { appVersion: '1.0.0', generatedAt: '2026-09-18T05:00:00.000Z' })
     expect(text).toContain('No runtime evidence')
     expect(text).toContain('Experimental')
     expect(text).not.toContain('status: Tested')
