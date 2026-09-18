@@ -1,3 +1,4 @@
+import { DEFAULT_MOB_SPAWN } from './spawn'
 import type { SpecMob, SpecModGui, SpecPluginGui } from './spec'
 
 export function defaultMob(id = 'custom_mob'): SpecMob {
@@ -9,7 +10,8 @@ export function defaultMob(id = 'custom_mob'): SpecMob {
     attackDamage: 3,
     preset: 'passive_wanderer',
     targeting: 'none',
-    spawnStub: 'No custom biome spawn table in Phase 6 — summon/command only.',
+    spawnStub: 'Summon/command always works. Enable a biome spawn table for Fabric/Forge/NeoForge (not plugins).',
+    spawn: { ...DEFAULT_MOB_SPAWN },
     drops: [],
     appearance: { model: 'humanoid', vanillaBase: 'minecraft:zombie' }
   }
@@ -49,13 +51,6 @@ export function defaultPluginGui(id = 'example_menu'): SpecPluginGui {
         iconId: 'minecraft:barrier',
         label: 'Close',
         action: 'close'
-      },
-      {
-        index: 26,
-        iconKind: 'vanilla',
-        iconId: 'minecraft:arrow',
-        label: 'Next page (stub)',
-        action: 'none'
       }
     ]
   }

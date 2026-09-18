@@ -106,4 +106,12 @@ describe('project spec validation', () => {
     expect(spec.modGuis.length).toBe(1)
     expect(spec.items.length).toBe(1)
   })
+
+  it('infers a biome spawn table for mods and reports the plugin gap', () => {
+    const mod = inferSpecFromPrompt(manifest, 'Add a custom mob that spawns in plains')
+    expect(mod.mobs[0]?.spawn.enabled).toBe(true)
+    expect(mod.mobs[0]?.spawn.biomes).toContain('plains')
+    const plugin = inferSpecFromPrompt({ ...manifest, platform: 'paper', type: 'plugin' }, 'Add a mob that spawns in plains')
+    expect(plugin.unsupportedRequests.some((item) => item.feature === 'biome spawn tables')).toBe(true)
+  })
 })

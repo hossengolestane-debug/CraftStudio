@@ -26,8 +26,9 @@ export function ModGuiEditor({
         </p>
         {menuEmission ? (
           <p className="text-sm">
-            Fabric, Forge 1.21.1, and NeoForge emit a Screen + Menu/ScreenHandler pair for the first screen. Client
-            clicks are untrusted; the server menu validates slots. This preview is not Minecraft-verified.
+            Fabric, Forge 1.21.1, and NeoForge emit a Screen + Menu/ScreenHandler pair for every screen in this
+            project. Client clicks are untrusted; the server menu validates slots and refuses illegal transfers.
+            This preview is not Minecraft-verified.
           </p>
         ) : (
           <p className="text-sm">This adapter does not emit a container menu. Layouts stay labeled preview.</p>

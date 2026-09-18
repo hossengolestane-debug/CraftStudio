@@ -42,8 +42,8 @@ Automated:
 
 Manual / agent:
 
-- `npm test`, `npm run lint`, `npm run typecheck`, `npm run build` (recorded after this report is written)
-- Live `./gradlew build` for NeoForge entity pins and Forge/NeoForge menus when the environment can download artifacts — see “Live notes”
+- `npm test` (99), `npm run lint`, `npm run typecheck`, `npm run build`
+- Live `./gradlew build` for NeoForge 1.21.4 + 1.21.8 (entity + menu), Forge 1.21.1 (entity + menu), and Fabric 1.21.1 (cube renderer + menu) — see “Live notes”
 - This cloud environment still cannot finish a Minecraft client. No Tested badge was written from compile-only
 
 ## Known limitations

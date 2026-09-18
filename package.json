@@ -1,6 +1,6 @@
 {
   "name": "craftstudio-local",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Desktop app for creating Minecraft Java Edition mods and server plugins with local Ollama.",
   "author": "CraftStudio",
@@ -12,7 +12,49 @@
     "preview": "electron-vite preview",
     "test": "vitest run",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
+    "dist:win": "electron-vite build && electron-builder --win portable nsis --publish never",
+    "dist:win:portable": "electron-vite build && electron-builder --win portable --publish never",
+    "dist:dir": "electron-vite build && electron-builder --dir --publish never"
+  },
+  "build": {
+    "appId": "local.craftstudio.app",
+    "productName": "CraftStudio Local",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "./out/main/index.js"
+    },
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
@@ -28,6 +70,7 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.1.4",
     "electron": "^39.8.10",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "eslint": "^9.36.0",
     "eslint-plugin-react": "^7.37.5",

@@ -68,7 +68,13 @@ export function describeCapabilityGap(adapter: PlatformAdapter, feature: keyof P
     return `${adapter.displayName} can implement ${feature} in a later generation phase.`
   }
   if (level === 'limited') {
+    if (feature === 'biomeSpawns') {
+      return `${adapter.displayName} emits dedicated biome spawn table entries for an allowlisted biome set. This is not a worldgen stack.`
+    }
     return `${adapter.displayName} can only approximate ${feature} (vanilla ids, inventories, or disguises).`
+  }
+  if (feature === 'biomeSpawns') {
+    return `${adapter.displayName} cannot register biome spawn tables for custom entity types. Plugin mobs stay summon/command disguises.`
   }
   return `${adapter.displayName} cannot implement ${feature}. Example: plugins cannot add arbitrary new client-side entities.`
 }

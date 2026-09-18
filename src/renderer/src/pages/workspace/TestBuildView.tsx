@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RuntimeEvidenceRecord } from '../../../../shared/evidence'
 import type { AppErrorPayload } from '../../../../shared/errors'
 import type { BuildResultDto, JavaStatusDto, RepairResultDto } from '../../../../shared/ipc'
@@ -34,6 +34,9 @@ export function TestBuildView({
   const [logs, setLogs] = useState('')
   const [error, setError] = useState<AppErrorPayload | null>(null)
   const [busy, setBusy] = useState(false)
+  const [activeTask, setActiveTask] = useState<'build' | 'runClient' | null>(null)
+  const [elapsedSec, setElapsedSec] = useState(0)
+  const elapsedRef = useRef<number | null>(null)
   const [repair, setRepair] = useState<RepairResultDto | null>(null)
   const [openDiagnostic, setOpenDiagnostic] = useState<string | null>(null)
   const [evidence, setEvidence] = useState<RuntimeEvidenceRecord[]>([])
@@ -48,6 +51,26 @@ export function TestBuildView({
   useEffect(() => {
     void api.listEvidence().then(setEvidence).catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    if (!busy) {
+      if (elapsedRef.current !== null) {
+        window.clearInterval(elapsedRef.current)
+        elapsedRef.current = null
+      }
+      return
+    }
+    setElapsedSec(0)
+    elapsedRef.current = window.setInterval(() => {
+      setElapsedSec((value) => value + 1)
+    }, 1000)
+    return () => {
+      if (elapsedRef.current !== null) {
+        window.clearInterval(elapsedRef.current)
+        elapsedRef.current = null
+      }
+    }
+  }, [busy])
 
   useEffect(() => {
     if (!supported) {
@@ -119,15 +142,19 @@ export function TestBuildView({
             disabled={busy}
             onClick={() => {
               setBusy(true)
+              setActiveTask('build')
               setLogs('')
               void api
                 .runBuild(project.manifest.id, 'build')
                 .then(setCompile)
                 .catch((err) => setError(asAppError(err)))
-                .finally(() => setBusy(false))
+                .finally(() => {
+                  setBusy(false)
+                  setActiveTask(null)
+                })
             }}
           >
-            {busy ? 'Working…' : 'Run Gradle build'}
+            {busy && activeTask === 'build' ? `Building… ${elapsedSec}s` : 'Run Gradle build'}
           </Button>
           <Button variant="ghost" onClick={() => void api.cancelBuild()}>
             Cancel
@@ -191,9 +218,15 @@ export function TestBuildView({
           </h2>
           <p className="text-sm">
             Runs allowlisted <code>./gradlew runClient --no-daemon --stacktrace</code> only after you accept the Minecraft
-            EULA. CraftStudio does not distribute game files, does not bypass auth, and does not silent-accept terms.
-            Exit 0 is not an automatic Tested badge — record evidence below after you verify the client.
+            EULA. Progress, cancel, and logs stay visible. CraftStudio does not distribute game files, does not bypass
+            auth, and does not silent-accept terms. Exit 0 is not an automatic Tested badge — record evidence below
+            after you verify the client.
           </p>
+          {busy && activeTask === 'runClient' ? (
+            <p className="text-sm font-medium">
+              runClient in progress ({elapsedSec}s). Use Cancel to send SIGTERM. The EULA gate stays required.
+            </p>
+          ) : null}
           {neoforge ? <p className="text-sm">NeoForge success is not Forge compatibility.</p> : null}
           {forge ? <p className="text-sm">Forge success is not NeoForge compatibility.</p> : null}
           <p className="text-sm">
@@ -216,18 +249,31 @@ export function TestBuildView({
               disabled={busy || !accepted}
               onClick={() => {
                 setBusy(true)
+                setActiveTask('runClient')
                 setLogs('')
                 void api
                   .runBuild(project.manifest.id, 'runClient')
                   .then(setRuntime)
                   .catch((err) => setError(asAppError(err)))
-                  .finally(() => setBusy(false))
+                  .finally(() => {
+                    setBusy(false)
+                    setActiveTask(null)
+                  })
               }}
             >
-              Run client (Gradle)
+              {busy && activeTask === 'runClient' ? `runClient… ${elapsedSec}s` : 'Run client (Gradle)'}
+            </Button>
+            <Button variant="ghost" disabled={!busy} onClick={() => void api.cancelBuild()}>
+              Cancel runClient
             </Button>
           </div>
-          {runtime ? <p>{runtime.message}</p> : null}
+          {runtime ? (
+            <p>
+              {runtime.message}
+              {runtime.cancelled ? ' (cancelled)' : ''}
+              {runtime.exitCode !== null ? ` · exit ${runtime.exitCode}` : ''}
+            </p>
+          ) : null}
           <Field label="What did you verify?" htmlFor="runtime-notes">
             <TextArea
               id="runtime-notes"

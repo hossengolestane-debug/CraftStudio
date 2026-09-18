@@ -201,6 +201,12 @@ export function CreateWizard({
                   Capability note: {selectedAdapter.displayName} cannot add arbitrary new client-side entities.
                 </p>
               ) : null}
+              {selectedAdapter.capabilities.biomeSpawns === 'unsupported' ? (
+                <p className="text-sm">
+                  Capability note: {selectedAdapter.displayName} cannot register biome spawn tables. Plugin mobs stay
+                  summon/command disguises.
+                </p>
+              ) : null}
             </div>
           ) : (
             <p className="text-muted">Choose a platform to see versions.</p>

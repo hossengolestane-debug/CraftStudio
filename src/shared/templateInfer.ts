@@ -12,17 +12,17 @@ const UNSUPPORTED_PATTERNS: { pattern: RegExp; feature: string; reason: string }
   {
     pattern: /\b(boss|golem|behavior tree|pathfinding tree)\b/i,
     feature: 'advanced entities',
-    reason: 'Phase 6 emits five movement presets only. Full behavior trees are out of scope.'
+    reason: 'Phase 7 emits five movement presets only. Full behavior trees are out of scope.'
   },
   {
-    pattern: /\b(dimension|biome|worldgen|ore gen|structure)\b/i,
+    pattern: /\b(dimension|worldgen|ore gen|structure)\b/i,
     feature: 'worldgen',
-    reason: 'World generation is not emitted in Phase 6.'
+    reason: 'Full world generation is not emitted. Dedicated biome spawn tables are a separate Phase 7 MVP.'
   },
   {
     pattern: /\b(custom block|new block|ore block)\b/i,
     feature: 'custom blocks',
-    reason: 'Block registration is not part of the Phase 6 slice.'
+    reason: 'Block registration is not part of the Phase 7 slice.'
   }
 ]
 
@@ -53,6 +53,7 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
   const wantsRecipe = /\b(recipe|craft|crafting|shapeless)\b/i.test(text)
   const wantsMob = /\b(mob|entity|entities|creature)\b/i.test(text)
   const wantsGui = /\b(gui|screen|inventory menu|container|menu)\b/i.test(text)
+  const wantsSpawn = /\b(spawn|spawns in|biome spawn)\b/i.test(text)
   const unsupportedRequests = UNSUPPORTED_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => ({
     feature: entry.feature,
     reason: entry.reason
@@ -61,6 +62,12 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
     unsupportedRequests.push({
       feature: 'new client entity types',
       reason: `${manifest.platform} can only disguise existing vanilla mobs. Clients do not see a new entity type.`
+    })
+  }
+  if (wantsSpawn && (manifest.platform === 'paper' || manifest.platform === 'spigot')) {
+    unsupportedRequests.push({
+      feature: 'biome spawn tables',
+      reason: `${manifest.platform} cannot register biome spawn tables. Custom mobs stay summon/command disguises.`
     })
   }
 
@@ -97,7 +104,11 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
           {
             ...defaultMob(`${itemId.slice(0, 20)}_mob`),
             displayName: `${titleCase(itemName)} Mob`,
-            preset: inferMobPreset(text)
+            preset: inferMobPreset(text),
+            spawn:
+              wantsSpawn && manifest.type === 'mod'
+                ? { enabled: true, biomes: ['plains'], weight: 8, minGroup: 1, maxGroup: 2 }
+                : defaultMob().spawn
           }
         ]
       : [],

@@ -19,8 +19,9 @@ export function PluginGuiEditor({
       <div>
         <h2 className="text-lg font-semibold">Plugin inventory menu</h2>
         <p className="mt-1 text-sm text-muted">
-          Preview of a chest-style menu. Generated listeners cancel click/drag/transfer. Pagination is a stub button.
-          This is not a Minecraft-verified GUI.
+          Preview of a chest-style menu. Generated listeners cancel click, drag, and shift-transfer. Pagination
+          rebuilds real extra pages when slots overflow the chest (last two slots are Previous / Next). This is not
+          a Minecraft-verified GUI.
         </p>
       </div>
 
@@ -42,6 +43,14 @@ export function PluginGuiEditor({
                 onChange={(event) => update(index, { title: event.target.value })}
               />
             </Field>
+            <label className="flex items-center gap-2 text-sm md:col-span-2">
+              <input
+                type="checkbox"
+                checked={gui.pagination}
+                onChange={(event) => update(index, { pagination: event.target.checked })}
+              />
+              Paginate when slots overflow this chest (Previous / Next on the last row)
+            </label>
           </div>
           <div className="border border-dashed border-line bg-[#f7f7f3] p-2">
             <p className="mb-2 text-xs uppercase tracking-wide text-muted">Preview (not in-game)</p>

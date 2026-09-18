@@ -13,6 +13,7 @@ export const SpigotAdapter: PlatformAdapter = {
     customGuis: 'limited',
     recipes: 'limited',
     worldgen: 'unsupported',
+    biomeSpawns: 'unsupported',
     serverCommands: 'supported',
     textures: 'limited',
     gradleProject: 'supported'

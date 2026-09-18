@@ -4,8 +4,17 @@ import { forgePinsFor } from '../../../shared/platformPins'
 import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
+import { defaultCommandPermission } from '../../../shared/spawn'
+import {
+  forgeLikeClientStyle,
+  forgeLikeEntityRenderingNote,
+  planForgeLikeEntityClientFiles
+} from '../entities/forgeLikeClient'
+import { fabricSpawnDoc, placeholderEntityPng } from '../fabric/extras'
 import { isHostilePreset, mojangGoalBlock, mojangParent } from '../mobs/presets'
 import { forgeLikeCommandMethod, forgeLikeMenuFields, planForgeLikeMenuFiles } from '../modgui/forgeLike'
+import { entityClassName } from '../naming'
+import { planBiomeModifierFiles } from '../spawn/biomeTables'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
 
@@ -20,13 +29,6 @@ function itemRegs(spec: ProjectSpec): string {
     () -> new Item(new Item.Properties().stacksTo(${item.maxCount})));`
     )
     .join('\n\n')
-}
-
-function entityClassName(id: string): string {
-  return id
-    .split('_')
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join('') + 'Entity'
 }
 
 function planEntityFiles(spec: ProjectSpec, packagePath: string): PlannedFile[] {
@@ -296,8 +298,8 @@ ${spec.mobs.length ? `import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraftforge.event.entity.EntityAttributeCreationEvent;` : ''}
 ${spec.modGuis.length ? `import net.minecraft.world.inventory.MenuType;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.common.extensions.IForgeMenuType;
+import net.minecraftforge.common.extensions.IForgeMenuType;` : ''}
+${spec.modGuis.length > 0 || spec.commands.length > 0 ? `import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;` : ''}
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
@@ -326,7 +328,7 @@ ${entityRegs}
     ${spec.modGuis.length ? 'MENUS.register(bus);' : ''}
     bus.addListener(this::addCreative);
     ${spec.mobs.length ? 'bus.addListener(this::registerAttributes);' : ''}
-    ${spec.modGuis.length ? 'MinecraftForge.EVENT_BUS.addListener(this::registerCommands);' : ''}
+    ${spec.modGuis.length > 0 || spec.commands.length > 0 ? 'MinecraftForge.EVENT_BUS.addListener(this::registerCommands);' : ''}
   }
 
   private void addCreative(BuildCreativeModeTabContentsEvent event) {
@@ -349,6 +351,26 @@ ${forgeLikeCommandMethod(spec)}
   })
 
   files.push(...planEntityFiles(spec, packagePath))
+  if (spec.mobs.length > 0) {
+    const clientStyle = forgeLikeClientStyle('forge', pins.minecraft)
+    files.push(...planForgeLikeEntityClientFiles(spec, packagePath, 'forge', clientStyle))
+    files.push({
+      relativePath: `src/main/resources/assets/${spec.modId}/textures/entity/preset_mob.png`,
+      encoding: 'binary',
+      contents: placeholderEntityPng()
+    })
+    files.push({
+      relativePath: 'ENTITY_RENDERING.md',
+      encoding: 'utf8',
+      contents: forgeLikeEntityRenderingNote('forge', pins.minecraft, clientStyle)
+    })
+    files.push({
+      relativePath: 'SPAWNS.md',
+      encoding: 'utf8',
+      contents: fabricSpawnDoc(spec)
+    })
+    files.push(...planBiomeModifierFiles(spec, 'forge'))
+  }
 
   const lang: Record<string, string> = { [`itemGroup.${spec.modId}`]: spec.displayName }
   for (const item of spec.items) {
@@ -392,11 +414,22 @@ ${forgeLikeCommandMethod(spec)}
       '2. Build with `./gradlew build`, then copy `build/libs/' + spec.modId + '-1.0.0.jar` into `.minecraft/mods`.',
       '3. Optional: export a resource pack (pack.png + layer1 when painted) from the app.',
       spec.modGuis.length > 0
-        ? '4. In-game, run `/opencustommenu` to open the preview container. Client clicks are untrusted; ExampleMenu validates slots.'
+        ? '4. In-game, run `/opencustommenu [id]` to open a preview container. Client clicks are untrusted; the server menu validates slots and refuses illegal transfers.'
         : '4. Accept the Minecraft EULA yourself. CraftStudio never distributes game files.',
       spec.modGuis.length > 0
         ? '5. Accept the Minecraft EULA yourself. CraftStudio never distributes game files.'
         : '',
+      spec.mobs.length > 0
+        ? `Summon a preset mob with \`/summon ${spec.modId}:${spec.mobs[0]!.id}\`. See ENTITY_RENDERING.md and SPAWNS.md.`
+        : '',
+      '',
+      '## Permission nodes',
+      '',
+      ...spec.commands.map(
+        (command) =>
+          `- \`/${command.name}\` → \`${command.permission?.trim() || defaultCommandPermission(spec.modId, command.name)}\` (Forge uses permission level ${command.permission?.trim() ? '2' : '0'})`
+      ),
+      spec.commands.length === 0 ? '- No extra spec commands in this project. `/opencustommenu` is registered when menus exist.' : '',
       '',
       'Compile success is not a Tested compatibility row.',
       ''

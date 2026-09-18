@@ -3,7 +3,9 @@ import { customModelDataFor, paperPinsFor, type PaperVersionPins } from '../../.
 import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
-import { pluginGuiClass, pluginGuiJava, spawnMobJava } from '../plugin/bukkit'
+import { defaultCommandPermission, defaultMenuPermission } from '../../../shared/spawn'
+import { pluginGuiClass, pluginGuiJava, pluginCommandPermissionsYml, pluginTabCompleteJava, spawnMobJava } from '../plugin/bukkit'
+import { planPluginSpawnGap } from '../spawn/biomeTables'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape, yamlEscape } from '../wrapper'
 
@@ -63,6 +65,11 @@ ${ingredients}
     .join('\n')
 }
 
+function permissionNode(spec: ProjectSpec, commandName: string): string {
+  const listed = spec.commands.find((command) => command.name === commandName)
+  return listed?.permission?.trim() || defaultCommandPermission(spec.modId, commandName)
+}
+
 function commandSwitch(spec: ProjectSpec): string {
   const cases = spec.items
     .map((item) => {
@@ -77,7 +84,10 @@ function paperMain(spec: ProjectSpec, pins: PaperVersionPins): string {
   const extraCommands = spec.commands
     .map(
       (command) =>
-        `    // Spec command /${javaEscape(command.name)} is listed in plugin.yml. Handler shares givecustomitem.`
+        `    var cmd_${command.name} = getCommand("${javaEscape(command.name)}");
+    if (cmd_${command.name} != null) {
+      cmd_${command.name}.setTabCompleter(this);
+    }`
     )
     .join('\n')
   const attr = pins.minecraft === '1.21.4' || pins.minecraft === '1.21.8' ? 'MAX_HEALTH' : 'GENERIC_MAX_HEALTH'
@@ -108,7 +118,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
-public class ${spec.mainClass} extends JavaPlugin {
+public class ${spec.mainClass} extends JavaPlugin implements org.bukkit.command.TabCompleter {
   public static final NamespacedKey ITEM_KEY = new NamespacedKey("craftstudio", "custom_item");
   public static final NamespacedKey MOB_KEY = new NamespacedKey("craftstudio", "custom_mob");
 
@@ -120,8 +130,22 @@ ${spawnMobJava(spec, 'adventure', attr)}
     getLogger().info("${javaEscape(spec.displayName)} enabled (Paper). Custom items are vanilla paper + PDC — clients do not see a new item id. Custom mobs are vanilla disguises, not new client entity types.");
 ${recipeRegistration(spec)}
 ${menuRegs}
+    var giveCmd = getCommand("givecustomitem");
+    if (giveCmd != null) {
+      giveCmd.setTabCompleter(this);
+    }
+    var summonCmd = getCommand("summoncustom");
+    if (summonCmd != null) {
+      summonCmd.setTabCompleter(this);
+    }
+    var menuCmd = getCommand("opencustommenu");
+    if (menuCmd != null) {
+      menuCmd.setTabCompleter(this);
+    }
 ${extraCommands}
   }
+
+${pluginTabCompleteJava(spec)}
 
   @Override
   public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
@@ -130,17 +154,30 @@ ${extraCommands}
       return true;
     }
     if (label.equalsIgnoreCase("summoncustom")) {
+      if (!player.hasPermission("${spec.modId}.mob.summon")) {
+        player.sendMessage("Missing permission ${spec.modId}.mob.summon");
+        return true;
+      }
       String id = args.length > 0 ? args[0] : "${spec.mobs[0]?.id ?? 'none'}";
       var spawned = spawnCustomMob(player.getWorld(), player.getLocation(), id);
       player.sendMessage(spawned == null ? "Unknown mob id." : "Spawned vanilla disguise for " + id + ". Clients do not see a new entity type.");
       return true;
     }
     if (label.equalsIgnoreCase("opencustommenu")) {
-      String id = args.length > 0 ? args[0] : "${spec.pluginGuis[0]?.id ?? 'none'}";
+      String menuId = args.length > 0 ? args[0] : "${spec.pluginGuis[0]?.id ?? 'none'}";
+      if (!player.hasPermission("${spec.modId}.menu." + menuId)) {
+        player.sendMessage("Missing permission ${spec.modId}.menu." + menuId);
+        return true;
+      }
+      String id = menuId;
       switch (id) {
 ${menuOpen}
         default -> player.sendMessage("Unknown menu id.");
       }
+      return true;
+    }
+    if (!player.hasPermission("${spec.modId}.item.give")) {
+      player.sendMessage("Missing permission ${spec.modId}.item.give");
       return true;
     }
     String id = args.length > 0 ? args[0] : "${spec.items[0]?.id ?? 'custom_item'}";
@@ -161,10 +198,12 @@ ${commandSwitch(spec)}
 }
 
 function pluginYml(spec: ProjectSpec, apiVersion: string): string {
-  const commands = [`  givecustomitem:\n    description: Give a CraftStudio custom item (vanilla paper + PDC)\n    usage: /givecustomitem [item_id]`]
+  const commands = [
+    `  givecustomitem:\n    description: Give a CraftStudio custom item (vanilla paper + PDC)\n    usage: /givecustomitem [item_id]\n    permission: ${spec.modId}.item.give`
+  ]
   if (spec.mobs.length) {
     commands.push(
-      `  summoncustom:\n    description: Spawn a vanilla-disguise CraftStudio mob (not a new client entity type)\n    usage: /summoncustom [mob_id]`
+      `  summoncustom:\n    description: Spawn a vanilla-disguise CraftStudio mob (not a new client entity type)\n    usage: /summoncustom [mob_id]\n    permission: ${spec.modId}.mob.summon`
     )
   }
   if (spec.pluginGuis.length) {
@@ -174,7 +213,7 @@ function pluginYml(spec: ProjectSpec, apiVersion: string): string {
   }
   for (const command of spec.commands) {
     commands.push(
-      `  ${command.name}:\n    description: ${yamlEscape(command.description || command.name)}\n    usage: /${command.name}`
+      `  ${command.name}:\n    description: ${yamlEscape(command.description || command.name)}\n    usage: /${command.name}\n    permission: ${permissionNode(spec, command.name)}`
     )
   }
   return [
@@ -186,6 +225,7 @@ function pluginYml(spec: ProjectSpec, apiVersion: string): string {
     'authors: [CraftStudio Local]',
     'commands:',
     ...commands,
+    pluginCommandPermissionsYml(spec),
     ''
   ].join('\n')
 }
@@ -292,6 +332,7 @@ jar {
       contents: pluginGuiJava(spec, gui, 'adventure')
     })
   }
+  files.push(...planPluginSpawnGap(spec))
 
   if (spec.mobs.length > 0) {
     files.push({
@@ -355,6 +396,19 @@ jar {
       '3. Accept Minecraft / Paper terms yourself. CraftStudio never distributes game files.',
       '4. In game: `/givecustomitem ' + (spec.items[0]?.id ?? 'item') + '`',
       '5. Do not install this jar on Spigot and do not treat Paper success as Spigot support.',
+      '',
+      '## Permission nodes',
+      '',
+      `- \`/givecustomitem\` → \`${spec.modId}.item.give\``,
+      spec.mobs.length ? `- \`/summoncustom\` → \`${spec.modId}.mob.summon\`` : '',
+      ...spec.pluginGuis.map((gui) => `- \`/opencustommenu ${gui.id}\` → \`${defaultMenuPermission(spec.modId, gui.id)}\``),
+      ...spec.commands.map(
+        (command) =>
+          `- \`/${command.name}\` → \`${command.permission?.trim() || defaultCommandPermission(spec.modId, command.name)}\``
+      ),
+      spec.mobs.some((mob) => mob.spawn.enabled)
+        ? 'Biome spawn tables are unsupported on Paper. See SPAWNS.md.'
+        : '',
       ''
     ].join('\n')
   })

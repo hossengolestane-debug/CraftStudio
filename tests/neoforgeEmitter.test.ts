@@ -139,5 +139,62 @@ describe('NeoForge adapter generation', () => {
     const client218 = v218.find((file) => file.relativePath.endsWith('ClientScreens.java'))?.contents.toString() ?? ''
     expect(client218).toContain('@EventBusSubscriber')
     expect(client218).not.toContain('EventBusSubscriber.Bus')
+    expect(v211.some((file) => file.relativePath.endsWith('StoneMiteEntityRenderer.java'))).toBe(true)
+    expect(v211.some((file) => file.relativePath.endsWith('ClientEntities.java'))).toBe(true)
+    const renderer211 = v211.find((file) => file.relativePath.endsWith('StoneMiteEntityRenderer.java'))?.contents.toString() ?? ''
+    expect(renderer211).toContain('MobRenderer')
+    const renderer214 = v214.find((file) => file.relativePath.endsWith('StoneMiteEntityRenderer.java'))?.contents.toString() ?? ''
+    expect(renderer214).toContain('LivingEntityRenderer')
+    expect(renderer214).toContain('LivingEntityRenderState')
+    const clientEnt218 = v218.find((file) => file.relativePath.endsWith('ClientEntities.java'))?.contents.toString() ?? ''
+    expect(clientEnt218).not.toContain('EventBusSubscriber.Bus')
+  })
+
+  it('emits multiple menus, safer transfer, spawn modifiers, and command registration', () => {
+    const multi = parseProjectSpec({
+      ...spec,
+      commands: [{ name: 'pebble', description: 'stub' }],
+      mobs: [
+        {
+          id: 'stone_mite',
+          displayName: 'Stone Mite',
+          health: 10,
+          preset: 'avoid_players',
+          targeting: 'none',
+          appearance: { model: 'humanoid', vanillaBase: 'minecraft:zombie' },
+          spawn: { enabled: true, biomes: ['plains'], weight: 12, minGroup: 1, maxGroup: 2 }
+        }
+      ],
+      modGuis: [
+        {
+          id: 'example_screen',
+          title: 'Preview',
+          width: 176,
+          height: 166,
+          widgets: [{ id: 'slot_0', kind: 'slot', x: 80, y: 60, width: 18, height: 18, text: '', action: 'none' }]
+        },
+        {
+          id: 'storage_screen',
+          title: 'Storage',
+          width: 176,
+          height: 166,
+          widgets: [{ id: 'slot_0', kind: 'slot', x: 80, y: 60, width: 18, height: 18, text: '', action: 'none' }]
+        }
+      ]
+    })
+    const files = planNeoForgeFiles({ ...manifest, minecraftVersion: '1.21.4' }, multi)
+    expect(files.some((file) => file.relativePath.endsWith('ExampleMenu.java'))).toBe(true)
+    expect(files.some((file) => file.relativePath.endsWith('StorageMenu.java'))).toBe(true)
+    const menu = files.find((file) => file.relativePath.endsWith('ExampleMenu.java'))?.contents.toString() ?? ''
+    expect(menu).toContain('moveItemStackTo')
+    expect(menu).toContain('mayPlace')
+    const spawn = files.find((file) =>
+      file.relativePath.endsWith('neoforge/biome_modifier/stone_mite_spawns.json')
+    )?.contents.toString() ?? ''
+    expect(spawn).toContain('neoforge:add_spawns')
+    expect(spawn).toContain('minecraft:plains')
+    const main = files.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
+    expect(main).toContain('literal("pebble")')
+    expect(main).toContain('opencustommenu')
   })
 })

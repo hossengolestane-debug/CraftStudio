@@ -177,6 +177,7 @@ export default function App() {
             await refreshSettings()
           }}
           onRefresh={refreshProjects}
+          settings={settings}
         />
       ) : null}
 

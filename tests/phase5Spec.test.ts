@@ -45,7 +45,13 @@ describe('Phase 5 spec + migration + models', () => {
     expect(() =>
       parseProjectSpec({
         ...base,
-        pluginGuis: [{ ...defaultPluginGui(), slots: [{ index: 40, iconKind: 'vanilla', iconId: 'minecraft:paper', label: 'Bad', action: 'none' }] }]
+        pluginGuis: [
+          {
+            ...defaultPluginGui(),
+            pagination: false,
+            slots: [{ index: 40, iconKind: 'vanilla', iconId: 'minecraft:paper', label: 'Bad', action: 'none' }]
+          }
+        ]
       })
     ).toThrow(/outside/)
     expect(() =>
@@ -62,6 +68,17 @@ describe('Phase 5 spec + migration + models', () => {
     const ok = parseProjectSpec({ ...base, pluginGuis: [defaultPluginGui()], modGuis: [defaultModGui()] })
     expect(ok.pluginGuis[0]?.pagination).toBe(true)
     expect(ok.modGuis[0]?.widgets.some((widget) => widget.kind === 'slot')).toBe(true)
+    const overflow = parseProjectSpec({
+      ...base,
+      pluginGuis: [
+        {
+          ...defaultPluginGui(),
+          pagination: true,
+          slots: [{ index: 40, iconKind: 'vanilla', iconId: 'minecraft:paper', label: 'Page two', action: 'none' }]
+        }
+      ]
+    })
+    expect(overflow.pluginGuis[0]?.slots[0]?.index).toBe(40)
   })
 
   it('emits handheld and layer1 item model JSON', () => {

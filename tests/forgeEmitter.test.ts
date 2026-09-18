@@ -118,6 +118,55 @@ describe('Forge adapter generation', () => {
     const entity = files.find((file) => file.relativePath.endsWith('StoneMiteEntity.java'))?.contents.toString() ?? ''
     expect(entity).toContain('LookAtPlayerGoal')
     expect(entity).toContain('NearestAttackableTargetGoal')
+    expect(files.some((file) => file.relativePath.endsWith('StoneMiteEntityRenderer.java'))).toBe(true)
+    const renderer = files.find((file) => file.relativePath.endsWith('StoneMiteEntityRenderer.java'))?.contents.toString() ?? ''
+    expect(renderer).toContain('MobRenderer')
+    expect(renderer).toContain('CraftStudioMobModel')
+    const menuSafer = files.find((file) => file.relativePath.endsWith('ExampleMenu.java'))?.contents.toString() ?? ''
+    expect(menuSafer).toContain('moveItemStackTo')
+  })
+
+  it('emits a second menu, spawn modifier JSON, and spec command registration', () => {
+    const multi = parseProjectSpec({
+      ...spec,
+      commands: [{ name: 'pebble', description: 'stub' }],
+      mobs: [
+        {
+          id: 'stone_mite',
+          displayName: 'Stone Mite',
+          health: 10,
+          preset: 'stationary_lookout',
+          targeting: 'players',
+          appearance: { model: 'humanoid', vanillaBase: 'minecraft:zombie' },
+          spawn: { enabled: true, biomes: ['desert'], weight: 6, minGroup: 1, maxGroup: 1 }
+        }
+      ],
+      modGuis: [
+        {
+          id: 'example_screen',
+          title: 'Preview',
+          width: 176,
+          height: 166,
+          widgets: [{ id: 'slot_0', kind: 'slot', x: 80, y: 60, width: 18, height: 18, text: '', action: 'none' }]
+        },
+        {
+          id: 'chest_screen',
+          title: 'Chest',
+          width: 176,
+          height: 166,
+          widgets: [{ id: 'slot_0', kind: 'slot', x: 80, y: 60, width: 18, height: 18, text: '', action: 'none' }]
+        }
+      ]
+    })
+    const files = planForgeFiles(manifest, multi)
+    expect(files.some((file) => file.relativePath.endsWith('ChestMenu.java'))).toBe(true)
+    const spawn = files.find((file) => file.relativePath.endsWith('forge/biome_modifier/stone_mite_spawns.json'))
+      ?.contents.toString() ?? ''
+    expect(spawn).toContain('forge:add_spawns')
+    expect(spawn).toContain('minecraft:desert')
+    const main = files.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
+    expect(main).toContain('literal("pebble")')
+    expect(main).toContain('RegisterCommandsEvent')
   })
 
   it('rejects NeoForge inference and unsupported versions', () => {

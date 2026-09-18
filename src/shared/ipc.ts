@@ -251,7 +251,7 @@ export interface CraftStudioAPI {
   listProjectFiles: (projectId: string) => Promise<ProjectFileNodeDto[]>
   readProjectFile: (projectId: string, relativePath: string) => Promise<ProjectFileContentsDto>
   writeProjectFile: (projectId: string, relativePath: string, contents: string) => Promise<{ relativePath: string; bytes: number }>
-  checkJava: (projectId: string) => Promise<JavaStatusDto>
+  checkJava: (projectId?: string) => Promise<JavaStatusDto>
   runBuild: (projectId: string, task?: 'build' | 'runClient') => Promise<BuildResultDto>
   cancelBuild: () => Promise<void>
   repairBuild: (projectId: string) => Promise<RepairResultDto>

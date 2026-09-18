@@ -13,6 +13,7 @@ export const ForgeAdapter: PlatformAdapter = {
     customGuis: 'supported',
     recipes: 'supported',
     worldgen: 'supported',
+    biomeSpawns: 'limited',
     serverCommands: 'supported',
     textures: 'supported',
     gradleProject: 'supported'
@@ -20,7 +21,7 @@ export const ForgeAdapter: PlatformAdapter = {
   javaRequirements: {
     minVersion: 17,
     recommendedVersion: 21,
-    notes: 'Java 17 for 1.18–1.20.4; Java 21 for 1.21+. Phase 6 emits ForgeGradle only for 1.21.1 (items, preset mobs, container menu). NeoForge is a separate adapter.'
+    notes: 'Java 17 for 1.18–1.20.4; Java 21 for 1.21+. Phase 7 emits ForgeGradle only for 1.21.1 (items, preset mobs, visible client renderers, container menus, spawn tables). NeoForge is a separate adapter.'
   },
   templates: [
     {

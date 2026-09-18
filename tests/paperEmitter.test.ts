@@ -77,6 +77,11 @@ describe('Paper adapter generation', () => {
     const yml = files.find((file) => file.relativePath === 'src/main/resources/plugin.yml')?.contents.toString() ?? ''
     expect(yml).toContain('givecustomitem')
     expect(yml).toContain('api-version: \'1.21\'')
+    expect(yml).toContain('copper_charm.command.charm')
+    expect(yml).toContain('permissions:')
+    expect(java).toContain('onTabComplete')
+    expect(java).toContain('setTabCompleter')
+    expect(java).toContain('copper_charm.item.give')
 
     const eula = files.find((file) => file.relativePath === 'run-paper/eula.txt')?.contents.toString() ?? ''
     expect(eula).toContain('eula=false')
@@ -90,6 +95,48 @@ describe('Paper adapter generation', () => {
       'utf8'
     )
     expect(written).toContain('main: local.craftstudio.copper_charm.CopperCharm')
+  })
+
+  it('paginates overflowing plugin menus and reports spawn tables as unsupported', () => {
+    const overflow = parseProjectSpec({
+      ...spec,
+      mobs: [
+        {
+          id: 'charm_wolf',
+          displayName: 'Charm Wolf',
+          health: 16,
+          preset: 'neutral_flee',
+          targeting: 'none',
+          appearance: { model: 'quadruped', vanillaBase: 'minecraft:wolf' },
+          spawn: { enabled: true, biomes: ['plains'], weight: 8, minGroup: 1, maxGroup: 2 }
+        }
+      ],
+      pluginGuis: [
+        {
+          id: 'big_menu',
+          title: 'Big Menu',
+          rows: 3,
+          pagination: true,
+          slots: Array.from({ length: 30 }, (_, index) => ({
+            index,
+            iconKind: 'vanilla' as const,
+            iconId: 'minecraft:paper',
+            label: `Item ${index}`,
+            action: 'none' as const
+          }))
+        }
+      ]
+    })
+    const files = planPaperFiles(manifest, overflow)
+    const menu = files.find((file) => file.relativePath.endsWith('BigMenuMenu.java'))?.contents.toString() ?? ''
+    expect(menu).toContain('PAGE_SIZE')
+    expect(menu).toContain('Previous')
+    expect(menu).toContain('Next')
+    expect(menu).toContain('openPage')
+    expect(menu).not.toContain('Pagination stub')
+    expect(files.some((file) => file.relativePath === 'SPAWNS.md')).toBe(true)
+    const spawns = files.find((file) => file.relativePath === 'SPAWNS.md')?.contents.toString() ?? ''
+    expect(spawns).toMatch(/cannot register biome spawn/i)
   })
 
   it('refuses Fabric manifests, Spigot inference, and unsupported versions', () => {

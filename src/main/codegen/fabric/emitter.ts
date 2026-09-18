@@ -6,10 +6,16 @@ import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
+import { defaultCommandPermission } from '../../../shared/spawn'
 import {
   fabricAttributeLines,
+  fabricCommandBlocks,
   fabricEntityFields,
+  fabricEntityRenderingNote,
   fabricMenuField,
+  fabricRendererStyle,
+  fabricSpawnDoc,
+  fabricSpawnInit,
   planFabricClientFiles,
   planFabricEntityRenderers,
   planFabricGuiFiles,
@@ -59,28 +65,14 @@ function itemAdds(spec: ProjectSpec): string {
   return spec.items.map((item) => `      entries.add(${toConstName(item.id)});`).join('\n')
 }
 
-function commandBlocks(spec: ProjectSpec): string {
-  if (spec.commands.length === 0) {
-    return ''
-  }
-  return spec.commands
-    .map(
-      (command) =>
-        `    dispatcher.register(CommandManager.literal("${javaEscape(command.name)}").executes(context -> {
-      context.getSource().sendFeedback(() -> Text.literal("CraftStudio command /${javaEscape(command.name)}"), false);
-      return 1;
-    }));`
-    )
-    .join('\n')
-}
-
 function fabricImports(
   style: FabricItemRegistration,
   spec: ProjectSpec
 ): string {
-  const hasCommands = spec.commands.length > 0
+  const hasCommands = spec.commands.length > 0 || spec.modGuis.length > 0
   const hasMobs = spec.mobs.length > 0
   const hasGuis = spec.modGuis.length > 0
+  const hasSpawn = spec.mobs.some((mob) => mob.spawn.enabled && mob.spawn.biomes.length > 0)
   const lines = [
     'import net.fabricmc.api.ModInitializer;',
     'import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;',
@@ -102,6 +94,11 @@ function fabricImports(
     lines.push('import net.minecraft.entity.EntityType;')
     lines.push('import net.minecraft.entity.SpawnGroup;')
   }
+  if (hasSpawn) {
+    lines.push('import net.fabricmc.fabric.api.biome.v1.BiomeModifications;')
+    lines.push('import net.fabricmc.fabric.api.biome.v1.BiomeSelectors;')
+    lines.push('import net.minecraft.world.biome.BiomeKeys;')
+  }
   if (hasGuis) {
     lines.push('import net.minecraft.resource.featuretoggle.FeatureFlags;')
     lines.push('import net.minecraft.screen.ScreenHandlerType;')
@@ -110,6 +107,11 @@ function fabricImports(
     lines.push('import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;')
     lines.push('import net.minecraft.server.command.CommandManager;')
     lines.push('import net.minecraft.text.Text;')
+  }
+  if (spec.modGuis.length > 0) {
+    lines.push('import com.mojang.brigadier.arguments.StringArgumentType;')
+    lines.push('import net.minecraft.screen.SimpleNamedScreenHandlerFactory;')
+    lines.push('import net.minecraft.server.network.ServerPlayerEntity;')
   }
   lines.push('import org.slf4j.Logger;')
   lines.push('import org.slf4j.LoggerFactory;')
@@ -123,13 +125,15 @@ function mainJava(spec: ProjectSpec, style: FabricItemRegistration): string {
       : itemJavaClassic(spec)
   const entities = spec.mobs.length ? `\n\n${fabricEntityFields(spec, style)}` : ''
   const menu = spec.modGuis.length ? `\n\n${fabricMenuField(spec, style)}` : ''
-  const commands = spec.commands.length
+  const commandBody = fabricCommandBlocks(spec)
+  const commands = commandBody
     ? `
     CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-${commandBlocks(spec)}
+${commandBody}
     });`
     : ''
   const attrs = spec.mobs.length ? `\n${fabricAttributeLines(spec)}` : ''
+  const spawns = fabricSpawnInit(spec)
 
   return `package ${spec.packageName};
 
@@ -143,11 +147,12 @@ ${items}${entities}${menu}
 
   @Override
   public void onInitialize() {
-    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 5");
+    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 7");
     ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
 ${itemAdds(spec)}
     });
 ${attrs}
+${spawns}
 ${commands}
   }
 }
@@ -350,10 +355,11 @@ jar {
   })
 
   const classic = pins.itemRegistration === 'classic'
+  const rendererStyle = fabricRendererStyle(pins.minecraft)
   files.push(...planFabricMobFiles(spec, packagePath, classic))
   files.push(...planFabricGuiFiles(spec, packagePath))
-  files.push(...planFabricEntityRenderers(spec, packagePath, classic))
-  files.push(...planFabricClientFiles(spec, packagePath, classic))
+  files.push(...planFabricEntityRenderers(spec, packagePath, rendererStyle))
+  files.push(...planFabricClientFiles(spec, packagePath, rendererStyle))
   if (spec.mobs.length > 0) {
     files.push({
       relativePath: `src/main/resources/assets/${spec.modId}/textures/entity/preset_mob.png`,
@@ -363,15 +369,12 @@ jar {
     files.push({
       relativePath: 'ENTITY_RENDERING.md',
       encoding: 'utf8',
-      contents: [
-        '# Entity rendering note',
-        '',
-        classic
-          ? `Fabric ${pins.minecraft}: a compiling custom cube model is registered. Vanilla model classes are typed to vanilla entities and are not used.`
-          : `Fabric ${pins.minecraft}: a compiling render-state EntityRenderer is registered but draws nothing. Entities are invisible in-game. A client join warning is shown.`,
-        'This is not a Minecraft-verified custom model. Spawn is summon/command only.',
-        ''
-      ].join('\n')
+      contents: fabricEntityRenderingNote(pins.minecraft, rendererStyle)
+    })
+    files.push({
+      relativePath: 'SPAWNS.md',
+      encoding: 'utf8',
+      contents: fabricSpawnDoc(spec)
     })
   }
 
@@ -392,11 +395,20 @@ jar {
       '5. Accept the Minecraft EULA yourself. CraftStudio never distributes game files or bypasses auth.',
       '',
       spec.modGuis.length > 0
-        ? 'Open the preview screen from in-game after you wire a use/command in a later edit, or use the Test tab runClient. Client clicks are untrusted; the server menu validates slots.'
+        ? 'Open a preview screen with `/opencustommenu [id]`. Client clicks are untrusted; the server menu validates slots and refuses illegal transfers.'
         : '',
       spec.mobs.length > 0
-        ? 'Summon preset mobs with `/summon ' + spec.modId + ':' + spec.mobs[0]!.id + '`. See ENTITY_RENDERING.md.'
+        ? 'Summon preset mobs with `/summon ' + spec.modId + ':' + spec.mobs[0]!.id + '`. See ENTITY_RENDERING.md and SPAWNS.md.'
         : '',
+      '',
+      '## Permission nodes',
+      '',
+      ...spec.commands.map(
+        (command) =>
+          `- \`/${command.name}\` → \`${command.permission?.trim() || defaultCommandPermission(spec.modId, command.name)}\` (Fabric uses op permission level ${command.permission?.trim() ? '2' : '0'})`
+      ),
+      spec.modGuis.length > 0 ? `- \`/opencustommenu\` is registered for operators and players (level 0).` : '',
+      spec.commands.length === 0 && spec.modGuis.length === 0 ? '- No extra spec commands in this project.' : '',
       '',
       '`./gradlew runClient` is optional developer wiring. A successful compile is **not** a Tested compatibility row.',
       ''

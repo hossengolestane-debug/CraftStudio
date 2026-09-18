@@ -132,6 +132,7 @@ export interface AdapterCapabilities {
   customGuis: CapabilityLevel
   recipes: CapabilityLevel
   worldgen: CapabilityLevel
+  biomeSpawns: CapabilityLevel
   serverCommands: CapabilityLevel
   textures: CapabilityLevel
   gradleProject: CapabilityLevel

@@ -13,6 +13,7 @@ export const FabricAdapter: PlatformAdapter = {
     customGuis: 'supported',
     recipes: 'supported',
     worldgen: 'supported',
+    biomeSpawns: 'limited',
     serverCommands: 'supported',
     textures: 'supported',
     gradleProject: 'supported'

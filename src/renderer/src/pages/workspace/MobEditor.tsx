@@ -1,5 +1,5 @@
 import { defaultMob } from '../../../../shared/defaults'
-import { MOB_PRESETS, VANILLA_MOB_BASES, type ProjectSpec, type SpecMob } from '../../../../shared/spec'
+import { MOB_PRESETS, SPAWN_BIOMES, VANILLA_MOB_BASES, type ProjectSpec, type SpecMob } from '../../../../shared/spec'
 import { Button, Card, Field, TextInput } from '../../components/ui'
 
 export function MobEditor({
@@ -21,8 +21,8 @@ export function MobEditor({
       <div>
         <h2 className="text-lg font-semibold">Custom mobs</h2>
         <p className="mt-1 text-sm text-muted">
-          Phase 6 emits five movement presets (not a behavior tree). Spawn tables stay a stub. Java stays
-          template-authored.
+          Phase 7 emits five movement presets (not a behavior tree) plus an optional biome spawn table.
+          Java stays template-authored.
         </p>
         {pluginLimits ? (
           <p className="mt-2 text-sm">
@@ -32,9 +32,8 @@ export function MobEditor({
           </p>
         ) : (
           <p className="mt-2 text-sm">
-            Mods register a real entity type. Fabric 1.21/1.21.1 emits a custom cube renderer; 1.21.2+ entities stay
-            invisible with a client warning until a render-state model exists. This is not a Minecraft-verified custom
-            model.
+            Mods register a real entity type and a compiling visible cube renderer (classic on Fabric 1.21/1.21.1,
+            render-state on Fabric 1.21.2+ and NeoForge 1.21.4+). This is not a Minecraft-verified custom model.
           </p>
         )}
       </div>
@@ -134,7 +133,94 @@ export function MobEditor({
               </select>
             </Field>
           </div>
-          <p className="text-xs text-muted">Spawn stub: {mob.spawnStub}</p>
+          <div className="space-y-2 border border-dashed border-line p-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={mob.spawn.enabled}
+                disabled={pluginLimits}
+                onChange={(event) =>
+                  update(index, { spawn: { ...mob.spawn, enabled: event.target.checked } })
+                }
+              />
+              Enable biome spawn table
+            </label>
+            {pluginLimits ? (
+              <p className="text-xs text-muted">
+                Paper/Spigot cannot register biome spawn tables. Disguises stay summon/command only.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-muted">
+                  Allowlisted biomes only. This is not a worldgen stack. {mob.spawnStub}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {SPAWN_BIOMES.map((biome) => (
+                    <label key={biome} className="flex items-center gap-1 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={mob.spawn.biomes.includes(biome)}
+                        onChange={(event) => {
+                          const biomes = event.target.checked
+                            ? [...mob.spawn.biomes, biome]
+                            : mob.spawn.biomes.filter((entry) => entry !== biome)
+                          update(index, { spawn: { ...mob.spawn, biomes } })
+                        }}
+                      />
+                      {biome}
+                    </label>
+                  ))}
+                </div>
+                <div className="grid gap-2 md:grid-cols-3">
+                  <Field label="Weight" htmlFor={`mob-spawn-w-${index}`}>
+                    <TextInput
+                      id={`mob-spawn-w-${index}`}
+                      inputMode="numeric"
+                      value={String(mob.spawn.weight)}
+                      onChange={(event) =>
+                        update(index, {
+                          spawn: {
+                            ...mob.spawn,
+                            weight: Math.min(100, Math.max(1, Number(event.target.value) || 8))
+                          }
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field label="Min group" htmlFor={`mob-spawn-min-${index}`}>
+                    <TextInput
+                      id={`mob-spawn-min-${index}`}
+                      inputMode="numeric"
+                      value={String(mob.spawn.minGroup)}
+                      onChange={(event) =>
+                        update(index, {
+                          spawn: {
+                            ...mob.spawn,
+                            minGroup: Math.min(8, Math.max(1, Number(event.target.value) || 1))
+                          }
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field label="Max group" htmlFor={`mob-spawn-max-${index}`}>
+                    <TextInput
+                      id={`mob-spawn-max-${index}`}
+                      inputMode="numeric"
+                      value={String(mob.spawn.maxGroup)}
+                      onChange={(event) =>
+                        update(index, {
+                          spawn: {
+                            ...mob.spawn,
+                            maxGroup: Math.min(8, Math.max(1, Number(event.target.value) || 2))
+                          }
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+              </>
+            )}
+          </div>
           <Button
             type="button"
             variant="ghost"

@@ -13,6 +13,7 @@ export const PaperAdapter: PlatformAdapter = {
     customGuis: 'limited',
     recipes: 'limited',
     worldgen: 'limited',
+    biomeSpawns: 'unsupported',
     serverCommands: 'supported',
     textures: 'limited',
     gradleProject: 'supported'

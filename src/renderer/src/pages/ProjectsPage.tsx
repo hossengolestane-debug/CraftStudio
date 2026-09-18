@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
 import type { AppErrorPayload } from '../../../shared/errors'
-import type { ProjectRecord, ProjectSummary } from '../../../shared/types'
+import type { AppSettings, ProjectRecord, ProjectSummary } from '../../../shared/types'
 import { ErrorPanel } from '../components/ErrorPanel'
+import { FirstRunChecklist } from '../components/FirstRunChecklist'
 import { Badge, Button, Card, TextInput } from '../components/ui'
 import { asAppError } from '../lib/errors'
 
 export function ProjectsPage({
   projects,
   openProject,
+  settings,
   busy,
   onCreate,
   onOpen,
@@ -17,6 +19,7 @@ export function ProjectsPage({
 }: {
   projects: ProjectSummary[]
   openProject: ProjectRecord | null
+  settings: AppSettings | null
   busy: boolean
   onCreate: () => void
   onOpen: (id: string) => Promise<void>
@@ -56,6 +59,8 @@ export function ProjectsPage({
           <Button onClick={onCreate}>Create project</Button>
         </div>
       </div>
+
+      <FirstRunChecklist settings={settings} />
 
       {error ? <ErrorPanel error={error} onDismiss={() => setError(null)} /> : null}
 

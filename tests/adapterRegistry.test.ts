@@ -60,6 +60,10 @@ describe('adapter registry', () => {
   it('marks plugin client entities and textures unsupported', () => {
     expect(PaperAdapter.capabilities.clientEntities).toBe('unsupported')
     expect(SpigotAdapter.capabilities.clientEntities).toBe('unsupported')
+    expect(PaperAdapter.capabilities.biomeSpawns).toBe('unsupported')
+    expect(SpigotAdapter.capabilities.biomeSpawns).toBe('unsupported')
+    expect(FabricAdapter.capabilities.biomeSpawns).toBe('limited')
+    expect(describeCapabilityGap(PaperAdapter, 'biomeSpawns')).toMatch(/cannot register biome spawn/)
     expect(PaperAdapter.capabilities.textures).toBe('limited')
     expect(SpigotAdapter.capabilities.customBlocks).toBe('unsupported')
   })

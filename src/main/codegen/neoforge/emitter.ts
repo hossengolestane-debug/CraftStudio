@@ -4,17 +4,19 @@ import { neoforgePinsFor, type NeoForgeVersionPins } from '../../../shared/platf
 import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
+import {
+  forgeLikeClientStyle,
+  forgeLikeEntityRenderingNote,
+  planForgeLikeEntityClientFiles
+} from '../entities/forgeLikeClient'
+import { defaultCommandPermission } from '../../../shared/spawn'
+import { fabricSpawnDoc, placeholderEntityPng } from '../fabric/extras'
 import { isHostilePreset, mojangGoalBlock, mojangParent } from '../mobs/presets'
 import { forgeLikeCommandMethod, forgeLikeMenuFields, planForgeLikeMenuFiles } from '../modgui/forgeLike'
+import { entityClassName } from '../naming'
+import { planBiomeModifierFiles } from '../spawn/biomeTables'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
-
-function entityClassName(id: string): string {
-  return id
-    .split('_')
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join('') + 'Entity'
-}
 
 function itemRegistrations(spec: ProjectSpec): string {
   return spec.items
@@ -123,6 +125,7 @@ function mainJava(spec: ProjectSpec, pins: NeoForgeVersionPins): string {
     .join('\n')
   const needsRegistries = emitEntities || spec.modGuis.length > 0
   const needsHolder = emitEntities || spec.modGuis.length > 0
+  const needsCommands = spec.modGuis.length > 0 || spec.commands.length > 0
   return `package ${spec.packageName};
 
 import net.minecraft.world.item.CreativeModeTabs;
@@ -134,8 +137,8 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;` : ''}
 ${spec.modGuis.length ? `import net.minecraft.world.inventory.MenuType;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
+import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;` : ''}
+${needsCommands ? `import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;` : ''}
 ${needsHolder ? 'import net.neoforged.neoforge.registries.DeferredHolder;' : ''}
 import net.neoforged.bus.api.IEventBus;
@@ -160,7 +163,7 @@ ${emitEntities ? `\n${entityRegistrations(spec, pins)}` : ''}
     ${spec.modGuis.length ? 'MENUS.register(modEventBus);' : ''}
     modEventBus.addListener(this::addCreative);
     ${emitEntities ? 'modEventBus.addListener(this::registerAttributes);' : ''}
-    ${spec.modGuis.length ? 'NeoForge.EVENT_BUS.addListener(this::registerCommands);' : ''}
+    ${needsCommands ? 'NeoForge.EVENT_BUS.addListener(this::registerCommands);' : ''}
   }
 
   private void addCreative(BuildCreativeModeTabContentsEvent event) {
@@ -390,6 +393,28 @@ jar {
 
   if (pins.entityRegistration && spec.mobs.length > 0) {
     files.push(...planNeoForgeEntityFiles(spec, packagePath))
+    const clientStyle = forgeLikeClientStyle('neoforge', pins.minecraft)
+    files.push(
+      ...planForgeLikeEntityClientFiles(spec, packagePath, 'neoforge', clientStyle, {
+        omitEventBusSubscriberBus: pins.minecraft === '1.21.8'
+      })
+    )
+    files.push({
+      relativePath: `src/main/resources/assets/${spec.modId}/textures/entity/preset_mob.png`,
+      encoding: 'binary',
+      contents: placeholderEntityPng()
+    })
+    files.push({
+      relativePath: 'ENTITY_RENDERING.md',
+      encoding: 'utf8',
+      contents: forgeLikeEntityRenderingNote('neoforge', pins.minecraft, clientStyle)
+    })
+    files.push({
+      relativePath: 'SPAWNS.md',
+      encoding: 'utf8',
+      contents: fabricSpawnDoc(spec)
+    })
+    files.push(...planBiomeModifierFiles(spec, 'neoforge'))
   } else if (spec.mobs.length > 0) {
     files.push({
       relativePath: 'MOBS.md',
@@ -428,14 +453,22 @@ jar {
         '-1.0.0.jar` into `.minecraft/mods`.',
       '4. Optional: export a resource pack (pack.png + layer1 when painted) from the app.',
       spec.modGuis.length > 0
-        ? '5. In-game, run `/opencustommenu` to open the preview container. Client clicks are untrusted; ExampleMenu validates slots.'
+        ? '5. In-game, run `/opencustommenu [id]` to open a preview container. Client clicks are untrusted; the server menu validates slots and refuses illegal transfers.'
         : '5. Accept the Minecraft EULA yourself. CraftStudio never distributes game files or bypasses auth.',
       spec.modGuis.length > 0
         ? '6. Accept the Minecraft EULA yourself. CraftStudio never distributes game files or bypasses auth.'
         : '',
       spec.mobs.length > 0 && pins.entityRegistration
-        ? `Summon a preset mob with \`/summon ${spec.modId}:${spec.mobs[0]!.id}\`.`
+        ? `Summon a preset mob with \`/summon ${spec.modId}:${spec.mobs[0]!.id}\`. See ENTITY_RENDERING.md and SPAWNS.md.`
         : '',
+      '',
+      '## Permission nodes',
+      '',
+      ...spec.commands.map(
+        (command) =>
+          `- \`/${command.name}\` → \`${command.permission?.trim() || defaultCommandPermission(spec.modId, command.name)}\` (NeoForge uses permission level ${command.permission?.trim() ? '2' : '0'})`
+      ),
+      spec.commands.length === 0 ? '- No extra spec commands in this project. `/opencustommenu` is registered when menus exist.' : '',
       '',
       '`./gradlew runClient` is optional developer wiring. A successful compile is **not** a Tested compatibility row.',
       ''

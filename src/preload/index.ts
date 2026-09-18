@@ -57,7 +57,7 @@ const api: CraftStudioAPI = {
   readProjectFile: (projectId: string, relativePath: string) => invoke(IPC_CHANNELS.FILES_READ, projectId, relativePath),
   writeProjectFile: (projectId: string, relativePath: string, contents: string) =>
     invoke(IPC_CHANNELS.FILES_WRITE, projectId, relativePath, contents),
-  checkJava: (projectId: string) => invoke(IPC_CHANNELS.JAVA_CHECK, projectId),
+  checkJava: (projectId?: string) => invoke(IPC_CHANNELS.JAVA_CHECK, projectId),
   runBuild: (projectId: string, task?: 'build' | 'runClient') => invoke(IPC_CHANNELS.BUILD_RUN, projectId, task ?? 'build'),
   cancelBuild: () => invoke(IPC_CHANNELS.BUILD_CANCEL),
   repairBuild: (projectId: string) => invoke(IPC_CHANNELS.BUILD_REPAIR, projectId),

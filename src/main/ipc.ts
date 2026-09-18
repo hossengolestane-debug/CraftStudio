@@ -153,14 +153,16 @@ export function registerIpc(deps: {
     })
   )
 
-  ipcMain.handle(IPC_CHANNELS.JAVA_CHECK, async (_event, projectId: string) =>
+  ipcMain.handle(IPC_CHANNELS.JAVA_CHECK, async (_event, projectId?: string) =>
     wrap(async () => {
-      const record = await deps.projects.get(projectId)
       let required = 21
-      try {
-        required = requiredJava(record.manifest.platform, record.manifest.minecraftVersion)
-      } catch {
-        required = 21
+      if (projectId) {
+        try {
+          const record = await deps.projects.get(projectId)
+          required = requiredJava(record.manifest.platform, record.manifest.minecraftVersion)
+        } catch {
+          required = 21
+        }
       }
       return checkJava(required)
     })

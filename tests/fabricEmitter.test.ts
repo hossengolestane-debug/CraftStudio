@@ -146,7 +146,7 @@ describe('Fabric adapter generation', () => {
     expect(modJson).toContain('RiverStonesClient')
   })
 
-  it('emits a render-state stub and client warning on 1.21.4', () => {
+  it('emits a visible render-state cube on 1.21.4 and 1.21.8', () => {
     const withMob = parseProjectSpec({
       ...spec,
       mobs: [
@@ -156,18 +156,72 @@ describe('Fabric adapter generation', () => {
           health: 12,
           preset: 'avoid_players',
           targeting: 'none',
-          appearance: { model: 'humanoid', vanillaBase: 'minecraft:zombie' }
+          appearance: { model: 'humanoid', vanillaBase: 'minecraft:zombie' },
+          spawn: { enabled: true, biomes: ['plains', 'forest'], weight: 8, minGroup: 1, maxGroup: 2 }
         }
       ]
     })
     const files = planFabricFiles(manifestFor('1.21.4'), withMob)
     const renderer = files.find((file) => file.relativePath.endsWith('StoneMiteEntityRenderer.java'))?.contents.toString() ?? ''
-    expect(renderer).toContain('EntityRenderState')
+    expect(renderer).toContain('LivingEntityRenderState')
+    expect(renderer).toContain('LivingEntityRenderer')
+    expect(renderer).toContain('CraftStudioMobModel')
     expect(renderer).toContain('createRenderState')
-    expect(files.some((file) => file.relativePath.endsWith('CraftStudioMobModel.java'))).toBe(false)
+    expect(files.some((file) => file.relativePath.endsWith('CraftStudioMobModel.java'))).toBe(true)
+    const model = files.find((file) => file.relativePath.endsWith('CraftStudioMobModel.java'))?.contents.toString() ?? ''
+    expect(model).toContain('EntityModel<LivingEntityRenderState>')
+    expect(model).not.toContain('super(root)')
     const client = files.find((file) => file.relativePath.endsWith('RiverStonesClient.java'))?.contents.toString() ?? ''
-    expect(client).toContain('invisible')
+    expect(client).not.toContain('invisible')
+    expect(client).toContain('EntityModelLayerRegistry')
+    const main = files.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
+    expect(main).toContain('BiomeModifications.addSpawn')
+    expect(main).toContain('BiomeKeys.PLAINS')
+    expect(files.some((file) => file.relativePath === 'SPAWNS.md')).toBe(true)
     const entity = files.find((file) => file.relativePath.endsWith('StoneMiteEntity.java'))?.contents.toString() ?? ''
     expect(entity).toContain('FleeEntityGoal')
+
+    const v218 = planFabricFiles(manifestFor('1.21.8'), withMob)
+    const model218 = v218.find((file) => file.relativePath.endsWith('CraftStudioMobModel.java'))?.contents.toString() ?? ''
+    expect(model218).toContain('super(root)')
+  })
+
+  it('emits every mod screen with safer insertItem transfer and opencustommenu suggestions', () => {
+    const multi = parseProjectSpec({
+      ...spec,
+      commands: [{ name: 'pebble', description: 'stub', permission: 'river_stones.command.pebble' }],
+      modGuis: [
+        {
+          id: 'example_screen',
+          title: 'Preview',
+          width: 176,
+          height: 166,
+          widgets: [
+            { id: 'title_label', kind: 'label', x: 8, y: 6, width: 80, height: 12, text: 'Preview', action: 'none' },
+            { id: 'slot_0', kind: 'slot', x: 80, y: 60, width: 18, height: 18, text: '', action: 'none' }
+          ]
+        },
+        {
+          id: 'storage_screen',
+          title: 'Storage',
+          width: 176,
+          height: 166,
+          widgets: [{ id: 'slot_0', kind: 'slot', x: 80, y: 60, width: 18, height: 18, text: '', action: 'none' }]
+        }
+      ]
+    })
+    const files = planFabricFiles(manifestFor('1.21.1'), multi)
+    expect(files.some((file) => file.relativePath.endsWith('ExampleScreenHandler.java'))).toBe(true)
+    expect(files.some((file) => file.relativePath.endsWith('StorageScreenHandler.java'))).toBe(true)
+    const handler = files.find((file) => file.relativePath.endsWith('ExampleScreenHandler.java'))?.contents.toString() ?? ''
+    expect(handler).toContain('insertItem')
+    expect(handler).toContain('canInsert')
+    const main = files.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
+    expect(main).toContain('STORAGE_SCREEN_MENU')
+    expect(main).toContain('opencustommenu')
+    expect(main).toContain('hasPermissionLevel(2)')
+    expect(main).toContain('river_stones.command.pebble')
+    const install = files.find((file) => file.relativePath === 'INSTALL.md')?.contents.toString() ?? ''
+    expect(install).toContain('Permission nodes')
   })
 })

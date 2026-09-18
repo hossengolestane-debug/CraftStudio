@@ -3,7 +3,16 @@ import { spigotPinsFor } from '../../../shared/platformPins'
 import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
-import { pluginGuiClass, pluginGuiJava, spawnMobJava, vanillaMaterial } from '../plugin/bukkit'
+import { defaultCommandPermission, defaultMenuPermission } from '../../../shared/spawn'
+import {
+  pluginCommandPermissionsYml,
+  pluginGuiClass,
+  pluginGuiJava,
+  pluginTabCompleteJava,
+  spawnMobJava,
+  vanillaMaterial
+} from '../plugin/bukkit'
+import { planPluginSpawnGap } from '../spawn/biomeTables'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape, yamlEscape } from '../wrapper'
 
@@ -110,16 +119,27 @@ jar {
   const commands = [
     '  givecustomitem:',
     '    description: Give a CraftStudio custom item (vanilla paper + PDC)',
-    '    usage: /givecustomitem [item_id]'
+    '    usage: /givecustomitem [item_id]',
+    `    permission: ${spec.modId}.item.give`
   ]
   if (spec.mobs.length) {
-    commands.push('  summoncustom:', '    description: Spawn a vanilla-disguise CraftStudio mob', '    usage: /summoncustom [mob_id]')
+    commands.push(
+      '  summoncustom:',
+      '    description: Spawn a vanilla-disguise CraftStudio mob',
+      '    usage: /summoncustom [mob_id]',
+      `    permission: ${spec.modId}.mob.summon`
+    )
   }
   if (spec.pluginGuis.length) {
     commands.push('  opencustommenu:', '    description: Open a CraftStudio inventory menu', '    usage: /opencustommenu [menu_id]')
   }
   for (const command of spec.commands) {
-    commands.push(`  ${command.name}:`, `    description: ${yamlEscape(command.description || command.name)}`, `    usage: /${command.name}`)
+    commands.push(
+      `  ${command.name}:`,
+      `    description: ${yamlEscape(command.description || command.name)}`,
+      `    usage: /${command.name}`,
+      `    permission: ${command.permission?.trim() || defaultCommandPermission(spec.modId, command.name)}`
+    )
   }
 
   files.push({
@@ -134,6 +154,7 @@ jar {
       'authors: [CraftStudio Local]',
       'commands:',
       ...commands,
+      pluginCommandPermissionsYml(spec),
       ''
     ].join('\n')
   })
@@ -182,7 +203,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public class ${spec.mainClass} extends JavaPlugin {
+public class ${spec.mainClass} extends JavaPlugin implements org.bukkit.command.TabCompleter {
   public static final NamespacedKey ITEM_KEY = new NamespacedKey("craftstudio", "custom_item");
   public static final NamespacedKey MOB_KEY = new NamespacedKey("craftstudio", "custom_mob");
 
@@ -194,7 +215,21 @@ ${spawnMobJava(spec, 'legacy', attr)}
     getLogger().info("${javaEscape(spec.displayName)} enabled (Spigot). Items are vanilla paper + PDC. Mobs are vanilla disguises. Paper APIs are not used.");
 ${recipeBits}
 ${menuRegs}
+    var giveCmd = getCommand("givecustomitem");
+    if (giveCmd != null) {
+      giveCmd.setTabCompleter(this);
+    }
+    var summonCmd = getCommand("summoncustom");
+    if (summonCmd != null) {
+      summonCmd.setTabCompleter(this);
+    }
+    var menuCmd = getCommand("opencustommenu");
+    if (menuCmd != null) {
+      menuCmd.setTabCompleter(this);
+    }
   }
+
+${pluginTabCompleteJava(spec)}
 
   @Override
   public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -203,6 +238,10 @@ ${menuRegs}
       return true;
     }
     if (label.equalsIgnoreCase("summoncustom")) {
+      if (!player.hasPermission("${spec.modId}.mob.summon")) {
+        player.sendMessage("Missing permission ${spec.modId}.mob.summon");
+        return true;
+      }
       String id = args.length > 0 ? args[0] : "${spec.mobs[0]?.id ?? 'none'}";
       var spawned = spawnCustomMob(player.getWorld(), player.getLocation(), id);
       player.sendMessage(spawned == null ? "Unknown mob id." : "Spawned vanilla disguise for " + id + ". Clients do not see a new entity type.");
@@ -210,10 +249,18 @@ ${menuRegs}
     }
     if (label.equalsIgnoreCase("opencustommenu")) {
       String id = args.length > 0 ? args[0] : "${spec.pluginGuis[0]?.id ?? 'none'}";
+      if (!player.hasPermission("${spec.modId}.menu." + id)) {
+        player.sendMessage("Missing permission ${spec.modId}.menu." + id);
+        return true;
+      }
       switch (id) {
 ${menuOpen}
         default -> player.sendMessage("Unknown menu id.");
       }
+      return true;
+    }
+    if (!player.hasPermission("${spec.modId}.item.give")) {
+      player.sendMessage("Missing permission ${spec.modId}.item.give");
       return true;
     }
     String id = args.length > 0 ? args[0] : "${spec.items[0]?.id ?? 'custom_item'}";
@@ -240,6 +287,7 @@ ${spec.items.map((item) => `      case "${item.id}" -> create${toConstName(item.
       contents: pluginGuiJava(spec, gui, 'legacy')
     })
   }
+  files.push(...planPluginSpawnGap(spec))
 
   files.push({
     relativePath: 'run-spigot/eula.txt',
@@ -280,6 +328,19 @@ ${spec.items.map((item) => `      case "${item.id}" -> create${toConstName(item.
       '1. `./gradlew build`',
       `2. Copy build/libs/${spec.modId}-1.0.0.jar into a Spigot ${pins.minecraft} plugins/ folder.`,
       '3. Accept Minecraft terms yourself.',
+      '',
+      '## Permission nodes',
+      '',
+      `- \`/givecustomitem\` → \`${spec.modId}.item.give\``,
+      spec.mobs.length ? `- \`/summoncustom\` → \`${spec.modId}.mob.summon\`` : '',
+      ...spec.pluginGuis.map((gui) => `- \`/opencustommenu ${gui.id}\` → \`${defaultMenuPermission(spec.modId, gui.id)}\``),
+      ...spec.commands.map(
+        (command) =>
+          `- \`/${command.name}\` → \`${command.permission?.trim() || defaultCommandPermission(spec.modId, command.name)}\``
+      ),
+      spec.mobs.some((mob) => mob.spawn.enabled)
+        ? 'Biome spawn tables are unsupported on Spigot. See SPAWNS.md.'
+        : '',
       ''
     ].join('\n')
   })

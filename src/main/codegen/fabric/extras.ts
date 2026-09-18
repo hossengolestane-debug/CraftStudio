@@ -1,16 +1,25 @@
 import type { FabricItemRegistration } from '../../../shared/platformPins'
 import { encodePngRgba } from '../../../shared/png'
-import type { ProjectSpec } from '../../../shared/spec'
+import { defaultCommandPermission, minecraftBiomeId, yarnBiomeKey } from '../../../shared/spawn'
+import type { ProjectSpec, SpecModGui } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import { isHostilePreset, yarnGoalBlock, yarnParent } from '../mobs/presets'
+import { entityClassName, fabricHandlerClass, fabricScreenClass, menuFieldName, menuRegistryName } from '../naming'
 import type { PlannedFile } from '../types'
 import { javaEscape } from '../wrapper'
 
-export function entityClassName(id: string): string {
-  return id
-    .split('_')
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join('') + 'Entity'
+export { entityClassName }
+
+export type FabricRendererStyle = 'classic_living' | 'render_state' | 'render_state_rooted'
+
+export function fabricRendererStyle(minecraftVersion: string): FabricRendererStyle {
+  if (minecraftVersion === '1.21.8') {
+    return 'render_state_rooted'
+  }
+  if (minecraftVersion === '1.21' || minecraftVersion === '1.21.1') {
+    return 'classic_living'
+  }
+  return 'render_state'
 }
 
 export function placeholderEntityPng(): Buffer {
@@ -124,46 +133,56 @@ export function fabricAttributeLines(spec: ProjectSpec): string {
     .join('\n')
 }
 
-export function planFabricGuiFiles(spec: ProjectSpec, packagePath: string): PlannedFile[] {
-  if (spec.modGuis.length === 0) {
-    return []
-  }
-  const screens = spec.modGuis
-    .map((gui) => {
-      const widgets = gui.widgets
-        .map((widget) => {
-          if (widget.kind === 'label') {
-            return `    context.drawText(this.textRenderer, "${javaEscape(widget.text || widget.id)}", ${widget.x}, ${widget.y}, 0x404040, false);`
-          }
-          if (widget.kind === 'button') {
-            return `    // Button "${javaEscape(widget.text || widget.id)}" at ${widget.x},${widget.y} action=${widget.action} — wired as a close control in init().`
-          }
-          return `    // Slot preview at ${widget.x},${widget.y}. Server must validate item movement; this screen does not trust the client.`
-        })
-        .join('\n')
-      return { gui, widgets }
+export function fabricSpawnInit(spec: ProjectSpec): string {
+  const lines = spec.mobs
+    .filter((mob) => mob.spawn.enabled && mob.spawn.biomes.length > 0)
+    .map((mob) => {
+      const keys = mob.spawn.biomes.map((biome) => `BiomeKeys.${yarnBiomeKey(biome)}`).join(', ')
+      const group = isHostilePreset(mob.preset) ? 'SpawnGroup.MONSTER' : 'SpawnGroup.CREATURE'
+      return `    BiomeModifications.addSpawn(BiomeSelectors.includeByKey(${keys}), ${group}, ${toConstName(mob.id)}, ${mob.spawn.weight}, ${mob.spawn.minGroup}, ${mob.spawn.maxGroup});`
     })
-  const first = spec.modGuis[0]!
-  return [
-    {
-      relativePath: `src/main/java/${packagePath}/ExampleScreenHandler.java`,
-      encoding: 'utf8',
-      contents: `package ${spec.packageName};
+  return lines.join('\n')
+}
+
+function customSlotCount(gui: SpecModGui): number {
+  return Math.max(1, gui.widgets.filter((widget) => widget.kind === 'slot').length)
+}
+
+function fabricHandlerJava(spec: ProjectSpec, gui: SpecModGui): string {
+  const handler = fabricHandlerClass(gui.id)
+  const field = menuFieldName(gui.id)
+  const slots = customSlotCount(gui)
+  const slotAdds = Array.from({ length: slots }, (_, index) => {
+    const widget = gui.widgets.filter((entry) => entry.kind === 'slot')[index]
+    const x = widget?.x ?? 80
+    const y = widget?.y ?? 60
+    return `    this.addSlot(new Slot(this.container, ${index}, ${x}, ${y}) {
+      @Override
+      public boolean canInsert(ItemStack stack) {
+        return !stack.isEmpty() && stack.getCount() <= stack.getMaxCount();
+      }
+    });`
+  }).join('\n')
+  return `package ${spec.packageName};
 
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.inventory.SimpleInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 
 /**
- * Server-side container for "${javaEscape(first.title)}".
- * Client clicks are not trusted: slot changes must be validated here before the inventory updates.
+ * Server-side container for "${javaEscape(gui.title)}".
+ * Client clicks are not trusted. Illegal shift-transfers are refused here.
  */
-public class ExampleScreenHandler extends ScreenHandler {
-  public ExampleScreenHandler(int syncId, PlayerInventory inventory) {
-    super(${spec.mainClass}.EXAMPLE_MENU, syncId);
-    this.addSlot(new Slot(inventory, 0, 80, 60));
+public class ${handler} extends ScreenHandler {
+  private static final int CUSTOM_SLOTS = ${slots};
+  private final SimpleInventory container = new SimpleInventory(CUSTOM_SLOTS);
+
+  public ${handler}(int syncId, PlayerInventory inventory) {
+    super(${spec.mainClass}.${field}, syncId);
+${slotAdds}
     for (int row = 0; row < 3; row++) {
       for (int col = 0; col < 9; col++) {
         this.addSlot(new Slot(inventory, col + row * 9 + 9, 8 + col * 18, 84 + row * 18));
@@ -181,15 +200,53 @@ public class ExampleScreenHandler extends ScreenHandler {
 
   @Override
   public ItemStack quickMove(PlayerEntity player, int index) {
-    return ItemStack.EMPTY;
+    Slot slot = this.slots.get(index);
+    if (slot == null || !slot.hasStack()) {
+      return ItemStack.EMPTY;
+    }
+    ItemStack stack = slot.getStack();
+    ItemStack original = stack.copy();
+    boolean moved;
+    if (index < CUSTOM_SLOTS) {
+      moved = this.insertItem(stack, CUSTOM_SLOTS, this.slots.size(), true);
+    } else {
+      moved = this.insertItem(stack, 0, CUSTOM_SLOTS, false);
+    }
+    if (!moved) {
+      return ItemStack.EMPTY;
+    }
+    if (stack.isEmpty()) {
+      slot.setStack(ItemStack.EMPTY);
+    } else {
+      slot.markDirty();
+    }
+    return original;
+  }
+
+  @Override
+  public void onClosed(PlayerEntity player) {
+    super.onClosed(player);
+    this.dropInventory(player, this.container);
   }
 }
 `
-    },
-    {
-      relativePath: `src/main/java/${packagePath}/ExampleScreen.java`,
-      encoding: 'utf8',
-      contents: `package ${spec.packageName};
+}
+
+function fabricScreenJava(spec: ProjectSpec, gui: SpecModGui): string {
+  const screen = fabricScreenClass(gui.id)
+  const handler = fabricHandlerClass(gui.id)
+  const widgets = gui.widgets
+    .map((widget) => {
+      if (widget.kind === 'label') {
+        return `    context.drawText(this.textRenderer, "${javaEscape(widget.text || widget.id)}", ${widget.x}, ${widget.y}, 0x404040, false);`
+      }
+      if (widget.kind === 'button') {
+        return `    // Button "${javaEscape(widget.text || widget.id)}" at ${widget.x},${widget.y} action=${widget.action} — wired as a close control in init().`
+      }
+      return `    // Slot preview at ${widget.x},${widget.y}. Server must validate item movement; this screen does not trust the client.`
+    })
+    .join('\n')
+  return `package ${spec.packageName};
 
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
@@ -198,39 +255,52 @@ import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.text.Text;
 
 /**
- * Client preview for "${javaEscape(first.title)}" (${first.width}x${first.height}).
- * This is a layout preview, not a Minecraft-verified GUI. Server-side validation lives in ExampleScreenHandler.
+ * Client preview for "${javaEscape(gui.title)}" (${gui.width}x${gui.height}).
+ * This is a layout preview, not a Minecraft-verified GUI. Server-side validation lives in ${handler}.
  */
-public class ExampleScreen extends HandledScreen<ExampleScreenHandler> {
-  public ExampleScreen(ExampleScreenHandler handler, PlayerInventory inventory, Text title) {
+public class ${screen} extends HandledScreen<${handler}> {
+  public ${screen}(${handler} handler, PlayerInventory inventory, Text title) {
     super(handler, inventory, title);
-    this.backgroundWidth = ${first.width};
-    this.backgroundHeight = ${first.height};
+    this.backgroundWidth = ${gui.width};
+    this.backgroundHeight = ${gui.height};
   }
 
   @Override
   protected void init() {
     super.init();
     this.addDrawableChild(ButtonWidget.builder(Text.literal("Close"), button -> this.close())
-      .dimensions(this.x + 48, this.y + ${Math.max(20, first.height - 36)}, 80, 20)
+      .dimensions(this.x + 48, this.y + ${Math.max(20, gui.height - 36)}, 80, 20)
       .build());
   }
 
   @Override
   protected void drawBackground(DrawContext context, float delta, int mouseX, int mouseY) {
     context.fill(this.x, this.y, this.x + this.backgroundWidth, this.y + this.backgroundHeight, 0xC0101010);
-${screens[0]?.widgets ?? ''}
+${widgets}
   }
 }
 `
+}
+
+export function planFabricGuiFiles(spec: ProjectSpec, packagePath: string): PlannedFile[] {
+  return spec.modGuis.flatMap((gui) => [
+    {
+      relativePath: `src/main/java/${packagePath}/${fabricHandlerClass(gui.id)}.java`,
+      encoding: 'utf8' as const,
+      contents: fabricHandlerJava(spec, gui)
+    },
+    {
+      relativePath: `src/main/java/${packagePath}/${fabricScreenClass(gui.id)}.java`,
+      encoding: 'utf8' as const,
+      contents: fabricScreenJava(spec, gui)
     }
-  ]
+  ])
 }
 
 export function planFabricClientFiles(
   spec: ProjectSpec,
   packagePath: string,
-  classic: boolean
+  _style: FabricRendererStyle
 ): PlannedFile[] {
   if (spec.modGuis.length === 0 && spec.mobs.length === 0) {
     return []
@@ -239,36 +309,31 @@ export function planFabricClientFiles(
     {
       relativePath: `src/main/java/${packagePath}/${spec.mainClass}Client.java`,
       encoding: 'utf8',
-      contents: fabricClientJava(spec, spec.modGuis.length > 0, classic)
+      contents: fabricClientJava(spec)
     }
   ]
 }
 
-function fabricClientJava(spec: ProjectSpec, registerScreen: boolean, classic: boolean): string {
-  const rendererLines = fabricClientRendererLines(spec, classic)
+function fabricClientJava(spec: ProjectSpec): string {
+  const rendererLines = fabricClientRendererLines(spec)
   const imports = ['import net.fabricmc.api.ClientModInitializer;']
-  if (registerScreen) {
+  if (spec.modGuis.length > 0) {
     imports.push('import net.minecraft.client.gui.screen.ingame.HandledScreens;')
   }
   if (spec.mobs.length > 0) {
     imports.push('import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;')
-    if (classic) {
-      imports.push('import net.fabricmc.fabric.api.client.rendering.v1.EntityModelLayerRegistry;')
-    } else {
-      imports.push('import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;')
-      imports.push('import net.minecraft.text.Text;')
-    }
+    imports.push('import net.fabricmc.fabric.api.client.rendering.v1.EntityModelLayerRegistry;')
   }
-  const layerLine = classic && spec.mobs.length > 0
-    ? `    EntityModelLayerRegistry.registerModelLayer(CraftStudioMobModel.LAYER, CraftStudioMobModel::getTexturedModelData);`
-    : ''
-  const warning = !classic && spec.mobs.length > 0
-    ? `    ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> client.execute(() -> {
-      if (client.player != null) {
-        client.player.sendMessage(Text.literal("[CraftStudio] Custom entities are registered but invisible on this Fabric pin until a render-state model exists."), false);
-      }
-    }));`
-    : ''
+  const layerLine =
+    spec.mobs.length > 0
+      ? `    EntityModelLayerRegistry.registerModelLayer(CraftStudioMobModel.LAYER, CraftStudioMobModel::getTexturedModelData);`
+      : ''
+  const screenLines = spec.modGuis
+    .map(
+      (gui) =>
+        `    HandledScreens.register(${spec.mainClass}.${menuFieldName(gui.id)}, ${fabricScreenClass(gui.id)}::new);`
+    )
+    .join('\n')
   return `package ${spec.packageName};
 
 ${imports.join('\n')}
@@ -276,10 +341,9 @@ ${imports.join('\n')}
 public class ${spec.mainClass}Client implements ClientModInitializer {
   @Override
   public void onInitializeClient() {
-    ${registerScreen ? `HandledScreens.register(${spec.mainClass}.EXAMPLE_MENU, ExampleScreen::new);` : ''}
+${screenLines}
 ${layerLine}
 ${rendererLines}
-${warning}
   }
 }
 `
@@ -289,39 +353,34 @@ export function fabricMenuField(spec: ProjectSpec, style: FabricItemRegistration
   if (spec.modGuis.length === 0) {
     return ''
   }
-  if (style === 'registry_key') {
-    return `  public static final RegistryKey<ScreenHandlerType<?>> EXAMPLE_MENU_KEY = RegistryKey.of(
+  return spec.modGuis
+    .map((gui) => {
+      const handler = fabricHandlerClass(gui.id)
+      const field = menuFieldName(gui.id)
+      const registry = menuRegistryName(gui.id)
+      if (style === 'registry_key') {
+        return `  public static final RegistryKey<ScreenHandlerType<?>> ${field}_KEY = RegistryKey.of(
     RegistryKeys.SCREEN_HANDLER,
-    Identifier.of(MOD_ID, "example_menu")
+    Identifier.of(MOD_ID, "${registry}")
   );
 
-  public static final ScreenHandlerType<ExampleScreenHandler> EXAMPLE_MENU = Registry.register(
+  public static final ScreenHandlerType<${handler}> ${field} = Registry.register(
     Registries.SCREEN_HANDLER,
-    EXAMPLE_MENU_KEY,
-    new ScreenHandlerType<>(ExampleScreenHandler::new, FeatureFlags.VANILLA_FEATURES)
+    ${field}_KEY,
+    new ScreenHandlerType<>(${handler}::new, FeatureFlags.VANILLA_FEATURES)
   );`
-  }
-  return `  public static final ScreenHandlerType<ExampleScreenHandler> EXAMPLE_MENU = Registry.register(
+      }
+      return `  public static final ScreenHandlerType<${handler}> ${field} = Registry.register(
     Registries.SCREEN_HANDLER,
-    Identifier.of(MOD_ID, "example_menu"),
-    new ScreenHandlerType<>(ExampleScreenHandler::new, FeatureFlags.VANILLA_FEATURES)
+    Identifier.of(MOD_ID, "${registry}"),
+    new ScreenHandlerType<>(${handler}::new, FeatureFlags.VANILLA_FEATURES)
   );`
+    })
+    .join('\n\n')
 }
 
-export function planFabricEntityRenderers(
-  spec: ProjectSpec,
-  packagePath: string,
-  classic: boolean
-): PlannedFile[] {
-  if (spec.mobs.length === 0) {
-    return []
-  }
-  const files: PlannedFile[] = []
-  if (classic) {
-    files.push({
-      relativePath: `src/main/java/${packagePath}/CraftStudioMobModel.java`,
-      encoding: 'utf8',
-      contents: `package ${spec.packageName};
+function classicMobModelJava(spec: ProjectSpec): string {
+  return `package ${spec.packageName};
 
 import net.minecraft.client.model.ModelData;
 import net.minecraft.client.model.ModelPart;
@@ -365,25 +424,79 @@ public class CraftStudioMobModel<T extends LivingEntity> extends EntityModel<T> 
   }
 }
 `
-    })
+}
+
+function modernMobModelJava(spec: ProjectSpec, rooted: boolean): string {
+  const ctor = rooted
+    ? `  public CraftStudioMobModel(ModelPart root) {
+    super(root);
+    this.root = root;
+  }`
+    : `  public CraftStudioMobModel(ModelPart root) {
+    this.root = root;
+  }`
+  const render = rooted
+    ? ''
+    : `
+  @Override
+  public void render(MatrixStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
+    this.root.render(matrices, vertices, light, overlay, color);
   }
-  for (const mob of spec.mobs) {
-    const cls = entityClassName(mob.id)
-    const renderer = `${cls}Renderer`
-    if (classic) {
-      files.push({
-        relativePath: `src/main/java/${packagePath}/${renderer}.java`,
-        encoding: 'utf8',
-        contents: `package ${spec.packageName};
+`
+  const extraImports = rooted
+    ? ''
+    : `import net.minecraft.client.render.VertexConsumer;
+import net.minecraft.client.util.math.MatrixStack;
+`
+  return `package ${spec.packageName};
+
+import net.minecraft.client.model.ModelData;
+import net.minecraft.client.model.ModelPart;
+import net.minecraft.client.model.ModelPartBuilder;
+import net.minecraft.client.model.ModelTransform;
+import net.minecraft.client.model.TexturedModelData;
+${extraImports}import net.minecraft.client.render.entity.model.EntityModel;
+import net.minecraft.client.render.entity.model.EntityModelLayer;
+import net.minecraft.client.render.entity.state.LivingEntityRenderState;
+import net.minecraft.util.Identifier;
+
+/**
+ * Visible 1.21.2+ cube model typed to LivingEntityRenderState.
+ * Vanilla model classes are typed to vanilla entities and are not used.
+ */
+public class CraftStudioMobModel extends EntityModel<LivingEntityRenderState> {
+  public static final EntityModelLayer LAYER = new EntityModelLayer(Identifier.of(${spec.mainClass}.MOD_ID, "preset_mob"), "main");
+  private final ModelPart root;
+
+${ctor}
+
+  public static TexturedModelData getTexturedModelData() {
+    ModelData data = new ModelData();
+    var root = data.getRoot();
+    root.addChild("body", ModelPartBuilder.create().uv(0, 0).cuboid(-3.0F, 10.0F, -2.0F, 6.0F, 8.0F, 4.0F), ModelTransform.NONE);
+    root.addChild("head", ModelPartBuilder.create().uv(16, 0).cuboid(-3.0F, 4.0F, -3.0F, 6.0F, 6.0F, 6.0F), ModelTransform.NONE);
+    return TexturedModelData.of(data, 64, 32);
+  }
+
+  @Override
+  public void setAngles(LivingEntityRenderState state) {
+  }
+${render}}
+`
+}
+
+function classicRendererJava(spec: ProjectSpec, mobId: string): string {
+  const cls = entityClassName(mobId)
+  return `package ${spec.packageName};
 
 import net.minecraft.client.render.entity.EntityRendererFactory;
 import net.minecraft.client.render.entity.MobEntityRenderer;
 import net.minecraft.util.Identifier;
 
-public class ${renderer} extends MobEntityRenderer<${cls}, CraftStudioMobModel<${cls}>> {
+public class ${cls}Renderer extends MobEntityRenderer<${cls}, CraftStudioMobModel<${cls}>> {
   private static final Identifier TEXTURE = Identifier.of(${spec.mainClass}.MOD_ID, "textures/entity/preset_mob.png");
 
-  public ${renderer}(EntityRendererFactory.Context context) {
+  public ${cls}Renderer(EntityRendererFactory.Context context) {
     super(context, new CraftStudioMobModel<>(context.getPart(CraftStudioMobModel.LAYER)), 0.5f);
   }
 
@@ -393,38 +506,70 @@ public class ${renderer} extends MobEntityRenderer<${cls}, CraftStudioMobModel<$
   }
 }
 `
-      })
-    } else {
-      files.push({
-        relativePath: `src/main/java/${packagePath}/${renderer}.java`,
-        encoding: 'utf8',
-        contents: `package ${spec.packageName};
+}
 
-import net.minecraft.client.render.entity.EntityRenderer;
+function modernRendererJava(spec: ProjectSpec, mobId: string): string {
+  const cls = entityClassName(mobId)
+  return `package ${spec.packageName};
+
 import net.minecraft.client.render.entity.EntityRendererFactory;
-import net.minecraft.client.render.entity.state.EntityRenderState;
+import net.minecraft.client.render.entity.LivingEntityRenderer;
+import net.minecraft.client.render.entity.state.LivingEntityRenderState;
+import net.minecraft.util.Identifier;
 
 /**
- * Compiling 1.21.2+ render-state stub. No model is drawn — entities stay invisible until a later model exists.
+ * Visible 1.21.2+ LivingEntityRenderer + cube model. This is not a Minecraft-verified custom model.
  */
-public class ${renderer} extends EntityRenderer<${cls}, EntityRenderState> {
-  public ${renderer}(EntityRendererFactory.Context context) {
-    super(context);
+public class ${cls}Renderer extends LivingEntityRenderer<${cls}, LivingEntityRenderState, CraftStudioMobModel> {
+  private static final Identifier TEXTURE = Identifier.of(${spec.mainClass}.MOD_ID, "textures/entity/preset_mob.png");
+
+  public ${cls}Renderer(EntityRendererFactory.Context context) {
+    super(context, new CraftStudioMobModel(context.getPart(CraftStudioMobModel.LAYER)), 0.5f);
   }
 
   @Override
-  public EntityRenderState createRenderState() {
-    return new EntityRenderState();
+  public LivingEntityRenderState createRenderState() {
+    return new LivingEntityRenderState();
+  }
+
+  @Override
+  public Identifier getTexture(LivingEntityRenderState state) {
+    return TEXTURE;
   }
 }
 `
-      })
+}
+
+export function planFabricEntityRenderers(
+  spec: ProjectSpec,
+  packagePath: string,
+  style: FabricRendererStyle
+): PlannedFile[] {
+  if (spec.mobs.length === 0) {
+    return []
+  }
+  const files: PlannedFile[] = [
+    {
+      relativePath: `src/main/java/${packagePath}/CraftStudioMobModel.java`,
+      encoding: 'utf8',
+      contents:
+        style === 'classic_living'
+          ? classicMobModelJava(spec)
+          : modernMobModelJava(spec, style === 'render_state_rooted')
     }
+  ]
+  for (const mob of spec.mobs) {
+    files.push({
+      relativePath: `src/main/java/${packagePath}/${entityClassName(mob.id)}Renderer.java`,
+      encoding: 'utf8',
+      contents:
+        style === 'classic_living' ? classicRendererJava(spec, mob.id) : modernRendererJava(spec, mob.id)
+    })
   }
   return files
 }
 
-export function fabricClientRendererLines(spec: ProjectSpec, _classic: boolean): string {
+export function fabricClientRendererLines(spec: ProjectSpec): string {
   if (spec.mobs.length === 0) {
     return ''
   }
@@ -434,4 +579,86 @@ export function fabricClientRendererLines(spec: ProjectSpec, _classic: boolean):
         `    EntityRendererRegistry.register(${spec.mainClass}.${toConstName(mob.id)}, ${entityClassName(mob.id)}Renderer::new);`
     )
     .join('\n')
+}
+
+export function fabricCommandBlocks(spec: ProjectSpec): string {
+  const specCommands = spec.commands.map((command) => {
+    const permission = command.permission?.trim() || defaultCommandPermission(spec.modId, command.name)
+    const level = command.permission?.trim() ? 2 : 0
+    return `    dispatcher.register(CommandManager.literal("${javaEscape(command.name)}")
+      .requires(source -> source.hasPermissionLevel(${level}))
+      .executes(context -> {
+        context.getSource().sendFeedback(() -> Text.literal("CraftStudio command /${javaEscape(command.name)} (${javaEscape(permission)})"), false);
+        return 1;
+      }));`
+  })
+  const menuIds = spec.modGuis.map((gui) => `"${javaEscape(gui.id)}"`).join(', ')
+  const menuCases = spec.modGuis
+    .map((gui) => {
+      const handler = fabricHandlerClass(gui.id)
+      return `        case "${javaEscape(gui.id)}" -> player.openHandledScreen(new SimpleNamedScreenHandlerFactory((syncId, inv, p) -> new ${handler}(syncId, inv), Text.literal("${javaEscape(gui.title)}")));`
+    })
+    .join('\n')
+  const openMenu =
+    spec.modGuis.length > 0
+      ? `    dispatcher.register(CommandManager.literal("opencustommenu")
+      .then(CommandManager.argument("id", StringArgumentType.word())
+        .suggests((ctx, builder) -> {
+          for (String id : new String[] {${menuIds}}) {
+            if (id.startsWith(builder.getRemaining().toLowerCase())) {
+              builder.suggest(id);
+            }
+          }
+          return builder.buildFuture();
+        })
+        .executes(context -> {
+          ServerPlayerEntity player = context.getSource().getPlayerOrException();
+          String id = StringArgumentType.getString(context, "id");
+          switch (id) {
+${menuCases}
+            default -> context.getSource().sendError(Text.literal("Unknown menu id."));
+          }
+          return 1;
+        }))
+      .executes(context -> {
+        ServerPlayerEntity player = context.getSource().getPlayerOrException();
+        player.openHandledScreen(new SimpleNamedScreenHandlerFactory((syncId, inv, p) -> new ${fabricHandlerClass(spec.modGuis[0]!.id)}(syncId, inv), Text.literal("${javaEscape(spec.modGuis[0]!.title)}")));
+        return 1;
+      }));`
+      : ''
+  return [...specCommands, openMenu].filter(Boolean).join('\n')
+}
+
+export function fabricEntityRenderingNote(minecraftVersion: string, style: FabricRendererStyle): string {
+  const body =
+    style === 'classic_living'
+      ? `Fabric ${minecraftVersion}: a compiling custom cube model is registered with MobEntityRenderer. Vanilla model classes are typed to vanilla entities and are not used.`
+      : `Fabric ${minecraftVersion}: a compiling visible LivingEntityRenderer + CraftStudioMobModel cube is registered (render-state API). Vanilla model classes are typed to vanilla entities and are not used.`
+  return [
+    '# Entity rendering note',
+    '',
+    body,
+    'This is not a Minecraft-verified custom model. Summon always works. Biome spawn tables emit only when enabled on the spec.',
+    ''
+  ].join('\n')
+}
+
+export function fabricSpawnDoc(spec: ProjectSpec, pluginUnsupported = false): string {
+  const rows = spec.mobs
+    .map((mob) => {
+      if (!mob.spawn.enabled || mob.spawn.biomes.length === 0) {
+        return `- ${mob.id}: summon/command only (spawn table disabled or empty).`
+      }
+      return `- ${mob.id}: ${mob.spawn.biomes.map(minecraftBiomeId).join(', ')} weight=${mob.spawn.weight} group=${mob.spawn.minGroup}-${mob.spawn.maxGroup}`
+    })
+    .join('\n')
+  return [
+    '# Biome spawn tables',
+    '',
+    pluginUnsupported
+      ? 'This adapter cannot register biome spawn tables. Plugin mobs stay vanilla disguises summoned by command.'
+      : 'Phase 7 MVP: dedicated biome spawn entries only. This is not a worldgen stack (no ores, dimensions, or structures).',
+    rows || '- No mobs in this spec.',
+    ''
+  ].join('\n')
 }

@@ -1,6 +1,9 @@
 import { z } from 'zod'
 import { AppError } from './errors'
+import { DEFAULT_MOB_SPAWN, SPAWN_BIOMES } from './spawn'
 import { SPEC_FILENAME } from './types'
+
+export { SPAWN_BIOMES }
 
 export const SPEC_SCHEMA_VERSION = 1
 export { SPEC_FILENAME }
@@ -77,7 +80,20 @@ const mobSchema = z.object({
   attackDamage: z.number().min(0).max(40).default(3),
   preset: z.enum(MOB_PRESETS).default('passive_wanderer'),
   targeting: z.enum(['none', 'players', 'hostiles']).default('none'),
-  spawnStub: z.string().trim().max(200).default('No custom biome spawn table in Phase 6 — summon/command only.'),
+  spawnStub: z
+    .string()
+    .trim()
+    .max(200)
+    .default('Summon/command always works. Enable a biome spawn table for Fabric/Forge/NeoForge (not plugins).'),
+  spawn: z
+    .object({
+      enabled: z.boolean().default(false),
+      biomes: z.array(z.enum(SPAWN_BIOMES)).max(8).default([]),
+      weight: z.number().int().min(1).max(100).default(8),
+      minGroup: z.number().int().min(1).max(8).default(1),
+      maxGroup: z.number().int().min(1).max(8).default(2)
+    })
+    .default(DEFAULT_MOB_SPAWN),
   drops: z.array(mobDropSchema).max(4).default([]),
   appearance: z
     .object({
@@ -121,7 +137,7 @@ const pluginGuiSchema = z.object({
   title: z.string().trim().min(1).max(32),
   rows: z.number().int().min(1).max(6).default(3),
   pagination: z.boolean().default(false),
-  slots: z.array(pluginGuiSlotSchema).min(1).max(27)
+  slots: z.array(pluginGuiSlotSchema).min(1).max(54)
 })
 
 const recipeIngredientSchema = z.object({
@@ -254,6 +270,13 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
   const itemIds = new Set(spec.items.map((item) => item.id))
 
   for (const mob of spec.mobs) {
+    if (mob.spawn.maxGroup < mob.spawn.minGroup) {
+      throw new AppError({
+        code: 'SPEC_INVALID',
+        message: `Mob "${mob.id}" has a spawn table with maxGroup < minGroup.`,
+        action: 'Set spawn maxGroup at least as high as minGroup.'
+      })
+    }
     if (mob.drops.some((drop) => drop.max < drop.min)) {
       throw new AppError({
         code: 'SPEC_INVALID',
@@ -275,11 +298,11 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
 
   for (const gui of spec.pluginGuis) {
     for (const slot of gui.slots) {
-      if (slot.index >= gui.rows * 9) {
+      if (!gui.pagination && slot.index >= gui.rows * 9) {
         throw new AppError({
           code: 'SPEC_INVALID',
           message: `Plugin GUI "${gui.id}" slot ${slot.index} is outside ${gui.rows} rows.`,
-          action: 'Use an index below rows × 9.'
+          action: 'Use an index below rows × 9, or enable pagination to overflow onto extra pages.'
         })
       }
       if (slot.action === 'give' && slot.giveItemId && !itemIds.has(slot.giveItemId)) {
