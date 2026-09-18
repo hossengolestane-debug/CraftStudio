@@ -4,6 +4,8 @@ import path from 'node:path'
 import { AppError } from '../../shared/errors'
 import { assertInsideRoot } from './pathSafety'
 
+export type GradleTaskId = 'build' | 'runClient'
+
 export interface BuildLogEvent {
   stream: 'stdout' | 'stderr'
   text: string
@@ -15,11 +17,16 @@ export interface BuildResult {
   timedOut: boolean
   cancelled: boolean
   command: string
+  task: GradleTaskId
   logs: string
   message: string
+  compileOnly: boolean
 }
 
-const TRUSTED_ARGS = ['build', '--no-daemon', '--stacktrace'] as const
+const TRUSTED_TASKS: Record<GradleTaskId, readonly string[]> = {
+  build: ['build', '--no-daemon', '--stacktrace'],
+  runClient: ['runClient', '--no-daemon', '--stacktrace']
+}
 
 export class GradleService {
   private child: ReturnType<typeof spawn> | null = null
@@ -29,15 +36,25 @@ export class GradleService {
     this.child = null
   }
 
-  async build(
+  async run(
     projectPath: string,
+    task: GradleTaskId,
     options: {
       timeoutMs?: number
       onLog?: (event: BuildLogEvent) => void
     } = {}
   ): Promise<BuildResult> {
+    const args = TRUSTED_TASKS[task]
+    if (!args) {
+      throw new AppError({
+        code: 'BUILD_GATED',
+        message: 'Refusing an unknown Gradle task.',
+        action: 'Phase 3 only runs allowlisted `build` or `runClient`.'
+      })
+    }
+    assertTrustedGradleArgs([...args])
     assertInsideRoot(projectPath, projectPath)
-    const timeoutMs = options.timeoutMs ?? 10 * 60 * 1000
+    const timeoutMs = options.timeoutMs ?? (task === 'runClient' ? 20 * 60 * 1000 : 10 * 60 * 1000)
     const script = process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'
     const scriptPath = path.join(projectPath, script)
     assertInsideRoot(projectPath, scriptPath)
@@ -50,7 +67,7 @@ export class GradleService {
       }
     }
 
-    const command = `${script} ${TRUSTED_ARGS.join(' ')}`
+    const command = `${script} ${args.join(' ')}`
     const chunks: string[] = []
 
     return await new Promise((resolve) => {
@@ -64,12 +81,13 @@ export class GradleService {
         resolve(result)
       }
 
-      const child = spawn(scriptPath, [...TRUSTED_ARGS], {
+      const child = spawn(scriptPath, [...args], {
         cwd: projectPath,
         env: {
           PATH: process.env.PATH,
           JAVA_HOME: process.env.JAVA_HOME,
           HOME: process.env.HOME,
+          DISPLAY: process.env.DISPLAY,
           GRADLE_USER_HOME: process.env.GRADLE_USER_HOME
         },
         windowsHide: true
@@ -84,8 +102,10 @@ export class GradleService {
           timedOut: true,
           cancelled: false,
           command,
+          task,
           logs: chunks.join(''),
-          message: `Gradle timed out after ${timeoutMs}ms. The project files may still be valid.`
+          compileOnly: task === 'build',
+          message: `Gradle ${task} timed out after ${timeoutMs}ms. This is not treated as success.`
         })
       }, timeoutMs)
 
@@ -105,7 +125,9 @@ export class GradleService {
           timedOut: false,
           cancelled: false,
           command,
+          task,
           logs: chunks.join(''),
+          compileOnly: task === 'build',
           message: `Could not start Gradle: ${error.message}`
         })
       })
@@ -118,35 +140,55 @@ export class GradleService {
             timedOut: false,
             cancelled: true,
             command,
+            task,
             logs: chunks.join(''),
-            message: 'Gradle build was cancelled.'
+            compileOnly: task === 'build',
+            message: `Gradle ${task} was cancelled.`
           })
           return
         }
+        const ok = code === 0
         finish({
           started: true,
           exitCode: code,
           timedOut: false,
           cancelled: false,
           command,
+          task,
           logs: chunks.join(''),
-          message:
-            code === 0
-              ? 'Gradle build succeeded.'
-              : `Gradle exited with code ${code ?? 'unknown'}. This is a real failure, not a simulated one.`
+          compileOnly: task === 'build',
+          message: ok
+            ? task === 'build'
+              ? 'Gradle build succeeded (compile). Compatibility is still Experimental until a real Minecraft runtime is verified.'
+              : 'Gradle runClient exited 0. Treat this as a developer launch, not a Tested registry row, unless you verified gameplay.'
+            : `Gradle ${task} exited with code ${code ?? 'unknown'}. This is a real failure, not a simulated one.`
         })
       })
     })
   }
+
+  build(
+    projectPath: string,
+    options: {
+      timeoutMs?: number
+      onLog?: (event: BuildLogEvent) => void
+    } = {}
+  ): Promise<BuildResult> {
+    return this.run(projectPath, 'build', options)
+  }
 }
 
-export function assertTrustedBuildCommand(args: string[]): void {
-  if (args.length !== TRUSTED_ARGS.length || TRUSTED_ARGS.some((arg, index) => args[index] !== arg)) {
+export function assertTrustedGradleArgs(args: string[]): void {
+  const allowed = Object.values(TRUSTED_TASKS)
+  const ok = allowed.some((trusted) => trusted.length === args.length && trusted.every((arg, i) => args[i] === arg))
+  if (!ok) {
     throw new AppError({
       code: 'BUILD_GATED',
       message: 'Refusing to run a non-allowlisted Gradle command.',
-      action: 'Phase 2 only runs `gradlew build --no-daemon --stacktrace`.',
+      action: 'Phase 3 only runs `gradlew build|runClient --no-daemon --stacktrace`.',
       details: args.join(' ')
     })
   }
 }
+
+export const assertTrustedBuildCommand = assertTrustedGradleArgs

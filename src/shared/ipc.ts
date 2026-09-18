@@ -38,7 +38,9 @@ export const IPC_CHANNELS = {
   FILES_READ: 'files:read',
   JAVA_CHECK: 'java:check',
   BUILD_RUN: 'build:run',
-  BUILD_CANCEL: 'build:cancel'
+  BUILD_CANCEL: 'build:cancel',
+  EXPORT_SOURCE: 'export:source',
+  EXPORT_JAR: 'export:jar'
 } as const
 
 export const IPC_EVENTS = {
@@ -132,8 +134,22 @@ export interface BuildResultDto {
   timedOut: boolean
   cancelled: boolean
   command: string
+  task?: 'build' | 'runClient'
   logs: string
   message: string
+  compileOnly?: boolean
+}
+
+export interface ExportResultDto {
+  kind: 'source-zip' | 'jar'
+  destPath: string
+  fileCount: number
+  message: string
+}
+
+export interface RunBuildInput {
+  projectId: string
+  task?: 'build' | 'runClient'
 }
 
 export interface BuildLogEvent {
@@ -165,8 +181,10 @@ export interface CraftStudioAPI {
   listProjectFiles: (projectId: string) => Promise<ProjectFileNodeDto[]>
   readProjectFile: (projectId: string, relativePath: string) => Promise<ProjectFileContentsDto>
   checkJava: (projectId: string) => Promise<JavaStatusDto>
-  runBuild: (projectId: string) => Promise<BuildResultDto>
+  runBuild: (projectId: string, task?: 'build' | 'runClient') => Promise<BuildResultDto>
   cancelBuild: () => Promise<void>
+  exportSourceZip: (projectId: string) => Promise<ExportResultDto>
+  exportBuiltJar: (projectId: string) => Promise<ExportResultDto>
   onGenerationProgress: (handler: (event: GenerationProgress) => void) => () => void
   onBuildLog: (handler: (event: BuildLogEvent) => void) => () => void
 }

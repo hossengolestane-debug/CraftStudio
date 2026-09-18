@@ -15,6 +15,8 @@ export type AppErrorCode =
   | 'JAVA_MISSING'
   | 'BUILD_FAILED'
   | 'BUILD_GATED'
+  | 'EXPORT_FAILED'
+  | 'TERMS_REQUIRED'
   | 'IO'
   | 'UNKNOWN'
 

@@ -15,7 +15,7 @@ export const PaperAdapter: PlatformAdapter = {
     worldgen: 'limited',
     serverCommands: 'supported',
     textures: 'unsupported',
-    gradleProject: 'unsupported'
+    gradleProject: 'supported'
   },
   javaRequirements: {
     minVersion: 17,
@@ -24,10 +24,11 @@ export const PaperAdapter: PlatformAdapter = {
   },
   templates: [
     {
-      id: 'paper-gradle-stub',
-      displayName: 'Paper plugin Gradle project',
-      description: 'Real Gradle emission is not implemented in Phase 1.',
-      status: 'stub'
+      id: 'paper-item-gradle',
+      displayName: 'Paper Gradle + PDC item',
+      description:
+        'Trusted Java plugin + plugin.yml for Paper 1.21 / 1.21.1 / 1.21.4 / 1.21.8. Custom items are vanilla paper + PDC. Not valid on Spigot.',
+      status: 'available'
     }
   ],
   validationRules: [
@@ -44,10 +45,17 @@ export const PaperAdapter: PlatformAdapter = {
   ],
   testProcedures: [
     {
+      id: 'paper-gradle-build',
+      displayName: 'Gradle build',
+      description: 'Runs `./gradlew build` against paper-api. Compile success is not a Tested row.',
+      status: 'available'
+    },
+    {
       id: 'paper-server-run',
-      displayName: 'Start a local Paper server',
-      description: 'Not implemented. A later phase will download a Paper build and copy the plugin jar.',
-      status: 'stub'
+      displayName: 'Paper test-server prep',
+      description:
+        'Writes run-paper/ notes and eula=false. Does not download Paper or Minecraft, does not launch a server, and does not accept the EULA.',
+      status: 'available'
     }
   ]
 }

@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import type { AppErrorPayload } from '../../../../shared/errors'
 import type { ApplyResultDto, GenerationProgress, GenerationResultDto } from '../../../../shared/ipc'
-import type { ProjectSpec } from '../../../../shared/spec'
+import { isCodegenSupported } from '../../../../shared/platformPins'
+import { parseProjectSpec, type ProjectSpec } from '../../../../shared/spec'
 import type { AppSettings, OllamaStatus, PlatformAdapterInfo, ProjectRecord } from '../../../../shared/types'
 import { ErrorPanel } from '../../components/ErrorPanel'
 import { Badge, Button, Card, Field, TextArea, TextInput } from '../../components/ui'
 import { asAppError } from '../../lib/errors'
+import { ItemEditor } from './ItemEditor'
 
 const api = window.craftstudio
+const SPEC_HINT = 'craftstudio.spec.json'
 
 export function DesignGenerate({
   project,
@@ -54,7 +57,9 @@ export function DesignGenerate({
     return off
   }, [project.manifest.id])
 
-  const fabricReady = project.manifest.platform === 'fabric'
+  const codegenReady = isCodegenSupported(project.manifest.platform, project.manifest.minecraftVersion)
+  const paperLimits = project.manifest.platform === 'paper'
+  const workingSpec = generation?.spec ?? spec
 
   const refreshModels = async (): Promise<OllamaStatus> => {
     const status = await api.checkOllama()
@@ -65,13 +70,36 @@ export function DesignGenerate({
     return status
   }
 
+  const applyWorking = (next: ProjectSpec): void => {
+    const draft = { ...next, source: 'editor' as const }
+    setSpec(draft)
+    setGeneration((current) =>
+      current
+        ? { ...current, spec: draft }
+        : {
+            spec: draft,
+            usedOllama: false,
+            repairAttempts: 0,
+            remainingProblems: [],
+            ollamaNote: 'Edited in the item editor. Apply still validates with Zod.',
+            success: true
+          }
+    )
+    try {
+      parseProjectSpec(draft)
+      setError(null)
+    } catch (err) {
+      setError(asAppError(err))
+    }
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
         <h1 className="text-2xl font-semibold">Design</h1>
         <p className="mt-1 text-muted">
-          Describe features, generate a validated spec, then apply trusted Fabric templates. Model output is never
-          written until Zod accepts it.
+          Describe or edit features, validate a spec, then apply trusted templates. Model output is never written until
+          Zod accepts it.
         </p>
       </div>
       {error ? <ErrorPanel error={error} onDismiss={() => setError(null)} /> : null}
@@ -81,6 +109,7 @@ export function DesignGenerate({
           <Badge>{project.manifest.type}</Badge>
           <Badge>{project.manifest.platform}</Badge>
           <Badge>{project.manifest.minecraftVersion}</Badge>
+          <Badge tone={codegenReady ? 'ok' : 'warn'}>{codegenReady ? 'Codegen available' : 'No emitter'}</Badge>
         </div>
         <Field label="Name" htmlFor="design-name">
           <TextInput id="design-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
@@ -113,17 +142,27 @@ export function DesignGenerate({
 
       <Card className="space-y-4">
         <h2 className="text-lg font-semibold">Generate specification</h2>
-        {!fabricReady ? (
+        {!codegenReady ? (
           <p>
-            Phase 2 codegen is Fabric-only. This {project.manifest.platform} project cannot emit Gradle files. The
-            adapter will not pretend otherwise.
+            Phase 3 codegen is Fabric (1.21 / 1.21.1 / 1.21.2 / 1.21.4 / 1.21.8) and Paper (1.21 / 1.21.1 / 1.21.4 /
+            1.21.8). This {project.manifest.platform} {project.manifest.minecraftVersion} project cannot emit Gradle
+            files. The adapter will not pretend otherwise.
+            {project.manifest.platform === 'spigot'
+              ? ' Spigot is not inferred from Paper success.'
+              : ''}
           </p>
         ) : (
           <>
+            {paperLimits ? (
+              <p className="text-sm">
+                Paper plugins cannot register new client item types. Generated items are vanilla paper with a name and
+                persistent data. Resource-pack export is not implemented.
+              </p>
+            ) : null}
             <Field
-              label="What should this mod add?"
+              label="What should this project add?"
               htmlFor="feature-prompt"
-              hint="Simple items use trusted templates. Ollama is only asked when you choose it or the request looks too complex for templates."
+              hint="Simple items use trusted templates. Ollama is only asked when you choose it or the request looks too complex."
             >
               <TextArea
                 id="feature-prompt"
@@ -166,9 +205,7 @@ export function DesignGenerate({
                 </div>
               </Field>
             </div>
-            {models.length > 0 ? (
-              <p className="text-sm text-muted">Installed: {models.join(', ')}</p>
-            ) : null}
+            {models.length > 0 ? <p className="text-sm text-muted">Installed: {models.join(', ')}</p> : null}
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={busy}
@@ -211,6 +248,14 @@ export function DesignGenerate({
         )}
       </Card>
 
+      {workingSpec ? (
+        <ItemEditor
+          spec={workingSpec}
+          paperLimits={paperLimits}
+          onChange={applyWorking}
+        />
+      ) : null}
+
       {generation ? (
         <Card className="space-y-3">
           <h2 className="text-lg font-semibold">Validated specification</h2>
@@ -246,7 +291,7 @@ export function DesignGenerate({
         </Card>
       ) : null}
 
-      {(generation || spec) && fabricReady ? (
+      {workingSpec && codegenReady ? (
         <Card className="space-y-3">
           <h2 className="text-lg font-semibold">Apply to project</h2>
           <p className="text-sm text-muted">
@@ -257,13 +302,9 @@ export function DesignGenerate({
               variant="secondary"
               disabled={busy}
               onClick={() => {
-                const next = generation?.spec ?? spec
-                if (!next) {
-                  return
-                }
                 setBusy(true)
                 void api
-                  .previewApply(project.manifest.id, next)
+                  .previewApply(project.manifest.id, workingSpec)
                   .then((result) => setPreview({ ...result, applied: false }))
                   .catch((err) => setError(asAppError(err)))
                   .finally(() => setBusy(false))
@@ -272,15 +313,11 @@ export function DesignGenerate({
               Review file changes
             </Button>
             <Button
-              disabled={busy || !(generation?.spec ?? spec)}
+              disabled={busy}
               onClick={() => {
-                const next = generation?.spec ?? spec
-                if (!next) {
-                  return
-                }
                 setBusy(true)
                 void api
-                  .applySpec(project.manifest.id, next, true)
+                  .applySpec(project.manifest.id, workingSpec, true)
                   .then(setPreview)
                   .catch((err) => setError(asAppError(err)))
                   .finally(() => setBusy(false))
@@ -325,11 +362,10 @@ export function DesignGenerate({
           <h2 className="text-lg font-semibold">Adapter capabilities</h2>
           <p className="mt-2 text-sm text-muted">
             Gradle emission: {adapter.capabilities.gradleProject}. Client entities: {adapter.capabilities.clientEntities}.
+            Custom items: {adapter.capabilities.customItems}.
           </p>
         </Card>
       ) : null}
     </div>
   )
 }
-
-const SPEC_HINT = 'craftstudio.spec.json'

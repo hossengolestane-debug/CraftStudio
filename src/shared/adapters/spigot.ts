@@ -26,7 +26,7 @@ export const SpigotAdapter: PlatformAdapter = {
     {
       id: 'spigot-gradle-stub',
       displayName: 'Spigot plugin Gradle project',
-      description: 'Real Gradle emission is not implemented in Phase 1.',
+      description: 'Spigot codegen is not implemented. Paper success is not Spigot compatibility.',
       status: 'stub'
     }
   ],

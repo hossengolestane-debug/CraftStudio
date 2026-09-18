@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AppError } from '../../shared/errors'
 import { isBuildScriptPath, isTrustedOutputPath } from '../codegen/allowlist'
-import type { PlannedFile } from '../codegen/fabric/emitter'
+import type { PlannedFile } from '../codegen/types'
 import { resolveProjectFile, resolveProjectsRoot } from './pathSafety'
 
 export interface FileChange {

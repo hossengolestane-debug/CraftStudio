@@ -55,8 +55,10 @@ const api: CraftStudioAPI = {
   listProjectFiles: (projectId: string) => invoke(IPC_CHANNELS.FILES_TREE, projectId),
   readProjectFile: (projectId: string, relativePath: string) => invoke(IPC_CHANNELS.FILES_READ, projectId, relativePath),
   checkJava: (projectId: string) => invoke(IPC_CHANNELS.JAVA_CHECK, projectId),
-  runBuild: (projectId: string) => invoke(IPC_CHANNELS.BUILD_RUN, projectId),
+  runBuild: (projectId: string, task?: 'build' | 'runClient') => invoke(IPC_CHANNELS.BUILD_RUN, projectId, task ?? 'build'),
   cancelBuild: () => invoke(IPC_CHANNELS.BUILD_CANCEL),
+  exportSourceZip: (projectId: string) => invoke(IPC_CHANNELS.EXPORT_SOURCE, projectId),
+  exportBuiltJar: (projectId: string) => invoke(IPC_CHANNELS.EXPORT_JAR, projectId),
   onGenerationProgress: (handler: (event: GenerationProgress) => void) => {
     const listener = (_event: unknown, payload: GenerationProgress): void => handler(payload)
     ipcRenderer.on(IPC_EVENTS.GENERATION_PROGRESS, listener)

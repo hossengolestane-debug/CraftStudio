@@ -34,7 +34,7 @@ export function CodeTreeView({ project }: { project: ProjectRecord }) {
         <div>
           <h1 className="text-2xl font-semibold">Code</h1>
           <p className="mt-1 text-muted">
-            Read-only tree of generated files. Monaco is optional and not required in Phase 2.
+            Read-only tree of generated files. Monaco is optional and not required in Phase 3.
           </p>
         </div>
         <Button variant="secondary" onClick={reload}>

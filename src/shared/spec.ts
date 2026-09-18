@@ -93,7 +93,7 @@ export const projectSpecSchema = z.object({
   recipes: z.array(recipeSchema).max(8).default([]),
   commands: z.array(commandSchema).max(4).default([]),
   unsupportedRequests: z.array(unsupportedSchema).max(16).default([]),
-  source: z.enum(['template', 'ollama', 'merged']),
+  source: z.enum(['template', 'ollama', 'merged', 'editor']),
   prompt: z.string().max(4000).default('')
 })
 

@@ -99,7 +99,12 @@ function validateSettings(value: unknown, fallbackProjectsPath: string): AppSett
     ollamaNumPredict: clamp(value.ollamaNumPredict, DEFAULT_OLLAMA_NUM_PREDICT, 128, 8192),
     ollamaNumCtx: clamp(value.ollamaNumCtx, DEFAULT_OLLAMA_NUM_CTX, 512, 32768),
     maxRepairAttempts: clamp(value.maxRepairAttempts, DEFAULT_MAX_REPAIR_ATTEMPTS, 0, 3),
-    lastOpenedProjectId
+    lastOpenedProjectId,
+    minecraftEulaAccepted: value.minecraftEulaAccepted === true,
+    runtimeTermsAcceptedAt:
+      typeof value.runtimeTermsAcceptedAt === 'string' && value.runtimeTermsAcceptedAt.length > 0
+        ? value.runtimeTermsAcceptedAt
+        : null
   }
 }
 

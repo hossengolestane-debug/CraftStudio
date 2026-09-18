@@ -4,7 +4,7 @@ export const FabricAdapter: PlatformAdapter = {
   id: 'fabric',
   displayName: 'Fabric',
   kind: 'mod',
-  supportedVersions: ['1.18.2', '1.19.4', '1.20.1', '1.20.4', '1.20.6', '1.21', '1.21.1', '1.21.4', '1.21.8'],
+  supportedVersions: ['1.18.2', '1.19.4', '1.20.1', '1.20.4', '1.20.6', '1.21', '1.21.1', '1.21.2', '1.21.4', '1.21.8'],
   capabilities: {
     customItems: 'supported',
     customBlocks: 'supported',
@@ -26,7 +26,8 @@ export const FabricAdapter: PlatformAdapter = {
     {
       id: 'fabric-item-gradle',
       displayName: 'Fabric Gradle + custom item',
-      description: 'Trusted Loom/Yarn templates for Minecraft 1.21 and 1.21.1. Emits a real Gradle tree from a validated spec.',
+      description:
+        'Trusted Loom/Yarn templates for Minecraft 1.21, 1.21.1, 1.21.2, 1.21.4, and 1.21.8. Classic Registry.register on 1.21/1.21.1; Items.register + RegistryKey from 1.21.2.',
       status: 'available'
     }
   ],
@@ -46,14 +47,15 @@ export const FabricAdapter: PlatformAdapter = {
     {
       id: 'fabric-gradle-build',
       displayName: 'Gradle build',
-      description: 'Phase 2 runs `./gradlew build` for Fabric 1.21/1.21.1 only. runClient is still Phase 3.',
+      description: 'Runs `./gradlew build` for supported Fabric 1.21.x pins. Compile success is not a Tested row.',
       status: 'available'
     },
     {
       id: 'fabric-client-run',
       displayName: 'Run client via Gradle',
-      description: 'Not implemented. Phase 3+ will invoke the Fabric runClient task.',
-      status: 'stub'
+      description:
+        'Optional `./gradlew runClient` after explicit Minecraft EULA acceptance. Downloads game files through official Gradle/Minecraft channels; never silently accepted. Not marked Tested without a verified client run.',
+      status: 'available'
     }
   ]
 }

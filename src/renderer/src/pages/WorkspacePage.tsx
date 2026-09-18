@@ -1,7 +1,8 @@
-import type { AppSettings, PlatformAdapterInfo, ProjectRecord } from '../../../shared/types'
+import type { AppSettings, PlatformAdapterInfo, ProjectRecord, SettingsPatch } from '../../../shared/types'
 import type { WorkspaceTab } from '../components/AppShell'
 import { CodeTreeView } from './workspace/CodeTreeView'
 import { DesignGenerate } from './workspace/DesignGenerate'
+import { ExportView } from './workspace/ExportView'
 import { TestBuildView } from './workspace/TestBuildView'
 
 export function WorkspacePage({
@@ -9,13 +10,15 @@ export function WorkspacePage({
   tab,
   adapters,
   settings,
-  onSave
+  onSave,
+  onSettingsPatch
 }: {
   project: ProjectRecord
   tab: WorkspaceTab
   adapters: PlatformAdapterInfo[]
   settings: AppSettings | null
   onSave: (id: string, input: { name?: string; description?: string }) => Promise<void>
+  onSettingsPatch?: (patch: SettingsPatch) => Promise<void>
 }) {
   const adapter = adapters.find((item) => item.id === project.manifest.platform)
 
@@ -24,7 +27,22 @@ export function WorkspacePage({
   }
 
   if (tab === 'test') {
-    return <TestBuildView project={project} adapter={adapter} />
+    return (
+      <TestBuildView
+        project={project}
+        adapter={adapter}
+        settings={settings}
+        onAcceptTerms={
+          onSettingsPatch
+            ? () => onSettingsPatch({ minecraftEulaAccepted: true, runtimeTermsAcceptedAt: new Date().toISOString() })
+            : undefined
+        }
+      />
+    )
+  }
+
+  if (tab === 'export') {
+    return <ExportView project={project} />
   }
 
   return (

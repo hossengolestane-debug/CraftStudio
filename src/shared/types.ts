@@ -8,7 +8,7 @@ export const COMPATIBILITY_STATUSES = ['tested', 'experimental', 'unsupported'] 
 export type CompatibilityStatus = (typeof COMPATIBILITY_STATUSES)[number]
 
 export const MANIFEST_SCHEMA_VERSION = 1
-export const SETTINGS_SCHEMA_VERSION = 2
+export const SETTINGS_SCHEMA_VERSION = 3
 export const MANIFEST_FILENAME = 'craftstudio.project.json'
 export const SPEC_FILENAME = 'craftstudio.spec.json'
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434'
@@ -82,6 +82,8 @@ export interface AppSettings {
   ollamaNumCtx: number
   maxRepairAttempts: number
   lastOpenedProjectId: string | null
+  minecraftEulaAccepted: boolean
+  runtimeTermsAcceptedAt: string | null
 }
 
 export interface SettingsPatch {
@@ -94,6 +96,8 @@ export interface SettingsPatch {
   ollamaNumCtx?: number
   maxRepairAttempts?: number
   lastOpenedProjectId?: string | null
+  minecraftEulaAccepted?: boolean
+  runtimeTermsAcceptedAt?: string | null
 }
 
 export interface OllamaModel {

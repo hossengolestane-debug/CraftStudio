@@ -1,44 +1,12 @@
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { AppError } from '../../../shared/errors'
+import { fabricPinsFor, type FabricItemRegistration } from '../../../shared/platformPins'
 import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
-import { fabricPinsFor } from './versions'
+import type { PlannedFile } from '../types'
+import { gradleWrapperFiles, javaEscape } from '../wrapper'
 
-export interface PlannedFile {
-  relativePath: string
-  contents: string | Buffer
-  encoding: 'utf8' | 'binary'
-}
-
-function wrapperAsset(name: string): Buffer {
-  const here = typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url))
-  const candidates = [
-    join(here, 'wrapper', name),
-    join(here, '../../../src/main/codegen/fabric/wrapper', name),
-    join(process.cwd(), 'src/main/codegen/fabric/wrapper', name)
-  ]
-  for (const candidate of candidates) {
-    try {
-      return readFileSync(candidate)
-    } catch {
-      // try next
-    }
-  }
-  throw new AppError({
-    code: 'IO',
-    message: `Missing vendored Gradle wrapper file "${name}".`,
-    action: 'Reinstall the app sources so src/main/codegen/fabric/wrapper is present.'
-  })
-}
-
-function javaEscape(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-}
-
-function itemJava(spec: ProjectSpec): string {
+function itemJavaClassic(spec: ProjectSpec): string {
   return spec.items
     .map((item) => {
       const constant = toConstName(item.id)
@@ -51,28 +19,116 @@ function itemJava(spec: ProjectSpec): string {
     .join('\n\n')
 }
 
+function itemKeys(spec: ProjectSpec): string {
+  return spec.items
+    .map((item) => {
+      const constant = toConstName(item.id)
+      return `  public static final RegistryKey<Item> ${constant}_KEY = RegistryKey.of(
+    RegistryKeys.ITEM,
+    Identifier.of(MOD_ID, "${item.id}")
+  );`
+    })
+    .join('\n\n')
+}
+
+function itemJavaRegistryKey(spec: ProjectSpec): string {
+  return spec.items
+    .map((item) => {
+      const constant = toConstName(item.id)
+      return `  public static final Item ${constant} = Items.register(
+    ${constant}_KEY,
+    Item::new,
+    new Item.Settings().maxCount(${item.maxCount})
+  );`
+    })
+    .join('\n\n')
+}
+
 function itemAdds(spec: ProjectSpec): string {
   return spec.items.map((item) => `      entries.add(${toConstName(item.id)});`).join('\n')
 }
 
-function commandComments(spec: ProjectSpec): string {
+function commandBlocks(spec: ProjectSpec): string {
   if (spec.commands.length === 0) {
     return ''
   }
   return spec.commands
     .map(
       (command) =>
-        `    // Command /${command.name} is recorded in the spec only. Fabric command registration is not generated in Phase 2.`
+        `    dispatcher.register(CommandManager.literal("${javaEscape(command.name)}").executes(context -> {
+      context.getSource().sendFeedback(() -> Text.literal("CraftStudio command /${javaEscape(command.name)}"), false);
+      return 1;
+    }));`
     )
     .join('\n')
+}
+
+function fabricImports(style: FabricItemRegistration, hasCommands: boolean): string {
+  const lines = [
+    'import net.fabricmc.api.ModInitializer;',
+    'import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;',
+    'import net.minecraft.item.Item;',
+    'import net.minecraft.item.ItemGroups;'
+  ]
+  if (style === 'registry_key') {
+    lines.push('import net.minecraft.item.Items;')
+    lines.push('import net.minecraft.registry.RegistryKey;')
+    lines.push('import net.minecraft.registry.RegistryKeys;')
+  } else {
+    lines.push('import net.minecraft.registry.Registries;')
+    lines.push('import net.minecraft.registry.Registry;')
+  }
+  lines.push('import net.minecraft.util.Identifier;')
+  if (hasCommands) {
+    lines.push('import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;')
+    lines.push('import net.minecraft.server.command.CommandManager;')
+    lines.push('import net.minecraft.text.Text;')
+  }
+  lines.push('import org.slf4j.Logger;')
+  lines.push('import org.slf4j.LoggerFactory;')
+  return lines.join('\n')
+}
+
+function mainJava(spec: ProjectSpec, style: FabricItemRegistration): string {
+  const items =
+    style === 'registry_key'
+      ? `${itemKeys(spec)}\n\n${itemJavaRegistryKey(spec)}`
+      : itemJavaClassic(spec)
+  const commands = spec.commands.length
+    ? `
+    CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+${commandBlocks(spec)}
+    });`
+    : ''
+
+  return `package ${spec.packageName};
+
+${fabricImports(style, spec.commands.length > 0)}
+
+public class ${spec.mainClass} implements ModInitializer {
+  public static final String MOD_ID = "${javaEscape(spec.modId)}";
+  public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+
+${items}
+
+  @Override
+  public void onInitialize() {
+    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 3");
+    ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
+${itemAdds(spec)}
+    });
+${commands}
+  }
+}
+`
 }
 
 export function planFabricFiles(manifest: ProjectManifest, spec: ProjectSpec): PlannedFile[] {
   if (manifest.platform !== 'fabric' || manifest.type !== 'mod') {
     throw new AppError({
       code: 'ADAPTER_UNSUPPORTED',
-      message: 'Phase 2 only generates Gradle projects for Fabric mods.',
-      action: 'Create a Fabric 1.21 or 1.21.1 project, or wait for another adapter.'
+      message: 'This emitter only generates Gradle projects for Fabric mods.',
+      action: 'Create a Fabric project on a supported 1.21.x version.'
     })
   }
 
@@ -87,12 +143,12 @@ export function planFabricFiles(manifest: ProjectManifest, spec: ProjectSpec): P
       'org.gradle.jvmargs=-Xmx1G',
       'org.gradle.parallel=true',
       '',
-      '# Versions from https://fabricmc.net/develop — CraftStudio Phase 2 pins (not model-chosen).',
+      '# Versions from https://fabricmc.net/develop — CraftStudio pins (not model-chosen).',
       `minecraft_version=${pins.minecraft}`,
       `yarn_mappings=${pins.yarn}`,
       `loader_version=${pins.loader}`,
       '',
-      `mod_version=1.0.0`,
+      'mod_version=1.0.0',
       `maven_group=${spec.packageName}`,
       `archives_base_name=${spec.modId}`,
       '',
@@ -166,36 +222,7 @@ jar {
 `
   })
 
-  files.push({
-    relativePath: 'gradle/wrapper/gradle-wrapper.properties',
-    encoding: 'utf8',
-    contents: [
-      'distributionBase=GRADLE_USER_HOME',
-      'distributionPath=wrapper/dists',
-      `distributionUrl=https\\://services.gradle.org/distributions/gradle-${pins.gradle}-bin.zip`,
-      'networkTimeout=10000',
-      'validateDistributionUrl=true',
-      'zipStoreBase=GRADLE_USER_HOME',
-      'zipStorePath=wrapper/dists',
-      ''
-    ].join('\n')
-  })
-
-  files.push({
-    relativePath: 'gradle/wrapper/gradle-wrapper.jar',
-    encoding: 'binary',
-    contents: wrapperAsset('gradle-wrapper.jar')
-  })
-  files.push({
-    relativePath: 'gradlew',
-    encoding: 'utf8',
-    contents: wrapperAsset('gradlew').toString('utf8')
-  })
-  files.push({
-    relativePath: 'gradlew.bat',
-    encoding: 'utf8',
-    contents: wrapperAsset('gradlew.bat').toString('utf8')
-  })
+  files.push(...gradleWrapperFiles(pins.gradle))
 
   files.push({
     relativePath: '.gitignore',
@@ -285,34 +312,27 @@ jar {
   files.push({
     relativePath: `src/main/java/${packagePath}/${spec.mainClass}.java`,
     encoding: 'utf8',
-    contents: `package ${spec.packageName};
+    contents: mainJava(spec, pins.itemRegistration)
+  })
 
-import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemGroups;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
-import net.minecraft.util.Identifier;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-public class ${spec.mainClass} implements ModInitializer {
-  public static final String MOD_ID = "${javaEscape(spec.modId)}";
-  public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-
-${itemJava(spec)}
-
-  @Override
-  public void onInitialize() {
-    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 2");
-    ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
-${itemAdds(spec)}
-    });
-${commandComments(spec)}
-  }
-}
-`
+  files.push({
+    relativePath: 'INSTALL.md',
+    encoding: 'utf8',
+    contents: [
+      `# Install ${spec.displayName}`,
+      '',
+      `Fabric ${pins.minecraft} · Java ${pins.java} · item API: ${pins.itemRegistration}`,
+      '',
+      '1. Install the Minecraft launcher and this exact game version.',
+      '2. Install [Fabric Loader](https://fabricmc.net/use/) for that version, plus Fabric API.',
+      '3. Build with `./gradlew build`, then copy `build/libs/' +
+        spec.modId +
+        '-1.0.0.jar` (not `-sources`) into `.minecraft/mods`.',
+      '4. Accept the Minecraft EULA yourself. CraftStudio never distributes game files or bypasses auth.',
+      '',
+      '`./gradlew runClient` is optional developer wiring. A successful compile is **not** a Tested compatibility row.',
+      ''
+    ].join('\n')
   })
 
   files.push({
@@ -323,7 +343,7 @@ ${commandComments(spec)}
       '',
       spec.description || '_No description._',
       '',
-      `Generated by CraftStudio Local Phase 2 for **Fabric ${pins.minecraft}** from a validated spec.`,
+      `Generated by CraftStudio Local Phase 3 for **Fabric ${pins.minecraft}** (${pins.itemRegistration} item registration).`,
       'Build files come from trusted templates. The model never writes Gradle or Java directly.',
       '',
       '## Build',
@@ -334,7 +354,8 @@ ${commandComments(spec)}
       './gradlew build',
       '```',
       '',
-      'Minecraft client launch (`runClient`) is not automated in Phase 2.',
+      'Optional (after you accept Minecraft terms in the app): `./gradlew runClient`.',
+      'See INSTALL.md. Compatibility stays Experimental until a real client run is verified.',
       ''
     ].join('\n')
   })

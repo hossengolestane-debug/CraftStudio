@@ -1,7 +1,7 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { listAdapters } from '../shared/adapters/registry'
 import { listCompatibility, lookupCompatibility } from '../shared/compatibility'
-import { toAppError } from '../shared/errors'
+import { AppError, toAppError } from '../shared/errors'
 import {
   IPC_CHANNELS,
   IPC_EVENTS,
@@ -12,7 +12,8 @@ import {
 import type { ProjectSpec } from '../shared/spec'
 import type { CreateProjectInput, SettingsPatch, UpdateProjectInput } from '../shared/types'
 import { DEFAULT_OLLAMA_ENDPOINT } from '../shared/types'
-import { fabricPinsFor } from './codegen/fabric/versions'
+import { isCodegenSupported, requiredJava } from '../shared/platformPins'
+import { exportBuiltJar, exportSourceZip } from './services/exportService'
 import { GenerationService } from './services/generationService'
 import { GradleService } from './services/gradleService'
 import { checkJava } from './services/javaService'
@@ -141,9 +142,7 @@ export function registerIpc(deps: {
       const record = await deps.projects.get(projectId)
       let required = 21
       try {
-        if (record.manifest.platform === 'fabric') {
-          required = fabricPinsFor(record.manifest.minecraftVersion).java
-        }
+        required = requiredJava(record.manifest.platform, record.manifest.minecraftVersion)
       } catch {
         required = 21
       }
@@ -151,20 +150,84 @@ export function registerIpc(deps: {
     })
   )
 
-  ipcMain.handle(IPC_CHANNELS.BUILD_RUN, (event, projectId: string) =>
+  ipcMain.handle(IPC_CHANNELS.BUILD_RUN, (event, projectId: string, task: 'build' | 'runClient' = 'build') =>
     wrap(async () => {
       const record = await deps.projects.get(projectId)
-      if (record.manifest.platform !== 'fabric') {
-        throw toAppError(new Error('Build is only implemented for Fabric in Phase 2'), {
+      if (!isCodegenSupported(record.manifest.platform, record.manifest.minecraftVersion)) {
+        throw new AppError({
           code: 'ADAPTER_UNSUPPORTED',
-          message: 'Build/Test is only real for Fabric in Phase 2.',
-          action: 'Use a Fabric project, or wait for another adapter.'
+          message: `Build/Test is not implemented for ${record.manifest.platform} ${record.manifest.minecraftVersion}.`,
+          action: 'Use a supported Fabric or Paper 1.21.x project. This button will not fake success.'
         })
       }
-      fabricPinsFor(record.manifest.minecraftVersion)
-      return deps.gradle.build(record.directoryPath, {
+      if (task === 'runClient') {
+        if (record.manifest.platform !== 'fabric') {
+          throw new AppError({
+            code: 'ADAPTER_UNSUPPORTED',
+            message: 'runClient is a Fabric Loom task only.',
+            action: 'Paper projects get test-server prep notes, not a launched server.'
+          })
+        }
+        const settings = await deps.settings.get()
+        if (!settings.minecraftEulaAccepted) {
+          throw new AppError({
+            code: 'TERMS_REQUIRED',
+            message: 'Minecraft EULA / runtime terms were not accepted.',
+            action: 'Read the Minecraft EULA, then accept it explicitly in Settings or on the Test tab. CraftStudio never silent-accepts.'
+          })
+        }
+      }
+      return deps.gradle.run(record.directoryPath, task, {
         onLog: (chunk) => event.sender.send(IPC_EVENTS.BUILD_LOG, chunk)
       })
+    })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.EXPORT_SOURCE, (event, projectId: string) =>
+    wrap(async () => {
+      const record = await deps.projects.get(projectId)
+      const settings = await deps.settings.get()
+      const window = senderWindow(event)
+      const dialogOpts = {
+        title: 'Export source ZIP',
+        defaultPath: `${record.manifest.name.replace(/[^a-zA-Z0-9_-]+/g, '-')}-source.zip`,
+        filters: [{ name: 'ZIP', extensions: ['zip'] }]
+      }
+      const result = window
+        ? await dialog.showSaveDialog(window, dialogOpts)
+        : await dialog.showSaveDialog(dialogOpts)
+      if (result.canceled || !result.filePath) {
+        throw new AppError({
+          code: 'EXPORT_FAILED',
+          message: 'Source export was cancelled.',
+          action: 'Choose a .zip destination to export the project sources.'
+        })
+      }
+      return exportSourceZip(settings.projectsPath, record.directoryName, result.filePath)
+    })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.EXPORT_JAR, (event, projectId: string) =>
+    wrap(async () => {
+      const record = await deps.projects.get(projectId)
+      const settings = await deps.settings.get()
+      const window = senderWindow(event)
+      const dialogOpts = {
+        title: 'Export built JAR',
+        defaultPath: `${record.manifest.name.replace(/[^a-zA-Z0-9_-]+/g, '-')}.jar`,
+        filters: [{ name: 'JAR', extensions: ['jar'] }]
+      }
+      const result = window
+        ? await dialog.showSaveDialog(window, dialogOpts)
+        : await dialog.showSaveDialog(dialogOpts)
+      if (result.canceled || !result.filePath) {
+        throw new AppError({
+          code: 'EXPORT_FAILED',
+          message: 'JAR export was cancelled.',
+          action: 'Build the project first, then choose a .jar destination.'
+        })
+      }
+      return exportBuiltJar(settings.projectsPath, record.directoryName, record.manifest.platform, result.filePath)
     })
   )
   ipcMain.handle(IPC_CHANNELS.BUILD_CANCEL, () =>

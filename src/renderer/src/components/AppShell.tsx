@@ -2,7 +2,7 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import type { ProjectRecord } from '../../../shared/types'
 
 export type PrimaryView = 'projects' | 'create' | 'assets' | 'settings'
-export type WorkspaceTab = 'design' | 'code' | 'test'
+export type WorkspaceTab = 'design' | 'code' | 'test' | 'export'
 
 const PRIMARY_ITEMS: { id: PrimaryView; label: string; shortcut: string }[] = [
   { id: 'projects', label: 'Projects', shortcut: '1' },
@@ -47,7 +47,7 @@ export function AppShell({
       <aside className="flex w-56 shrink-0 flex-col bg-sidebar text-sidebar-text">
         <div className="border-b border-white/15 px-4 py-5">
           <p className="text-lg font-semibold tracking-tight">CraftStudio Local</p>
-          <p className="mt-1 text-sm text-sidebar-muted">Phase 2 · Fabric slice</p>
+          <p className="mt-1 text-sm text-sidebar-muted">Phase 3 · Fabric + Paper</p>
         </div>
         <nav aria-label="Primary" className="flex flex-col gap-1 p-3" onKeyDown={onSidebarKeyDown}>
           {PRIMARY_ITEMS.map((item) => {
@@ -88,7 +88,8 @@ export function AppShell({
                 [
                   ['design', 'Design'],
                   ['code', 'Code'],
-                  ['test', 'Test']
+                  ['test', 'Test'],
+                  ['export', 'Export']
                 ] as const
               ).map(([id, label]) => {
                 const current = workspaceTab === id

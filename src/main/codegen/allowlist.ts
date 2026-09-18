@@ -1,6 +1,7 @@
 export const TRUSTED_OUTPUT_PATHS = new Set([
   'craftstudio.spec.json',
   'README.md',
+  'INSTALL.md',
   '.gitignore',
   'build.gradle',
   'settings.gradle',
@@ -8,7 +9,9 @@ export const TRUSTED_OUTPUT_PATHS = new Set([
   'gradlew',
   'gradlew.bat',
   'gradle/wrapper/gradle-wrapper.properties',
-  'gradle/wrapper/gradle-wrapper.jar'
+  'gradle/wrapper/gradle-wrapper.jar',
+  'run-paper/README.md',
+  'run-paper/eula.txt'
 ])
 
 export const BUILD_SCRIPT_PATHS = new Set([

@@ -53,4 +53,34 @@ describe('generation pipeline', () => {
     const listed = await projects.list()
     expect(listed[0]?.id).toBe(created.manifest.id)
   })
+
+  it('creates a Paper project and writes plugin.yml from the same spec style', async () => {
+    const userData = await mkdtemp(path.join(os.tmpdir(), 'cs-paper-settings-'))
+    const projectsRoot = await mkdtemp(path.join(os.tmpdir(), 'cs-paper-projects-'))
+    temps.push(userData, projectsRoot)
+    const settings = new SettingsService({ userDataPath: userData })
+    await settings.update({ projectsPath: projectsRoot })
+    const projects = new ProjectService(settings, () => new Date('2026-09-18T15:00:00.000Z'))
+    const generation = new GenerationService(projects, settings, new OllamaService())
+
+    const created = await projects.create({
+      name: 'Harbor Tokens',
+      description: 'Add an item called harbor token',
+      type: 'plugin',
+      platform: 'paper',
+      minecraftVersion: '1.21.1'
+    })
+
+    const result = await generation.generateSpec(created.manifest.id, created.manifest.description, 'template')
+    const applied = await generation.applySpec(created.manifest.id, result.spec, true)
+    expect(applied.applied).toBe(true)
+    const yml = await readFile(path.join(created.directoryPath, 'src/main/resources/plugin.yml'), 'utf8')
+    expect(yml).toContain('main: local.craftstudio.harbor_tokens.HarborTokens')
+    const java = await readFile(
+      path.join(created.directoryPath, 'src/main/java/local/craftstudio/harbor_tokens/HarborTokens.java'),
+      'utf8'
+    )
+    expect(java).toContain('extends JavaPlugin')
+    expect(java).toContain('Material.PAPER')
+  })
 })

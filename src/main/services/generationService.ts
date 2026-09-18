@@ -9,10 +9,9 @@ import {
   type ProjectSpec
 } from '../../shared/spec'
 import { inferSpecFromPrompt, promptLooksComplex } from '../../shared/templateInfer'
-import type { AppSettings, PlatformId, ProjectRecord } from '../../shared/types'
+import type { AppSettings, ProjectRecord } from '../../shared/types'
 import { isBuildScriptPath } from '../codegen/allowlist'
-import { planFabricFiles } from '../codegen/fabric/emitter'
-import { fabricPinsFor } from '../codegen/fabric/versions'
+import { assertCanGenerate, planAdapterFiles } from '../codegen/plan'
 import { diffPlannedFiles, writePlannedFiles, type FileChange } from './filePlan'
 import { OllamaService } from './ollamaService'
 import { resolveProjectFile } from './pathSafety'
@@ -92,8 +91,7 @@ export class GenerationService {
     } = {}
   ): Promise<GenerationResult> {
     const record = await this.projects.get(projectId)
-    this.assertCanGenerate(record.manifest.platform)
-    fabricPinsFor(record.manifest.minecraftVersion)
+    assertCanGenerate(record.manifest.platform, record.manifest.minecraftVersion)
 
     const settings = await this.settings.get()
     const text = prompt.trim() || record.manifest.description || record.manifest.name
@@ -122,9 +120,9 @@ export class GenerationService {
 
   async previewApply(projectId: string, specInput: unknown): Promise<ApplyPreview> {
     const record = await this.projects.get(projectId)
-    this.assertCanGenerate(record.manifest.platform)
+    assertCanGenerate(record.manifest.platform, record.manifest.minecraftVersion)
     const spec = parseProjectSpec(specInput)
-    const files = planFabricFiles(record.manifest, spec)
+    const files = planAdapterFiles(record.manifest, spec)
     const root = (await this.settings.get()).projectsPath
     const specFile = {
       relativePath: SPEC_FILENAME,
@@ -153,7 +151,7 @@ export class GenerationService {
     }
 
     const record = await this.projects.get(projectId)
-    const files = planFabricFiles(record.manifest, preview.spec)
+    const files = planAdapterFiles(record.manifest, preview.spec)
     const root = (await this.settings.get()).projectsPath
     const specFile = {
       relativePath: SPEC_FILENAME,
@@ -168,16 +166,6 @@ export class GenerationService {
       }
     })
     return { ...preview, applied: true }
-  }
-
-  private assertCanGenerate(platform: PlatformId): void {
-    if (platform !== 'fabric') {
-      throw new AppError({
-        code: 'ADAPTER_UNSUPPORTED',
-        message: `${platform} code generation is not implemented in Phase 2.`,
-        action: 'Use a Fabric 1.21 or 1.21.1 project for the vertical slice. Other adapters stay stubs.'
-      })
-    }
   }
 
   private async generateWithOllama(

@@ -2,7 +2,7 @@ import { AppError } from './errors'
 import type { CompatibilityEntry, CompatibilityStatus, PlatformId } from './types'
 
 export const REGISTRY_HONESTY_NOTE =
-  'Phase 1 did not compile, launch, or test any Minecraft loader/plugin build. Nothing is marked Tested. Statuses are documentary only.'
+  'Nothing is marked Tested. Gradle compile success is recorded separately from Minecraft client or Paper server runtime verification.'
 
 const NOTE = {
   experimental:
@@ -26,6 +26,7 @@ const ROWS: Row[] = [
   ['fabric', '1.20.6', 'experimental', NOTE.experimental],
   ['fabric', '1.21', 'experimental', NOTE.experimental],
   ['fabric', '1.21.1', 'experimental', NOTE.experimental],
+  ['fabric', '1.21.2', 'experimental', NOTE.experimental],
   ['fabric', '1.21.4', 'experimental', NOTE.experimental],
   ['fabric', '1.21.8', 'experimental', NOTE.experimental],
 

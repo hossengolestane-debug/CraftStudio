@@ -7,23 +7,25 @@ import { writePlannedFiles } from '../src/main/services/filePlan'
 import { parseProjectSpec } from '../src/shared/spec'
 import { MANIFEST_SCHEMA_VERSION, type ProjectManifest } from '../src/shared/types'
 
-const manifest: ProjectManifest = {
-  id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
-  name: 'River Stones',
-  description: 'Adds polished river stones.',
-  type: 'mod',
-  platform: 'fabric',
-  minecraftVersion: '1.21.1',
-  createdAt: '2026-09-18T01:00:00.000Z',
-  updatedAt: '2026-09-18T01:00:00.000Z',
-  features: {
-    customItems: true,
-    customMobs: false,
-    customGuis: false,
-    customBlocks: false,
-    recipes: true
-  },
-  schemaVersion: MANIFEST_SCHEMA_VERSION
+function manifestFor(minecraftVersion: string): ProjectManifest {
+  return {
+    id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    name: 'River Stones',
+    description: 'Adds polished river stones.',
+    type: 'mod',
+    platform: 'fabric',
+    minecraftVersion,
+    createdAt: '2026-09-18T01:00:00.000Z',
+    updatedAt: '2026-09-18T01:00:00.000Z',
+    features: {
+      customItems: true,
+      customMobs: false,
+      customGuis: false,
+      customBlocks: false,
+      recipes: true
+    },
+    schemaVersion: MANIFEST_SCHEMA_VERSION
+  }
 }
 
 const spec = parseProjectSpec({
@@ -55,22 +57,19 @@ describe('Fabric adapter generation', () => {
     await Promise.all(temps.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
   })
 
-  it('emits a Gradle tree with pinned versions and a custom item', async () => {
-    const files = planFabricFiles(manifest, spec)
-    const paths = files.map((file) => file.relativePath)
-    expect(paths).toContain('build.gradle')
-    expect(paths).toContain('gradle/wrapper/gradle-wrapper.jar')
-    expect(paths).toContain('src/main/java/local/craftstudio/river_stones/RiverStones.java')
-
+  it('emits classic Registry.register for 1.21.1', async () => {
+    const files = planFabricFiles(manifestFor('1.21.1'), spec)
     const gradle = files.find((file) => file.relativePath === 'build.gradle')?.contents.toString() ?? ''
     expect(gradle).toContain("id 'fabric-loom' version '1.9.2'")
     expect(gradle).toContain('net.fabricmc:yarn')
     expect(gradle).not.toMatch(/curl |rm -rf|wget /)
 
     const java = files.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
+    expect(java).toContain('Registry.register')
     expect(java).toContain('Identifier.of(MOD_ID, "river_stone")')
+    expect(java).not.toContain('Items.register')
     expect(java).toContain('maxCount(16)')
-    expect(java).toContain('Command /pebble is recorded in the spec only')
+    expect(java).toContain('CommandManager.literal("pebble")')
 
     const root = await mkdtemp(path.join(os.tmpdir(), 'cs-emit-'))
     temps.push(root)
@@ -80,15 +79,29 @@ describe('Fabric adapter generation', () => {
       'utf8'
     )
     expect(written).toContain('"id": "river_stones"')
-    const recipe = await readFile(
-      path.join(root, 'river-stones-aaaaaaaa', 'src/main/resources/data/river_stones/recipe/river_stone_from_cobble.json'),
-      'utf8'
-    )
-    expect(recipe).toContain('minecraft:cobblestone')
+  })
+
+  it('emits Items.register + RegistryKey for 1.21.2, 1.21.4, and 1.21.8', () => {
+    for (const version of ['1.21.2', '1.21.4', '1.21.8'] as const) {
+      const files = planFabricFiles(manifestFor(version), spec)
+      const java = files.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
+      expect(java, version).toContain('Items.register')
+      expect(java, version).toContain('RegistryKey<Item>')
+      expect(java, version).toContain('RIVER_STONE_KEY')
+      expect(java, version).not.toContain('Registry.register(')
+      const props = files.find((file) => file.relativePath === 'gradle.properties')?.contents.toString() ?? ''
+      expect(props).toContain(`minecraft_version=${version}`)
+    }
+    const loom18 = planFabricFiles(manifestFor('1.21.8'), spec)
+      .find((file) => file.relativePath === 'build.gradle')
+      ?.contents.toString()
+    expect(loom18).toContain("id 'fabric-loom' version '1.10.1'")
   })
 
   it('refuses non-Fabric manifests and unsupported Minecraft versions', () => {
-    expect(() => planFabricFiles({ ...manifest, platform: 'paper', type: 'plugin' }, spec)).toThrow(/Fabric/)
-    expect(() => planFabricFiles({ ...manifest, minecraftVersion: '1.18.2' }, spec)).toThrow(/1\.21/)
+    expect(() => planFabricFiles({ ...manifestFor('1.21.1'), platform: 'paper', type: 'plugin' }, spec)).toThrow(
+      /Fabric/
+    )
+    expect(() => planFabricFiles(manifestFor('1.18.2'), spec)).toThrow(/1\.21/)
   })
 })

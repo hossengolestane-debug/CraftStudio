@@ -44,7 +44,10 @@ export function describeCapabilityGap(adapter: PlatformAdapter, feature: keyof P
   const level = adapter.capabilities[feature]
   if (level === 'supported') {
     if (adapter.id === 'fabric' && feature === 'gradleProject') {
-      return 'Fabric Phase 2 emits a real Gradle project from a validated spec for Minecraft 1.21 and 1.21.1.'
+      return 'Fabric Phase 3 emits a real Gradle project for 1.21, 1.21.1, 1.21.2, 1.21.4, and 1.21.8.'
+    }
+    if (adapter.id === 'paper' && feature === 'gradleProject') {
+      return 'Paper Phase 3 emits a real Gradle plugin for 1.21 / 1.21.1 / 1.21.4 / 1.21.8. Spigot is not inferred from that.'
     }
     return `${adapter.displayName} can implement ${feature} in a later generation phase.`
   }

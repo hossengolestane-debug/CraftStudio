@@ -201,6 +201,10 @@ export default function App() {
               setOpenProject(record)
               await refreshProjects()
             }}
+            onSettingsPatch={async (patch) => {
+              const next = await api.updateSettings(patch)
+              setSettings(next)
+            }}
           />
         </div>
       ) : null}

@@ -159,6 +159,39 @@ export function SettingsPage({
           </Button>
         </div>
 
+        <div className="border border-line p-4 space-y-2">
+          <h2 className="font-semibold">Minecraft / runtime terms</h2>
+          <p className="text-sm">
+            CraftStudio never silent-accepts the Minecraft EULA, never distributes game files, and never bypasses
+            authentication. Checking this only unlocks optional Fabric <code>runClient</code> wiring.
+          </p>
+          <p className="text-sm">
+            <a className="underline" href="https://www.minecraft.net/eula" target="_blank" rel="noreferrer">
+              Read the Minecraft EULA
+            </a>
+          </p>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={settings.minecraftEulaAccepted}
+              onChange={(event) => {
+                void onSave({
+                  minecraftEulaAccepted: event.target.checked,
+                  runtimeTermsAcceptedAt: event.target.checked ? new Date().toISOString() : null
+                }).catch((err) => setError(asAppError(err)))
+              }}
+            />
+            <span>
+              I have read the Minecraft EULA and accept it for optional developer launches on this machine. I understand
+              compile success is not a Tested compatibility row.
+            </span>
+          </label>
+          <p className="text-sm text-muted">
+            Accepted at: {settings.runtimeTermsAcceptedAt ?? 'never'}
+          </p>
+        </div>
+
         {status ? (
           <div className="border border-line p-4">
             <div className="flex items-center gap-2">
