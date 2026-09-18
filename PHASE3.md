@@ -33,6 +33,7 @@ Manual / agent:
 - Live Paper 1.21.1 apply at `/tmp/cs-phase3-projects/harbor-tokens-4dccf5f2` then **`./gradlew build` → BUILD SUCCESSFUL** in 12s (`compileJava` + `jar` → `harbor_tokens-1.0.0.jar`)
 - Live Fabric 1.21.4 apply at `/tmp/cs-phase3-projects/glow-shard-05b59845` (`Items.register` + `RegistryKey`) then **`./gradlew build` → BUILD SUCCESSFUL** in 45s (`compileJava` + `remapJar`)
 - Compile success still does **not** flip Tested — no Minecraft client or Paper server was launched in this environment
+- Live Electron UI: created **Harbor Tokens** (Paper 1.21.1), template generate listed `harbor_token`, item editor set stack size to 16 (`source: editor`), Apply wrote `plugin.yml` + `HarborTokens.java`. Folder: `~/.config/craftstudio-local/CraftStudioProjects/harbor-tokens-ab439be3/`
 
 ## Known limitations
 
