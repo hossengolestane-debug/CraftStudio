@@ -30,6 +30,7 @@ Manual / agent (this environment):
 - Template generate + apply against a temp / live Fabric 1.21.1 project (see verification notes in the PR)
 - `java -version` is 21.0.10 here
 - Generated `/tmp/cs-live-projects/live-pebble-f95e34e0` (template spec → apply) then **`./gradlew build` succeeded** (Loom 1.9.2, 54s, `BUILD SUCCESSFUL`, `compileJava` + `remapJar`). Network was available to fetch Gradle 8.11.1 and Minecraft/Yarn artifacts.
+- Live Electron UI: created **Copper Charm** (Fabric 1.21.1), template-only generate produced a validated `copper_charm` item, Apply wrote the Gradle tree, Code showed `build.gradle` + `CopperCharm.java`, Test reported Java 21 Ready. On-disk folder: `~/.config/craftstudio-local/CraftStudioProjects/copper-charm-8a0569ed/`.
 
 ## Known limitations
 

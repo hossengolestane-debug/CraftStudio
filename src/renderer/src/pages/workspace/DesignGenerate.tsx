@@ -272,14 +272,15 @@ export function DesignGenerate({
               Review file changes
             </Button>
             <Button
-              disabled={busy || !generation?.spec}
+              disabled={busy || !(generation?.spec ?? spec)}
               onClick={() => {
-                if (!generation) {
+                const next = generation?.spec ?? spec
+                if (!next) {
                   return
                 }
                 setBusy(true)
                 void api
-                  .applySpec(project.manifest.id, generation.spec, true)
+                  .applySpec(project.manifest.id, next, true)
                   .then(setPreview)
                   .catch((err) => setError(asAppError(err)))
                   .finally(() => setBusy(false))
