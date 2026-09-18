@@ -1,5 +1,6 @@
 import { AppError } from '../errors'
 import { listCompatibility } from '../compatibility'
+import type { RuntimeEvidenceRecord } from '../evidence'
 import type { PlatformAdapter, PlatformAdapterInfo, PlatformId, ProjectKind } from '../types'
 import { FabricAdapter } from './fabric'
 import { ForgeAdapter } from './forge'
@@ -17,10 +18,10 @@ export const PLATFORM_ADAPTERS: PlatformAdapter[] = [
 
 const BY_ID = new Map(PLATFORM_ADAPTERS.map((adapter) => [adapter.id, adapter]))
 
-export function listAdapters(): PlatformAdapterInfo[] {
+export function listAdapters(evidence: RuntimeEvidenceRecord[] = []): PlatformAdapterInfo[] {
   return PLATFORM_ADAPTERS.map((adapter) => ({
     ...adapter,
-    compatibility: listCompatibility(adapter.id)
+    compatibility: listCompatibility(adapter.id, evidence)
   }))
 }
 
@@ -44,10 +45,16 @@ export function describeCapabilityGap(adapter: PlatformAdapter, feature: keyof P
   const level = adapter.capabilities[feature]
   if (level === 'supported') {
     if (adapter.id === 'fabric' && feature === 'gradleProject') {
-      return 'Fabric Phase 3 emits a real Gradle project for 1.21, 1.21.1, 1.21.2, 1.21.4, and 1.21.8.'
+      return 'Fabric emits a real Gradle project for 1.21, 1.21.1, 1.21.2, 1.21.4, and 1.21.8.'
     }
     if (adapter.id === 'paper' && feature === 'gradleProject') {
-      return 'Paper Phase 3 emits a real Gradle plugin for 1.21 / 1.21.1 / 1.21.4 / 1.21.8. Spigot is not inferred from that.'
+      return 'Paper emits a real Gradle plugin for 1.21 / 1.21.1 / 1.21.4 / 1.21.8. Spigot is not inferred from that.'
+    }
+    if (adapter.id === 'neoforge' && feature === 'gradleProject') {
+      return 'NeoForge emits a real ModDevGradle project for 1.21.1. That is not a Forge compatibility claim.'
+    }
+    if (adapter.id === 'paper' && feature === 'textures') {
+      return 'Paper items stay vanilla paper + CustomModelData. Clients must install the exported resource pack; the plugin jar cannot register a new item id.'
     }
     return `${adapter.displayName} can implement ${feature} in a later generation phase.`
   }

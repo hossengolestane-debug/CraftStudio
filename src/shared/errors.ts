@@ -17,6 +17,7 @@ export type AppErrorCode =
   | 'BUILD_GATED'
   | 'EXPORT_FAILED'
   | 'TERMS_REQUIRED'
+  | 'EVIDENCE_REQUIRED'
   | 'IO'
   | 'UNKNOWN'
 

@@ -41,7 +41,7 @@ export function ItemEditor({
         {paperLimits ? (
           <p className="mt-2 text-sm">
             Paper cannot add a new client item id. The generated plugin uses vanilla <code>paper</code> plus persistent
-            data. Players see a renamed paper item unless they add their own resource pack (not exported).
+            data and CustomModelData. Players must install the exported resource pack on their client.
           </p>
         ) : null}
       </div>

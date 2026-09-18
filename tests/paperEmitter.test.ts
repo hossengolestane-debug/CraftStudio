@@ -71,6 +71,7 @@ describe('Paper adapter generation', () => {
     expect(java).toContain('PersistentDataType.STRING')
     expect(java).toContain('Material.PAPER')
     expect(java).toContain('Material.COPPER_INGOT')
+    expect(java).toContain('setCustomModelData(1)')
     expect(java).toContain('clients do not see a new item id')
 
     const yml = files.find((file) => file.relativePath === 'src/main/resources/plugin.yml')?.contents.toString() ?? ''

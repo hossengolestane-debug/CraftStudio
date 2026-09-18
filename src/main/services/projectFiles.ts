@@ -1,6 +1,7 @@
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AppError } from '../../shared/errors'
+import { isEditableProjectPath } from '../codegen/allowlist'
 import { assertInsideRoot, resolveProjectFile, resolveProjectsRoot } from './pathSafety'
 
 const SKIP_DIRS = new Set(['.gradle', 'build', 'run', 'out', 'node_modules', '.git'])
@@ -75,4 +76,30 @@ export async function readProjectFile(
     }
   }
   return { relativePath, contents: await readFile(target, 'utf8'), truncated: false }
+}
+
+export async function writeProjectFile(
+  projectsRoot: string,
+  projectDirName: string,
+  relativePath: string,
+  contents: string
+): Promise<{ relativePath: string; bytes: number }> {
+  if (!isEditableProjectPath(relativePath)) {
+    throw new AppError({
+      code: 'PATH_ESCAPE',
+      message: `Refusing to edit "${relativePath}".`,
+      action: 'Only allowlisted text sources can be edited. PNGs go through the texture editor. Binary jars are not writable.'
+    })
+  }
+  if (contents.length > MAX_FILE_BYTES) {
+    throw new AppError({
+      code: 'VALIDATION',
+      message: 'Edited file exceeds the 256 KB editor limit.',
+      action: 'Split the change or edit the file outside CraftStudio.'
+    })
+  }
+  const target = resolveProjectFile(projectsRoot, projectDirName, relativePath)
+  await mkdir(path.dirname(target), { recursive: true })
+  await writeFile(target, contents, 'utf8')
+  return { relativePath, bytes: Buffer.byteLength(contents, 'utf8') }
 }

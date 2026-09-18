@@ -30,6 +30,11 @@ const TRUSTED_TASKS: Record<GradleTaskId, readonly string[]> = {
 
 export class GradleService {
   private child: ReturnType<typeof spawn> | null = null
+  private readonly lastByProject = new Map<string, BuildResult>()
+
+  lastResult(projectPath: string): BuildResult | undefined {
+    return this.lastByProject.get(path.resolve(projectPath))
+  }
 
   cancel(): void {
     this.child?.kill('SIGTERM')
@@ -49,7 +54,7 @@ export class GradleService {
       throw new AppError({
         code: 'BUILD_GATED',
         message: 'Refusing an unknown Gradle task.',
-        action: 'Phase 3 only runs allowlisted `build` or `runClient`.'
+        action: 'Only allowlisted `build` or `runClient` may run.'
       })
     }
     assertTrustedGradleArgs([...args])
@@ -78,6 +83,7 @@ export class GradleService {
         }
         settled = true
         this.child = null
+        this.lastByProject.set(path.resolve(projectPath), result)
         resolve(result)
       }
 
@@ -160,7 +166,7 @@ export class GradleService {
           message: ok
             ? task === 'build'
               ? 'Gradle build succeeded (compile). Compatibility is still Experimental until a real Minecraft runtime is verified.'
-              : 'Gradle runClient exited 0. Treat this as a developer launch, not a Tested registry row, unless you verified gameplay.'
+              : 'Gradle runClient exited 0. This is compile/runtime launch evidence only after you record it on the Test tab — not an automatic Tested badge.'
             : `Gradle ${task} exited with code ${code ?? 'unknown'}. This is a real failure, not a simulated one.`
         })
       })
@@ -185,7 +191,7 @@ export function assertTrustedGradleArgs(args: string[]): void {
     throw new AppError({
       code: 'BUILD_GATED',
       message: 'Refusing to run a non-allowlisted Gradle command.',
-      action: 'Phase 3 only runs `gradlew build|runClient --no-daemon --stacktrace`.',
+      action: 'Only `gradlew build|runClient --no-daemon --stacktrace` is allowlisted.',
       details: args.join(' ')
     })
   }

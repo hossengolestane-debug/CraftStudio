@@ -188,8 +188,8 @@ export function CreateWizard({
                 ))}
               </div>
               <p className="text-sm text-muted">
-                Nothing is marked Tested in Phase 1 — no Minecraft build was run. Unsupported versions cannot be
-                selected.
+                Rows stay Experimental until a runtime evidence record exists. Compile-only Gradle success does not flip
+                Tested. Unsupported versions cannot be selected.
               </p>
               {selectedAdapter.capabilities.clientEntities === 'unsupported' ? (
                 <p className="text-sm">

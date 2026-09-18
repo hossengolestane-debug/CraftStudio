@@ -11,6 +11,10 @@ const api = window.craftstudio
 
 export function ExportView({ project }: { project: ProjectRecord }) {
   const supported = isCodegenSupported(project.manifest.platform, project.manifest.minecraftVersion)
+  const packSupported =
+    project.manifest.platform === 'fabric' ||
+    project.manifest.platform === 'paper' ||
+    project.manifest.platform === 'neoforge'
   const [error, setError] = useState<AppErrorPayload | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ExportResultDto | null>(null)
@@ -21,6 +25,7 @@ export function ExportView({ project }: { project: ProjectRecord }) {
         <h1 className="text-2xl font-semibold">Export</h1>
         <p className="mt-1 text-muted">
           Source ZIP is always available after files exist. JAR export requires a real successful Gradle build on disk.
+          Resource packs require painted or imported item textures.
         </p>
       </div>
       {error ? <ErrorPanel error={error} onDismiss={() => setError(null)} /> : null}
@@ -54,8 +59,8 @@ export function ExportView({ project }: { project: ProjectRecord }) {
       <Card className="space-y-3">
         <h2 className="text-lg font-semibold">Built JAR</h2>
         <p className="text-sm">
-          Copies Fabric remapJar or the Paper plugin jar from <code>build/libs</code> after a successful build. This
-          will not invent a jar from a model reply.
+          Copies the Fabric remapJar, NeoForge jar, or Paper plugin jar from <code>build/libs</code> after a successful
+          build. This will not invent a jar from a model reply.
         </p>
         <Button
           disabled={busy || !supported}
@@ -75,13 +80,33 @@ export function ExportView({ project }: { project: ProjectRecord }) {
 
       <Card className="space-y-3">
         <h2 className="text-lg font-semibold">Resource pack</h2>
-        <p className="text-sm">
-          Not implemented. Paper custom items do not ship a resource pack. Fabric uses a placeholder flint item model.
-          This button stays disabled on purpose.
-        </p>
-        <button type="button" disabled className="border border-line px-3 py-2 text-muted">
-          Export resource pack (not yet)
-        </button>
+        {project.manifest.platform === 'paper' ? (
+          <p className="text-sm">
+            Paper items stay vanilla paper + CustomModelData. <strong>Every client must install this pack</strong> or
+            they will still see regular paper. The plugin jar cannot register a new item id.
+          </p>
+        ) : packSupported ? (
+          <p className="text-sm">
+            Exports <code>pack.mcmeta</code> plus item textures/models under <code>assets/&lt;modid&gt;/</code>. Re-apply
+            the spec after painting so the mod jar also embeds the same PNGs.
+          </p>
+        ) : (
+          <p className="text-sm">Resource-pack export is not implemented for this adapter.</p>
+        )}
+        <Button
+          disabled={busy || !packSupported}
+          onClick={() => {
+            setBusy(true)
+            setError(null)
+            void api
+              .exportResourcePack(project.manifest.id)
+              .then(setResult)
+              .catch((err) => setError(asAppError(err)))
+              .finally(() => setBusy(false))
+          }}
+        >
+          Export resource pack
+        </Button>
       </Card>
 
       <Card className="space-y-2">
@@ -90,13 +115,20 @@ export function ExportView({ project }: { project: ProjectRecord }) {
           <ol className="list-decimal space-y-1 pl-5 text-sm">
             <li>Install Minecraft {project.manifest.minecraftVersion} and Fabric Loader + Fabric API.</li>
             <li>Build, then drop the exported jar (not -sources) into <code>.minecraft/mods</code>.</li>
+            <li>Optional: install the exported resource pack if you want the textures without rebuilding the jar.</li>
+            <li>Accept the Minecraft EULA yourself. CraftStudio does not distribute game files.</li>
+          </ol>
+        ) : project.manifest.platform === 'neoforge' ? (
+          <ol className="list-decimal space-y-1 pl-5 text-sm">
+            <li>Install Minecraft {project.manifest.minecraftVersion} and the NeoForge installer — not Forge.</li>
+            <li>Build, then drop the exported jar into <code>.minecraft/mods</code>.</li>
             <li>Accept the Minecraft EULA yourself. CraftStudio does not distribute game files.</li>
           </ol>
         ) : project.manifest.platform === 'paper' ? (
           <ol className="list-decimal space-y-1 pl-5 text-sm">
             <li>Run a Paper {project.manifest.minecraftVersion} server you downloaded yourself.</li>
             <li>Put the plugin jar in <code>plugins/</code>. Do not install it on Spigot.</li>
-            <li>Clients see vanilla paper + PDC unless they add their own resource pack.</li>
+            <li>Install the exported resource pack on every client. CustomModelData will not show otherwise.</li>
             <li>Accept Minecraft/Paper terms yourself. <code>run-paper/eula.txt</code> stays <code>eula=false</code>.</li>
           </ol>
         ) : (

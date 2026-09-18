@@ -60,7 +60,7 @@ describe('adapter registry', () => {
   it('marks plugin client entities and textures unsupported', () => {
     expect(PaperAdapter.capabilities.clientEntities).toBe('unsupported')
     expect(SpigotAdapter.capabilities.clientEntities).toBe('unsupported')
-    expect(PaperAdapter.capabilities.textures).toBe('unsupported')
+    expect(PaperAdapter.capabilities.textures).toBe('limited')
     expect(SpigotAdapter.capabilities.customBlocks).toBe('unsupported')
   })
 })

@@ -1,8 +1,9 @@
 import { AppError } from './errors'
+import { hasValidEvidence, overlayCompatibility, type RuntimeEvidenceRecord } from './evidence'
 import type { CompatibilityEntry, CompatibilityStatus, PlatformId } from './types'
 
 export const REGISTRY_HONESTY_NOTE =
-  'Nothing is marked Tested. Gradle compile success is recorded separately from Minecraft client or Paper server runtime verification.'
+  'Static registry rows stay Experimental. A row may flip to Tested only when a runtime evidence record exists (timestamp, platform, version, what was verified). Compile-only Gradle success is never enough.'
 
 const NOTE = {
   experimental:
@@ -80,44 +81,58 @@ export const COMPATIBILITY_REGISTRY: CompatibilityEntry[] = ROWS.map(
   })
 )
 
-export function listCompatibility(platform: PlatformId): CompatibilityEntry[] {
-  return COMPATIBILITY_REGISTRY.filter((entry) => entry.platform === platform)
+export function listCompatibility(
+  platform: PlatformId,
+  evidence: RuntimeEvidenceRecord[] = []
+): CompatibilityEntry[] {
+  return overlayCompatibility(
+    COMPATIBILITY_REGISTRY.filter((entry) => entry.platform === platform),
+    evidence
+  )
 }
 
 export function lookupCompatibility(
   platform: PlatformId,
-  minecraftVersion: string
+  minecraftVersion: string,
+  evidence: RuntimeEvidenceRecord[] = []
 ): CompatibilityEntry {
   const match = COMPATIBILITY_REGISTRY.find(
     (entry) => entry.platform === platform && entry.minecraftVersion === minecraftVersion
   )
 
   if (match) {
-    return match
+    return overlayCompatibility([match], evidence)[0]!
   }
 
   return {
     platform,
     minecraftVersion,
     status: 'unsupported',
-    notes: 'This version is not in the Phase 1 compatibility registry.'
+    notes: 'This version is not in the compatibility registry.'
   }
 }
 
-export function assertCreatableCombination(platform: PlatformId, minecraftVersion: string): CompatibilityEntry {
-  const entry = lookupCompatibility(platform, minecraftVersion)
+export function assertCreatableCombination(
+  platform: PlatformId,
+  minecraftVersion: string,
+  evidence: RuntimeEvidenceRecord[] = []
+): CompatibilityEntry {
+  const staticEntry = COMPATIBILITY_REGISTRY.find(
+    (entry) => entry.platform === platform && entry.minecraftVersion === minecraftVersion
+  )
+  const entry = lookupCompatibility(platform, minecraftVersion, evidence)
   if (entry.status === 'unsupported') {
     throw new AppError({
       code: 'UNSUPPORTED_COMBINATION',
       message: `${platform} + Minecraft ${minecraftVersion} is unsupported.`,
-      action: 'Choose a version marked Experimental (or Tested, when one exists).',
+      action: 'Choose a version marked Experimental (or Tested, when evidence exists).',
       details: entry.notes
     })
   }
-  if (entry.status === 'tested') {
+  if (staticEntry?.status === 'tested' && !hasValidEvidence(evidence, platform, minecraftVersion)) {
     throw new AppError({
       code: 'UNSUPPORTED_COMBINATION',
-      message: 'A Tested badge appeared without a verified Minecraft build.',
+      message: 'A Tested badge appeared in the static registry without a runtime evidence record.',
       action: 'This is a CraftStudio bug. Use an Experimental version and report the registry row.',
       details: `${platform} ${minecraftVersion}`
     })

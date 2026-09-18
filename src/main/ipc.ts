@@ -1,26 +1,32 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { listAdapters } from '../shared/adapters/registry'
 import { listCompatibility, lookupCompatibility } from '../shared/compatibility'
+import type { EvidenceDraft } from '../shared/evidence'
 import { AppError, toAppError } from '../shared/errors'
 import {
   IPC_CHANNELS,
   IPC_EVENTS,
   type CompatibilityLookupInput,
   type GenerateSpecInput,
-  type IpcResult
+  type IpcResult,
+  type RecordEvidenceInput,
+  type SaveTextureInput
 } from '../shared/ipc'
-import type { ProjectSpec } from '../shared/spec'
+import { DEFAULT_PALETTE, paletteSuggestionSchema } from '../shared/pixelSpec'
+import { extractJsonObject, parseProjectSpec, type ProjectSpec } from '../shared/spec'
 import type { CreateProjectInput, SettingsPatch, UpdateProjectInput } from '../shared/types'
 import { DEFAULT_OLLAMA_ENDPOINT } from '../shared/types'
 import { isCodegenSupported, requiredJava } from '../shared/platformPins'
-import { exportBuiltJar, exportSourceZip } from './services/exportService'
+import { EvidenceService } from './services/evidenceService'
+import { exportBuiltJar, exportResourcePackZip, exportSourceZip } from './services/exportService'
 import { GenerationService } from './services/generationService'
 import { GradleService } from './services/gradleService'
 import { checkJava } from './services/javaService'
 import { OllamaService } from './services/ollamaService'
-import { listProjectTree, readProjectFile } from './services/projectFiles'
+import { listProjectTree, readProjectFile, writeProjectFile } from './services/projectFiles'
 import { ProjectService } from './services/projectService'
 import { SettingsService } from './services/settingsService'
+import { loadItemTexture, loadProjectTextures, saveItemTexture, savePixelSpec } from './services/textureService'
 
 function wrap<T>(run: () => Promise<T> | T): Promise<IpcResult<T>> {
   return Promise.resolve()
@@ -42,6 +48,7 @@ export function registerIpc(deps: {
   ollama: OllamaService
   generation: GenerationService
   gradle: GradleService
+  evidence: EvidenceService
 }): void {
   ipcMain.handle(IPC_CHANNELS.PROJECTS_LIST, () => wrap(() => deps.projects.list()))
   ipcMain.handle(IPC_CHANNELS.PROJECTS_CREATE, (_event, input: CreateProjectInput) =>
@@ -68,11 +75,15 @@ export function registerIpc(deps: {
       deps.ollama.cancel()
     })
   )
-  ipcMain.handle(IPC_CHANNELS.ADAPTERS_LIST, () => wrap(() => listAdapters()))
-  ipcMain.handle(IPC_CHANNELS.COMPATIBILITY_LOOKUP, (_event, input: CompatibilityLookupInput) =>
-    wrap(() => lookupCompatibility(input.platform, input.minecraftVersion))
+  ipcMain.handle(IPC_CHANNELS.ADAPTERS_LIST, () =>
+    wrap(async () => listAdapters(await deps.evidence.list()))
   )
-  ipcMain.handle(IPC_CHANNELS.COMPATIBILITY_LIST, (_event, platform) => wrap(() => listCompatibility(platform)))
+  ipcMain.handle(IPC_CHANNELS.COMPATIBILITY_LOOKUP, (_event, input: CompatibilityLookupInput) =>
+    wrap(async () => lookupCompatibility(input.platform, input.minecraftVersion, await deps.evidence.list()))
+  )
+  ipcMain.handle(IPC_CHANNELS.COMPATIBILITY_LIST, (_event, platform) =>
+    wrap(async () => listCompatibility(platform, await deps.evidence.list()))
+  )
   ipcMain.handle(IPC_CHANNELS.APP_DEFAULTS, () =>
     wrap(() => ({
       defaultProjectsPath: deps.settings.defaultProjectsPath(),
@@ -157,14 +168,14 @@ export function registerIpc(deps: {
         throw new AppError({
           code: 'ADAPTER_UNSUPPORTED',
           message: `Build/Test is not implemented for ${record.manifest.platform} ${record.manifest.minecraftVersion}.`,
-          action: 'Use a supported Fabric or Paper 1.21.x project. This button will not fake success.'
+          action: 'Use a supported Fabric, Paper, or NeoForge 1.21.1 project. This button will not fake success.'
         })
       }
       if (task === 'runClient') {
-        if (record.manifest.platform !== 'fabric') {
+        if (record.manifest.platform !== 'fabric' && record.manifest.platform !== 'neoforge') {
           throw new AppError({
             code: 'ADAPTER_UNSUPPORTED',
-            message: 'runClient is a Fabric Loom task only.',
+            message: 'runClient is a Fabric Loom or NeoForge ModDev task only.',
             action: 'Paper projects get test-server prep notes, not a launched server.'
           })
         }
@@ -233,6 +244,165 @@ export function registerIpc(deps: {
   ipcMain.handle(IPC_CHANNELS.BUILD_CANCEL, () =>
     wrap(() => {
       deps.gradle.cancel()
+    })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.FILES_WRITE, async (_event, projectId: string, relativePath: string, contents: string) =>
+    wrap(async () => {
+      const record = await deps.projects.get(projectId)
+      const settings = await deps.settings.get()
+      return writeProjectFile(settings.projectsPath, record.directoryName, relativePath, contents)
+    })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.TEXTURE_GET, async (_event, projectId: string, itemId: string) =>
+    wrap(async () => {
+      const record = await deps.projects.get(projectId)
+      const settings = await deps.settings.get()
+      return loadItemTexture(settings.projectsPath, record.directoryName, itemId)
+    })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.TEXTURE_SAVE, async (_event, input: SaveTextureInput) =>
+    wrap(async () => {
+      const record = await deps.projects.get(input.projectId)
+      const settings = await deps.settings.get()
+      const saved = await saveItemTexture(
+        settings.projectsPath,
+        record.directoryName,
+        input.itemId,
+        input.width,
+        input.height,
+        Uint8Array.from(input.pixels)
+      )
+      if (input.pixelSpec) {
+        await savePixelSpec(settings.projectsPath, record.directoryName, input.itemId, input.pixelSpec)
+      }
+      return saved
+    })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.TEXTURE_PALETTE, async (_event, projectId: string, prompt?: string) =>
+    wrap(async () => {
+      await deps.projects.get(projectId)
+      const settings = await deps.settings.get()
+      const fallback = {
+        palette: [...DEFAULT_PALETTE],
+        usedOllama: false,
+        note: 'Default CraftStudio palette. Ollama was not used to draw pixels.'
+      }
+      if (!settings.ollamaModel) {
+        return fallback
+      }
+      try {
+        const raw = await deps.ollama.chatJson({
+          endpoint: settings.ollamaEndpoint,
+          model: settings.ollamaModel,
+          timeoutMs: Math.min(settings.ollamaGenerateTimeoutMs, 30000),
+          numPredict: 256,
+          numCtx: 1024,
+          format: 'json',
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Return ONLY JSON {"palette":["#RRGGBB",...]} with 4-12 hex colors. Do not describe an image. Do not claim you drew pixels.'
+            },
+            {
+              role: 'user',
+              content: prompt?.trim() || 'Suggest a muted item-texture palette for a Minecraft custom item.'
+            }
+          ]
+        })
+        const parsed = paletteSuggestionSchema.parse(extractJsonObject(raw))
+        return {
+          palette: parsed.palette,
+          usedOllama: true,
+          note: 'Ollama suggested hex colors only. It did not generate a raster texture.'
+        }
+      } catch {
+        return fallback
+      }
+    })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.EXPORT_PACK, (event, projectId: string) =>
+    wrap(async () => {
+      const record = await deps.projects.get(projectId)
+      const spec = await deps.generation.getSpec(projectId)
+      if (!spec) {
+        throw new AppError({
+          code: 'EXPORT_FAILED',
+          message: 'No validated spec on disk. Generate and apply items first.',
+          action: 'Open Design, apply a spec, paint textures on Assets, then export the pack.'
+        })
+      }
+      parseProjectSpec(spec)
+      const settings = await deps.settings.get()
+      const textures = await loadProjectTextures(
+        settings.projectsPath,
+        record.directoryName,
+        spec.items.map((item) => item.id)
+      )
+      const window = senderWindow(event)
+      const dialogOpts = {
+        title: 'Export resource pack',
+        defaultPath: `${record.manifest.name.replace(/[^a-zA-Z0-9_-]+/g, '-')}-resource-pack.zip`,
+        filters: [{ name: 'ZIP', extensions: ['zip'] }]
+      }
+      const result = window
+        ? await dialog.showSaveDialog(window, dialogOpts)
+        : await dialog.showSaveDialog(dialogOpts)
+      if (result.canceled || !result.filePath) {
+        throw new AppError({
+          code: 'EXPORT_FAILED',
+          message: 'Resource-pack export was cancelled.',
+          action: 'Choose a .zip destination for the pack.'
+        })
+      }
+      return exportResourcePackZip(
+        settings.projectsPath,
+        record.directoryName,
+        record.manifest,
+        spec,
+        textures,
+        result.filePath
+      )
+    })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.EVIDENCE_LIST, () => wrap(() => deps.evidence.list()))
+  ipcMain.handle(IPC_CHANNELS.EVIDENCE_RECORD, (_event, input: RecordEvidenceInput) =>
+    wrap(async () => {
+      const record = await deps.projects.get(input.projectId)
+      const settings = await deps.settings.get()
+      const last = deps.gradle.lastResult(record.directoryPath)
+      const draft: EvidenceDraft = {
+        platform: record.manifest.platform,
+        minecraftVersion: record.manifest.minecraftVersion,
+        projectId: record.manifest.id,
+        verifiedWhat: input.verifiedWhat,
+        notes: input.notes,
+        eulaAccepted: Boolean(settings.minecraftEulaAccepted),
+        compileOnly: last?.compileOnly === true && last.task === 'build',
+        runtimeExitCode: last?.exitCode ?? null,
+        userAttestedLaunch: input.userAttestedLaunch
+      }
+      if (input.verifiedWhat === 'paper_user_server') {
+        draft.compileOnly = false
+      }
+      return deps.evidence.record(
+        draft,
+        last
+          ? {
+              task: last.task,
+              exitCode: last.exitCode,
+              compileOnly: last.compileOnly,
+              cancelled: last.cancelled,
+              timedOut: last.timedOut
+            }
+          : undefined
+      )
     })
   )
 }

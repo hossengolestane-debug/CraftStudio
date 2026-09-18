@@ -11,12 +11,14 @@ import {
 import { inferSpecFromPrompt, promptLooksComplex } from '../../shared/templateInfer'
 import type { AppSettings, ProjectRecord } from '../../shared/types'
 import { isBuildScriptPath } from '../codegen/allowlist'
+import { attachGeneratedTextures } from '../codegen/pack/planner'
 import { assertCanGenerate, planAdapterFiles } from '../codegen/plan'
 import { diffPlannedFiles, writePlannedFiles, type FileChange } from './filePlan'
 import { OllamaService } from './ollamaService'
 import { resolveProjectFile } from './pathSafety'
 import type { ProjectService } from './projectService'
 import type { SettingsService } from './settingsService'
+import { loadProjectTextures } from './textureService'
 
 export type GenerationMode = 'auto' | 'template' | 'ollama'
 
@@ -122,8 +124,9 @@ export class GenerationService {
     const record = await this.projects.get(projectId)
     assertCanGenerate(record.manifest.platform, record.manifest.minecraftVersion)
     const spec = parseProjectSpec(specInput)
-    const files = planAdapterFiles(record.manifest, spec)
     const root = (await this.settings.get()).projectsPath
+    const textures = await loadProjectTextures(root, record.directoryName, spec.items.map((item) => item.id))
+    const files = attachGeneratedTextures(planAdapterFiles(record.manifest, spec), record.manifest, spec, textures)
     const specFile = {
       relativePath: SPEC_FILENAME,
       contents: `${JSON.stringify(spec, null, 2)}\n`,
@@ -151,8 +154,18 @@ export class GenerationService {
     }
 
     const record = await this.projects.get(projectId)
-    const files = planAdapterFiles(record.manifest, preview.spec)
     const root = (await this.settings.get()).projectsPath
+    const textures = await loadProjectTextures(
+      root,
+      record.directoryName,
+      preview.spec.items.map((item) => item.id)
+    )
+    const files = attachGeneratedTextures(
+      planAdapterFiles(record.manifest, preview.spec),
+      record.manifest,
+      preview.spec,
+      textures
+    )
     const specFile = {
       relativePath: SPEC_FILENAME,
       contents: `${JSON.stringify(preview.spec, null, 2)}\n`,

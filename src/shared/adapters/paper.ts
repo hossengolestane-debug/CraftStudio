@@ -14,7 +14,7 @@ export const PaperAdapter: PlatformAdapter = {
     recipes: 'limited',
     worldgen: 'limited',
     serverCommands: 'supported',
-    textures: 'unsupported',
+    textures: 'limited',
     gradleProject: 'supported'
   },
   javaRequirements: {
@@ -27,7 +27,7 @@ export const PaperAdapter: PlatformAdapter = {
       id: 'paper-item-gradle',
       displayName: 'Paper Gradle + PDC item',
       description:
-        'Trusted Java plugin + plugin.yml for Paper 1.21 / 1.21.1 / 1.21.4 / 1.21.8. Custom items are vanilla paper + PDC. Not valid on Spigot.',
+        'Trusted Java plugin + plugin.yml for Paper 1.21 / 1.21.1 / 1.21.4 / 1.21.8. Custom items are vanilla paper + PDC + CustomModelData. Clients must install the exported resource pack. Not valid on Spigot.',
       status: 'available'
     }
   ],

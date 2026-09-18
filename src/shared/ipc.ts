@@ -1,4 +1,6 @@
+import type { RuntimeEvidenceRecord, VerifiedWhat } from './evidence'
 import type { AppErrorPayload } from './errors'
+import type { PixelSpec } from './pixelSpec'
 import type { ProjectSpec } from './spec'
 import type {
   AppSettings,
@@ -40,7 +42,14 @@ export const IPC_CHANNELS = {
   BUILD_RUN: 'build:run',
   BUILD_CANCEL: 'build:cancel',
   EXPORT_SOURCE: 'export:source',
-  EXPORT_JAR: 'export:jar'
+  EXPORT_JAR: 'export:jar',
+  EXPORT_PACK: 'export:pack',
+  FILES_WRITE: 'files:write',
+  TEXTURE_GET: 'texture:get',
+  TEXTURE_SAVE: 'texture:save',
+  TEXTURE_PALETTE: 'texture:palette',
+  EVIDENCE_LIST: 'evidence:list',
+  EVIDENCE_RECORD: 'evidence:record'
 } as const
 
 export const IPC_EVENTS = {
@@ -141,10 +150,40 @@ export interface BuildResultDto {
 }
 
 export interface ExportResultDto {
-  kind: 'source-zip' | 'jar'
+  kind: 'source-zip' | 'jar' | 'resource-pack'
   destPath: string
   fileCount: number
   message: string
+}
+
+export interface TextureDto {
+  itemId: string
+  relativePath: string
+  width: number
+  height: number
+  pixels: number[]
+}
+
+export interface SaveTextureInput {
+  projectId: string
+  itemId: string
+  width: number
+  height: number
+  pixels: number[]
+  pixelSpec?: PixelSpec
+}
+
+export interface PaletteSuggestionDto {
+  palette: string[]
+  usedOllama: boolean
+  note: string
+}
+
+export interface RecordEvidenceInput {
+  projectId: string
+  verifiedWhat: VerifiedWhat
+  notes: string
+  userAttestedLaunch?: boolean
 }
 
 export interface RunBuildInput {
@@ -180,11 +219,18 @@ export interface CraftStudioAPI {
   cancelGeneration: () => Promise<void>
   listProjectFiles: (projectId: string) => Promise<ProjectFileNodeDto[]>
   readProjectFile: (projectId: string, relativePath: string) => Promise<ProjectFileContentsDto>
+  writeProjectFile: (projectId: string, relativePath: string, contents: string) => Promise<{ relativePath: string; bytes: number }>
   checkJava: (projectId: string) => Promise<JavaStatusDto>
   runBuild: (projectId: string, task?: 'build' | 'runClient') => Promise<BuildResultDto>
   cancelBuild: () => Promise<void>
   exportSourceZip: (projectId: string) => Promise<ExportResultDto>
   exportBuiltJar: (projectId: string) => Promise<ExportResultDto>
+  exportResourcePack: (projectId: string) => Promise<ExportResultDto>
+  getTexture: (projectId: string, itemId: string) => Promise<TextureDto | null>
+  saveTexture: (input: SaveTextureInput) => Promise<TextureDto>
+  suggestTexturePalette: (projectId: string, prompt?: string) => Promise<PaletteSuggestionDto>
+  listEvidence: () => Promise<RuntimeEvidenceRecord[]>
+  recordEvidence: (input: RecordEvidenceInput) => Promise<RuntimeEvidenceRecord>
   onGenerationProgress: (handler: (event: GenerationProgress) => void) => () => void
   onBuildLog: (handler: (event: BuildLogEvent) => void) => () => void
 }

@@ -83,4 +83,37 @@ describe('generation pipeline', () => {
     expect(java).toContain('extends JavaPlugin')
     expect(java).toContain('Material.PAPER')
   })
+
+  it('creates a NeoForge 1.21.1 project from the same spec style', async () => {
+    const userData = await mkdtemp(path.join(os.tmpdir(), 'cs-neo-settings-'))
+    const projectsRoot = await mkdtemp(path.join(os.tmpdir(), 'cs-neo-projects-'))
+    temps.push(userData, projectsRoot)
+    const settings = new SettingsService({ userDataPath: userData })
+    await settings.update({ projectsPath: projectsRoot })
+    const projects = new ProjectService(settings, () => new Date('2026-09-18T15:00:00.000Z'))
+    const generation = new GenerationService(projects, settings, new OllamaService())
+
+    const created = await projects.create({
+      name: 'River Stones',
+      description: 'Add an item called river stone',
+      type: 'mod',
+      platform: 'neoforge',
+      minecraftVersion: '1.21.1'
+    })
+
+    const result = await generation.generateSpec(created.manifest.id, created.manifest.description, 'template')
+    const applied = await generation.applySpec(created.manifest.id, result.spec, true)
+    expect(applied.applied).toBe(true)
+    const toml = await readFile(
+      path.join(created.directoryPath, 'src/main/resources/META-INF/neoforge.mods.toml'),
+      'utf8'
+    )
+    expect(toml).toContain('modLoader="javafml"')
+    const java = await readFile(
+      path.join(created.directoryPath, 'src/main/java/local/craftstudio/river_stones/RiverStones.java'),
+      'utf8'
+    )
+    expect(java).toContain('DeferredRegister.createItems')
+    expect(java).not.toContain('net.minecraftforge')
+  })
 })

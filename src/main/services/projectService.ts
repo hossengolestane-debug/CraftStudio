@@ -255,7 +255,7 @@ export class ProjectService {
       '',
       'This folder was created by CraftStudio Local.',
       'A create-time snapshot of the manifest is stored in `snapshots/created.manifest.json`.',
-      'Use Design → Generate to emit Fabric or Paper Gradle files from a validated spec (Phase 3).',
+      'Use Design → Generate to emit Fabric, Paper, or NeoForge Gradle files from a validated spec.',
       ''
     ].join('\n')
   }

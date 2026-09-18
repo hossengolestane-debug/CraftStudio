@@ -15,7 +15,7 @@ export const NeoForgeAdapter: PlatformAdapter = {
     worldgen: 'supported',
     serverCommands: 'supported',
     textures: 'supported',
-    gradleProject: 'unsupported'
+    gradleProject: 'supported'
   },
   javaRequirements: {
     minVersion: 17,
@@ -24,10 +24,11 @@ export const NeoForgeAdapter: PlatformAdapter = {
   },
   templates: [
     {
-      id: 'neoforge-gradle-stub',
-      displayName: 'NeoForge Gradle project',
-      description: 'Real Gradle emission is not implemented in Phase 1.',
-      status: 'stub'
+      id: 'neoforge-item-gradle',
+      displayName: 'NeoForge Gradle + custom item',
+      description:
+        'Trusted ModDevGradle templates for Minecraft 1.21.1 (NeoForge 21.1.250). Forge is a separate stub and is not inferred from this slice.',
+      status: 'available'
     }
   ],
   validationRules: [
@@ -44,10 +45,17 @@ export const NeoForgeAdapter: PlatformAdapter = {
   ],
   testProcedures: [
     {
+      id: 'neoforge-gradle-build',
+      displayName: 'Gradle build',
+      description: 'Runs `./gradlew build` for NeoForge 1.21.1. Compile success is not a Tested row and is not Forge compatibility.',
+      status: 'available'
+    },
+    {
       id: 'neoforge-client-run',
       displayName: 'Run client via Gradle',
-      description: 'Not implemented. Phase 3+ will invoke the NeoForge runClient task.',
-      status: 'stub'
+      description:
+        'Optional `./gradlew runClient` after explicit Minecraft EULA acceptance. Not marked Tested without a verified client run. Not a Forge claim.',
+      status: 'available'
     }
   ]
 }

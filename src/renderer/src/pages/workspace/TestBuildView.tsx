@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
+import type { RuntimeEvidenceRecord } from '../../../../shared/evidence'
 import type { AppErrorPayload } from '../../../../shared/errors'
 import type { BuildResultDto, JavaStatusDto } from '../../../../shared/ipc'
 import { isCodegenSupported } from '../../../../shared/platformPins'
 import type { AppSettings, PlatformAdapterInfo, ProjectRecord } from '../../../../shared/types'
 import { ErrorPanel } from '../../components/ErrorPanel'
-import { Badge, Button, Card, ComingSoon } from '../../components/ui'
+import { Badge, Button, Card, ComingSoon, Field, TextArea } from '../../components/ui'
 import { asAppError } from '../../lib/errors'
 
 const api = window.craftstudio
@@ -22,13 +23,27 @@ export function TestBuildView({
 }) {
   const supported = isCodegenSupported(project.manifest.platform, project.manifest.minecraftVersion)
   const fabric = project.manifest.platform === 'fabric'
+  const neoforge = project.manifest.platform === 'neoforge'
   const paper = project.manifest.platform === 'paper'
+  const canRunClient = fabric || neoforge
   const [java, setJava] = useState<JavaStatusDto | null>(null)
-  const [result, setResult] = useState<BuildResultDto | null>(null)
+  const [compile, setCompile] = useState<BuildResultDto | null>(null)
+  const [runtime, setRuntime] = useState<BuildResultDto | null>(null)
   const [logs, setLogs] = useState('')
   const [error, setError] = useState<AppErrorPayload | null>(null)
   const [busy, setBusy] = useState(false)
+  const [evidence, setEvidence] = useState<RuntimeEvidenceRecord[]>([])
+  const [notes, setNotes] = useState('')
+  const [attested, setAttested] = useState(false)
   const accepted = Boolean(settings?.minecraftEulaAccepted)
+  const rowEvidence = evidence.find(
+    (item) =>
+      item.platform === project.manifest.platform && item.minecraftVersion === project.manifest.minecraftVersion
+  )
+
+  useEffect(() => {
+    void api.listEvidence().then(setEvidence).catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     if (!supported) {
@@ -65,8 +80,8 @@ export function TestBuildView({
       <div>
         <h1 className="text-2xl font-semibold">Test</h1>
         <p className="mt-1 text-muted">
-          Real Gradle for {project.manifest.platform} {project.manifest.minecraftVersion}. Compile success is not a
-          Tested compatibility row and is never inferred from the model.
+          Compile success and runtime verification are separate. A Tested compatibility row requires an evidence record
+          — never a compile-only build.
         </p>
       </div>
       {error ? <ErrorPanel error={error} onDismiss={() => setError(null)} /> : null}
@@ -75,20 +90,35 @@ export function TestBuildView({
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">Java toolchain</span>
           {java ? <Badge tone={java.meets ? 'ok' : 'danger'}>{java.meets ? 'Ready' : 'Missing / old'}</Badge> : null}
-          <Badge>Compile: {result?.task === 'build' && result.exitCode === 0 ? 'succeeded' : 'not verified this session'}</Badge>
-          <Badge tone="warn">Runtime: Experimental (not Tested)</Badge>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge tone={compile?.exitCode === 0 ? 'ok' : 'warn'}>
+            Compile: {compile?.task === 'build' && compile.exitCode === 0 ? 'succeeded' : 'not verified this session'}
+          </Badge>
+          <Badge tone={rowEvidence ? 'ok' : 'warn'}>
+            Runtime: {rowEvidence ? `Tested ${rowEvidence.timestamp}` : 'not verified'}
+          </Badge>
         </div>
         <p className="text-sm">{java?.message ?? 'Checking Java…'}</p>
+        {rowEvidence ? (
+          <p className="text-sm">
+            Evidence: {rowEvidence.verifiedWhat} — {rowEvidence.notes}
+          </p>
+        ) : (
+          <p className="text-sm text-muted">
+            No runtime evidence for {project.manifest.platform} {project.manifest.minecraftVersion}. The static registry
+            stays Experimental.
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           <Button
             disabled={busy}
             onClick={() => {
               setBusy(true)
               setLogs('')
-              setResult(null)
               void api
                 .runBuild(project.manifest.id, 'build')
-                .then(setResult)
+                .then(setCompile)
                 .catch((err) => setError(asAppError(err)))
                 .finally(() => setBusy(false))
             }}
@@ -99,24 +129,25 @@ export function TestBuildView({
             Cancel
           </Button>
         </div>
-        {result ? (
+        {compile ? (
           <p>
-            {result.message} Command: <code>{result.command}</code>
-            {result.exitCode !== null ? ` (exit ${result.exitCode})` : null}
-            {result.compileOnly ? ' · compile-only' : ''}
+            {compile.message} Command: <code>{compile.command}</code>
+            {compile.exitCode !== null ? ` (exit ${compile.exitCode})` : null}
+            {compile.compileOnly ? ' · compile-only' : ''}
           </p>
         ) : null}
-        <pre className="max-h-80 overflow-auto bg-[#111] p-3 text-xs text-[#f5f5f2]">{logs || result?.logs}</pre>
+        <pre className="max-h-80 overflow-auto bg-[#111] p-3 text-xs text-[#f5f5f2]">{logs || compile?.logs || runtime?.logs}</pre>
       </Card>
 
-      {fabric ? (
+      {canRunClient ? (
         <Card className="space-y-3">
-          <h2 className="text-lg font-semibold">Fabric runClient (optional)</h2>
+          <h2 className="text-lg font-semibold">{fabric ? 'Fabric' : 'NeoForge'} runClient (optional)</h2>
           <p className="text-sm">
             Runs allowlisted <code>./gradlew runClient --no-daemon --stacktrace</code> only after you accept the Minecraft
             EULA. CraftStudio does not distribute game files, does not bypass auth, and does not silent-accept terms.
-            A cloud VM often cannot finish a full client run. Compatibility stays Experimental without proof.
+            Exit 0 is not an automatic Tested badge — record evidence below after you verify the client.
           </p>
+          {neoforge ? <p className="text-sm">NeoForge success is not Forge compatibility.</p> : null}
           <p className="text-sm">
             Terms:{' '}
             <a className="underline" href="https://www.minecraft.net/eula" target="_blank" rel="noreferrer">
@@ -138,10 +169,9 @@ export function TestBuildView({
               onClick={() => {
                 setBusy(true)
                 setLogs('')
-                setResult(null)
                 void api
                   .runBuild(project.manifest.id, 'runClient')
-                  .then(setResult)
+                  .then(setRuntime)
                   .catch((err) => setError(asAppError(err)))
                   .finally(() => setBusy(false))
               }}
@@ -149,6 +179,40 @@ export function TestBuildView({
               Run client (Gradle)
             </Button>
           </div>
+          {runtime ? <p>{runtime.message}</p> : null}
+          <Field label="What did you verify?" htmlFor="runtime-notes">
+            <TextArea
+              id="runtime-notes"
+              rows={2}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Example: runClient loaded the title screen and the custom item appeared in Ingredients."
+            />
+          </Field>
+          <Button
+            variant="secondary"
+            disabled={busy || !accepted || runtime?.exitCode !== 0}
+            onClick={() => {
+              void api
+                .recordEvidence({
+                  projectId: project.manifest.id,
+                  verifiedWhat: fabric ? 'fabric_run_client' : 'neoforge_run_client',
+                  notes
+                })
+                .then((record) => {
+                  setEvidence((current) => [
+                    ...current.filter(
+                      (item) =>
+                        !(item.platform === record.platform && item.minecraftVersion === record.minecraftVersion)
+                    ),
+                    record
+                  ])
+                })
+                .catch((err) => setError(asAppError(err)))
+            }}
+          >
+            Record runtime verification
+          </Button>
         </Card>
       ) : null}
 
@@ -163,6 +227,59 @@ export function TestBuildView({
           <p className="text-sm">
             Do not install the plugin on Spigot. Paper compile success is not Spigot compatibility.
           </p>
+          <p className="text-sm">
+            Terms:{' '}
+            <a className="underline" href="https://www.minecraft.net/eula" target="_blank" rel="noreferrer">
+              minecraft.net/eula
+            </a>
+          </p>
+          <Button
+            variant="secondary"
+            disabled={accepted || !onAcceptTerms}
+            onClick={() => {
+              void onAcceptTerms?.().catch((err) => setError(asAppError(err)))
+            }}
+          >
+            {accepted ? 'EULA accepted (saved)' : 'I accept the Minecraft EULA'}
+          </Button>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={attested} onChange={(event) => setAttested(event.target.checked)} />
+            I launched a Paper server I downloaded myself and confirmed this plugin loaded. CraftStudio did not start it.
+          </label>
+          <Field label="What did you verify?" htmlFor="paper-notes">
+            <TextArea
+              id="paper-notes"
+              rows={2}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Example: Paper 1.21.1 server I installed; /givecustomitem worked with the resource pack."
+            />
+          </Field>
+          <Button
+            variant="secondary"
+            disabled={!accepted || !attested}
+            onClick={() => {
+              void api
+                .recordEvidence({
+                  projectId: project.manifest.id,
+                  verifiedWhat: 'paper_user_server',
+                  notes,
+                  userAttestedLaunch: attested
+                })
+                .then((record) => {
+                  setEvidence((current) => [
+                    ...current.filter(
+                      (item) =>
+                        !(item.platform === record.platform && item.minecraftVersion === record.minecraftVersion)
+                    ),
+                    record
+                  ])
+                })
+                .catch((err) => setError(asAppError(err)))
+            }}
+          >
+            Record Paper runtime attestation
+          </Button>
         </Card>
       ) : null}
     </div>

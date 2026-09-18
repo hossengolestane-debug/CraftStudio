@@ -137,7 +137,7 @@ export default function App() {
         />
       ) : null}
 
-      {view === 'assets' ? <AssetsPage /> : null}
+      {view === 'assets' ? <AssetsPage project={openProject} /> : null}
 
       {view === 'settings' ? (
         <SettingsPage

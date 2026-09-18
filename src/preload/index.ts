@@ -12,6 +12,7 @@ import {
   type IpcResult
 } from '../shared/ipc'
 import type { ProjectSpec } from '../shared/spec'
+import type { RecordEvidenceInput, SaveTextureInput } from '../shared/ipc'
 import type { CreateProjectInput, PlatformId, SettingsPatch, UpdateProjectInput } from '../shared/types'
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
@@ -54,11 +55,19 @@ const api: CraftStudioAPI = {
   cancelGeneration: () => invoke(IPC_CHANNELS.SPEC_CANCEL),
   listProjectFiles: (projectId: string) => invoke(IPC_CHANNELS.FILES_TREE, projectId),
   readProjectFile: (projectId: string, relativePath: string) => invoke(IPC_CHANNELS.FILES_READ, projectId, relativePath),
+  writeProjectFile: (projectId: string, relativePath: string, contents: string) =>
+    invoke(IPC_CHANNELS.FILES_WRITE, projectId, relativePath, contents),
   checkJava: (projectId: string) => invoke(IPC_CHANNELS.JAVA_CHECK, projectId),
   runBuild: (projectId: string, task?: 'build' | 'runClient') => invoke(IPC_CHANNELS.BUILD_RUN, projectId, task ?? 'build'),
   cancelBuild: () => invoke(IPC_CHANNELS.BUILD_CANCEL),
   exportSourceZip: (projectId: string) => invoke(IPC_CHANNELS.EXPORT_SOURCE, projectId),
   exportBuiltJar: (projectId: string) => invoke(IPC_CHANNELS.EXPORT_JAR, projectId),
+  exportResourcePack: (projectId: string) => invoke(IPC_CHANNELS.EXPORT_PACK, projectId),
+  getTexture: (projectId: string, itemId: string) => invoke(IPC_CHANNELS.TEXTURE_GET, projectId, itemId),
+  saveTexture: (input: SaveTextureInput) => invoke(IPC_CHANNELS.TEXTURE_SAVE, input),
+  suggestTexturePalette: (projectId: string, prompt?: string) => invoke(IPC_CHANNELS.TEXTURE_PALETTE, projectId, prompt),
+  listEvidence: () => invoke(IPC_CHANNELS.EVIDENCE_LIST),
+  recordEvidence: (input: RecordEvidenceInput) => invoke(IPC_CHANNELS.EVIDENCE_RECORD, input),
   onGenerationProgress: (handler: (event: GenerationProgress) => void) => {
     const listener = (_event: unknown, payload: GenerationProgress): void => handler(payload)
     ipcRenderer.on(IPC_EVENTS.GENERATION_PROGRESS, listener)

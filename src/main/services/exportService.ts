@@ -1,14 +1,17 @@
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AppError } from '../../shared/errors'
-import type { PlatformId } from '../../shared/types'
+import type { ProjectSpec } from '../../shared/spec'
+import type { PlatformId, ProjectManifest } from '../../shared/types'
+import { planStandaloneResourcePack, resourcePackClientNote } from '../codegen/pack/planner'
+import { writePlannedFiles } from './filePlan'
 import { assertInsideRoot, resolveProjectFile, splitRelativePath } from './pathSafety'
 import { writeZipFile, type ZipEntry } from './zip'
 
 const SKIP_DIRS = new Set(['.gradle', 'build', 'run', 'out', 'node_modules', '.idea'])
 
 export interface ExportResult {
-  kind: 'source-zip' | 'jar'
+  kind: 'source-zip' | 'jar' | 'resource-pack'
   destPath: string
   fileCount: number
   message: string
@@ -148,5 +151,49 @@ export async function exportBuiltJar(
     destPath,
     fileCount: 1,
     message: `Copied ${path.basename(source)} to ${destPath}.`
+  }
+}
+
+export async function exportResourcePackZip(
+  projectsRoot: string,
+  projectDirName: string,
+  manifest: ProjectManifest,
+  spec: ProjectSpec,
+  textures: Record<string, Buffer>,
+  destPath: string
+): Promise<ExportResult> {
+  if (!destPath.toLowerCase().endsWith('.zip')) {
+    throw new AppError({
+      code: 'EXPORT_FAILED',
+      message: 'Resource-pack export must be a .zip file.',
+      action: 'Choose a destination ending in .zip.'
+    })
+  }
+  if (destPath.includes('\0')) {
+    throw new AppError({
+      code: 'PATH_ESCAPE',
+      message: 'Export destination contains a null byte.',
+      action: 'Choose a different save location.'
+    })
+  }
+  const planned = planStandaloneResourcePack(manifest, spec, textures)
+  await writePlannedFiles(
+    projectsRoot,
+    projectDirName,
+    planned.map((file) => ({
+      ...file,
+      relativePath: file.relativePath === 'pack.mcmeta' ? 'resource-pack/pack.mcmeta' : `resource-pack/${file.relativePath}`
+    }))
+  )
+  const entries: ZipEntry[] = planned.map((file) => ({
+    name: file.relativePath,
+    data: typeof file.contents === 'string' ? Buffer.from(file.contents, 'utf8') : file.contents
+  }))
+  await writeZipFile(destPath, entries)
+  return {
+    kind: 'resource-pack',
+    destPath,
+    fileCount: entries.length,
+    message: `Wrote ${entries.length} pack files to ${destPath}. ${resourcePackClientNote(manifest.platform)}`
   }
 }

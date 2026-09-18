@@ -26,6 +26,8 @@ describe('generated path safety', () => {
   it('only allowlists trusted output paths', () => {
     expect(isTrustedOutputPath('build.gradle')).toBe(true)
     expect(isTrustedOutputPath('src/main/java/local/craftstudio/x/X.java')).toBe(true)
+    expect(isTrustedOutputPath('craftstudio/textures/demo.png')).toBe(true)
+    expect(isTrustedOutputPath('src/main/resources/META-INF/neoforge.mods.toml')).toBe(true)
     expect(isTrustedOutputPath('../craftstudio.project.json')).toBe(false)
     expect(isTrustedOutputPath('evil.sh')).toBe(false)
   })

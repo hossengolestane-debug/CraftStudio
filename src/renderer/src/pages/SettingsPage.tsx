@@ -184,7 +184,7 @@ export function SettingsPage({
             />
             <span>
               I have read the Minecraft EULA and accept it for optional developer launches on this machine. I understand
-              compile success is not a Tested compatibility row.
+              compile success is not a Tested compatibility row. Tested requires a recorded runtime evidence entry.
             </span>
           </label>
           <p className="text-sm text-muted">

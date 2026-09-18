@@ -144,9 +144,8 @@ export function DesignGenerate({
         <h2 className="text-lg font-semibold">Generate specification</h2>
         {!codegenReady ? (
           <p>
-            Phase 3 codegen is Fabric (1.21 / 1.21.1 / 1.21.2 / 1.21.4 / 1.21.8) and Paper (1.21 / 1.21.1 / 1.21.4 /
-            1.21.8). This {project.manifest.platform} {project.manifest.minecraftVersion} project cannot emit Gradle
-            files. The adapter will not pretend otherwise.
+            Phase 4 codegen is Fabric 1.21.x, Paper 1.21.x, and NeoForge 1.21.1. This {project.manifest.platform}{' '}
+            {project.manifest.minecraftVersion} project cannot emit Gradle files. The adapter will not pretend otherwise.
             {project.manifest.platform === 'spigot'
               ? ' Spigot is not inferred from Paper success.'
               : ''}
@@ -155,8 +154,8 @@ export function DesignGenerate({
           <>
             {paperLimits ? (
               <p className="text-sm">
-                Paper plugins cannot register new client item types. Generated items are vanilla paper with a name and
-                persistent data. Resource-pack export is not implemented.
+                Paper plugins cannot register new client item types. Generated items are vanilla paper with PDC and
+                CustomModelData. Clients must install the resource pack from Export.
               </p>
             ) : null}
             <Field
