@@ -43,6 +43,9 @@ export function adaptersForKind(kind: ProjectKind): PlatformAdapter[] {
 export function describeCapabilityGap(adapter: PlatformAdapter, feature: keyof PlatformAdapter['capabilities']): string {
   const level = adapter.capabilities[feature]
   if (level === 'supported') {
+    if (adapter.id === 'fabric' && feature === 'gradleProject') {
+      return 'Fabric Phase 2 emits a real Gradle project from a validated spec for Minecraft 1.21 and 1.21.1.'
+    }
     return `${adapter.displayName} can implement ${feature} in a later generation phase.`
   }
   if (level === 'limited') {

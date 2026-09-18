@@ -35,9 +35,9 @@ describe('adapter registry', () => {
       expect(adapter.supportedVersions.length).toBeGreaterThan(0)
       expect(adapter.capabilities).toBeTruthy()
       expect(adapter.javaRequirements.minVersion).toBeGreaterThan(0)
-      expect(adapter.templates.every((template) => template.status === 'stub')).toBe(true)
+      expect(adapter.templates.length).toBeGreaterThan(0)
       expect(adapter.validationRules.length).toBeGreaterThan(0)
-      expect(adapter.testProcedures.every((procedure) => procedure.status === 'stub')).toBe(true)
+      expect(adapter.testProcedures.length).toBeGreaterThan(0)
     }
   })
 

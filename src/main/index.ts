@@ -2,6 +2,8 @@ import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { BrowserWindow, app, shell } from 'electron'
 import { registerIpc } from './ipc'
+import { GenerationService } from './services/generationService'
+import { GradleService } from './services/gradleService'
 import { OllamaService } from './services/ollamaService'
 import { ProjectService } from './services/projectService'
 import { SettingsService } from './services/settingsService'
@@ -57,7 +59,9 @@ app.whenReady().then(() => {
   const settings = new SettingsService({ userDataPath: app.getPath('userData') })
   const projects = new ProjectService(settings)
   const ollama = new OllamaService()
-  registerIpc({ settings, projects, ollama })
+  const generation = new GenerationService(projects, settings, ollama)
+  const gradle = new GradleService()
+  registerIpc({ settings, projects, ollama, generation, gradle })
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

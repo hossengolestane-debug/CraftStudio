@@ -6,15 +6,16 @@ Desktop app that helps beginners create **Minecraft Java Edition** mods and serv
 | --- | --- |
 | Fabric, NeoForge, Forge | Paper, Spigot |
 
-This repository currently implements **Phase 1**: a real Electron shell, local project files, adapter/compatibility scaffolding, and an honest Ollama connection check. It does **not** generate Gradle projects, Java sources, textures, or Minecraft test runs.
+**Phase 2** is implemented: a user can create a Fabric 1.21 / 1.21.1 project, describe a simple item, get a Zod-validated spec, and emit a real Gradle tree from trusted templates. Other adapters stay honest stubs.
 
 ## Requirements
 
 - Node.js 20.19+ or 22.12+
 - npm 10+
-- Windows, macOS, or Linux (docs below are Windows-first; the code is portable)
+- JDK 21 on PATH to run `./gradlew build` (generation still works without it)
+- Windows, macOS, or Linux (docs are Windows-first; the code is portable)
 
-Optional: [Ollama](https://ollama.com) running locally at `http://localhost:11434`.
+Optional: [Ollama](https://ollama.com) at `http://localhost:11434` for requests templates cannot express. Simple items generate **without** Ollama.
 
 ## How to run
 
@@ -23,77 +24,60 @@ npm install
 npm run dev
 ```
 
-`npm run dev` starts Vite and launches the Electron window (main + renderer).
-
-Production compile (main, preload, and renderer):
-
 ```bash
 npm run build
 npm run preview
-```
-
-Tests and lint:
-
-```bash
 npm test
 npm run lint
 npm run typecheck
 ```
 
-On some Linux containers Electron needs extra Chromium flags (`no-sandbox`, `no-zygote`). Set:
+On some Linux containers:
 
 ```bash
-# PowerShell
-$env:CRAFTSTUDIO_NO_SANDBOX="1"; npm run dev
-
-# bash
 CRAFTSTUDIO_NO_SANDBOX=1 npm run dev
 ```
 
-`CI=true` enables the same flags. This is the OS Chromium sandbox, not the preload bridge (`nodeIntegration` stays off).
+## Vertical slice (Phase 2)
 
-## What Phase 1 does
+1. Create a **Fabric** project on **Minecraft 1.21 or 1.21.1**.
+2. Open **Design**. Describe an item (or keep the project description).
+3. Click **Generate specification** (Auto or Template only).
+4. Review the spec. Click **Apply files**.
+5. Open **Code** to read the tree. Open **Test** to run `./gradlew build` if Java 21 is installed.
 
-- Create, list, open, rename, and delete **real folders** under a configurable projects root
-- Write `craftstudio.project.json` (see [docs/PROJECT_MANIFEST.md](docs/PROJECT_MANIFEST.md))
-- Progressive create wizard: type → platform & version → describe → review → build/test & export stubs
-- Compatibility badges: **Experimental** or **Unsupported** only (nothing is Tested until a Minecraft build is actually verified)
-- Settings JSON: projects path, Ollama endpoint, last opened project
-- Live Ollama check via `GET /api/tags` with timeout and cancel — no cloud fallback
-- Disabled Assets / Code / Test / Export surfaces that never fake success
+Trusted templates emit Gradle, `fabric.mod.json`, a `ModInitializer`, lang, a placeholder item model, and optional shapeless recipes. Ollama may only propose spec JSON. That JSON is independently validated; invalid output is repaired at most a few times, then the template spec is kept. **Nothing is written from unvalidated model text.**
 
 ## Architecture
 
 ```text
-src/main/          Electron main process (Node services + IPC handlers)
-src/preload/       Restricted contextBridge (nodeIntegration OFF, contextIsolation ON)
-src/renderer/      React + TypeScript + Tailwind UI
-src/shared/        Manifest, adapters, compatibility registry (no Node fs)
+src/main/          Electron main (projects, Ollama, generation, Gradle)
+src/main/codegen/  Fabric templates + vendored Gradle wrapper
+src/preload/       Restricted contextBridge
+src/renderer/      React UI
+src/shared/        Manifest, Zod spec, adapters, compatibility
 ```
-
-The renderer never talks to the filesystem or Ollama directly. It calls a typed `window.craftstudio` API exposed by the preload script.
 
 | Service | Responsibility |
 | --- | --- |
-| `SettingsService` | `<userData>/settings.json` |
-| `ProjectService` | Project folders + manifests + create-time snapshots |
-| `OllamaService` | Local `/api/tags` with `AbortController` |
-| Path safety | Reject traversal and writes outside the projects root |
+| `ProjectService` | Folders + manifests |
+| `GenerationService` | Template infer → optional Ollama → Zod → apply |
+| `OllamaService` | `/api/tags` and streamed `/api/chat` |
+| Path safety | Projects root **and** the open project folder |
+| `GradleService` | Allowlisted `gradlew build --no-daemon --stacktrace` only |
 
-Default projects root: `<userData>/CraftStudioProjects`  
-Home alternative: `~/CraftStudioProjects`
+Default projects root: `<userData>/CraftStudioProjects`
 
-Pinned stack (verified against current npm peer ranges before install):
+Pinned app stack: Electron 39, electron-vite 5, Vite 7, React 19, TypeScript 5.9, Tailwind 4, Zod 3, Vitest 3.
 
-- Electron 39 + electron-vite 5 + Vite 7
-- React 19 + TypeScript 5.9
-- Tailwind CSS 4
-- Vitest 3
+Fabric pins (from [fabricmc.net/develop](https://fabricmc.net/develop/) / example-mod era versions): Loom 1.9.2, Yarn, Loader 0.16.10, Fabric API matching 1.21 / 1.21.1, Gradle 8.11.1, Java 21. Yarn is used so generated Java matches the Fabric wiki item tutorial.
 
-## Phase 1 scope (honest)
+## Honesty
 
-**In:** runnable app, UI shell, local projects, wizard persistence, adapter stubs, compatibility registry, Ollama detection, tests, docs.
+- NeoForge, Forge, Paper, Spigot: no Gradle emission
+- Fabric versions other than 1.21 / 1.21.1: no codegen
+- No Minecraft `runClient`, no texture editor, no mob/GUI generators
+- Compatibility rows are still **not Tested** until a Minecraft client run is verified
+- Model output cannot write outside the project or run a shell
 
-**Out:** structured LLM generation, Gradle emission, Minecraft launch, Monaco, texture editor, export packaging.
-
-See [PHASE1.md](PHASE1.md) for what was tested and the recommended Phase 2 path.
+See [PHASE1.md](PHASE1.md) and [PHASE2.md](PHASE2.md).

@@ -248,8 +248,8 @@ export function CreateWizard({
             <dd>{description.trim() || '—'}</dd>
           </dl>
           <p className="text-sm text-muted">
-            Create writes `craftstudio.project.json`, a README, and a create-time snapshot. It does not generate
-            Gradle or Java yet.
+            Create writes `craftstudio.project.json`, a README, and a create-time snapshot. Open Design next to
+            generate a Fabric Gradle project from a validated spec (1.21 / 1.21.1).
           </p>
         </Card>
       ) : null}
@@ -268,11 +268,11 @@ export function CreateWizard({
             <div className="border border-line p-4">
               <h3 className="font-semibold">Build & Test</h3>
               <p className="mt-2 text-sm text-muted">
-                Coming in a later phase. Gradle generation and Minecraft launches are not implemented. This button
-                will not pretend to succeed.
+                After you generate files in Design, the Test tab can run a real `./gradlew build` for Fabric 1.21 /
+                1.21.1. This wizard step does not start a build and will not fake success.
               </p>
               <Button className="mt-3" disabled>
-                Build & Test (Phase 3)
+                Build from wizard (use Test tab)
               </Button>
             </div>
             <div className="border border-line p-4">

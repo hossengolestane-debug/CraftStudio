@@ -15,7 +15,7 @@ export const FabricAdapter: PlatformAdapter = {
     worldgen: 'supported',
     serverCommands: 'supported',
     textures: 'supported',
-    gradleProject: 'unsupported'
+    gradleProject: 'supported'
   },
   javaRequirements: {
     minVersion: 17,
@@ -24,10 +24,10 @@ export const FabricAdapter: PlatformAdapter = {
   },
   templates: [
     {
-      id: 'fabric-gradle-stub',
-      displayName: 'Fabric Gradle project',
-      description: 'Real Gradle emission is not implemented in Phase 1.',
-      status: 'stub'
+      id: 'fabric-item-gradle',
+      displayName: 'Fabric Gradle + custom item',
+      description: 'Trusted Loom/Yarn templates for Minecraft 1.21 and 1.21.1. Emits a real Gradle tree from a validated spec.',
+      status: 'available'
     }
   ],
   validationRules: [
@@ -43,6 +43,12 @@ export const FabricAdapter: PlatformAdapter = {
     }
   ],
   testProcedures: [
+    {
+      id: 'fabric-gradle-build',
+      displayName: 'Gradle build',
+      description: 'Phase 2 runs `./gradlew build` for Fabric 1.21/1.21.1 only. runClient is still Phase 3.',
+      status: 'available'
+    },
     {
       id: 'fabric-client-run',
       displayName: 'Run client via Gradle',

@@ -44,8 +44,7 @@ function unavailable(endpoint: string, _details: string, cancelled = false): Oll
     models: [],
     message: 'Ollama is not reachable at this endpoint.',
     recovery:
-      'Start Ollama locally, confirm the endpoint in Settings, and try again. CraftStudio does not fall back to any cloud model host.',
-    // details are not part of status; callers can use message + recovery
+      'Start Ollama locally, confirm the endpoint in Settings, and try again. CraftStudio does not fall back to any cloud model host.'
   }
 }
 
@@ -76,6 +75,61 @@ function parseModels(payload: unknown): OllamaModel[] {
   return parsed
 }
 
+export interface ChatJsonOptions {
+  endpoint: string
+  model: string
+  messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
+  timeoutMs: number
+  numPredict: number
+  numCtx: number
+  format?: Record<string, unknown> | 'json'
+  onChunk?: (text: string) => void
+}
+
+export async function readOllamaStream(
+  response: Response,
+  onChunk?: (text: string) => void,
+  signal?: AbortSignal
+): Promise<string> {
+  if (!response.body) {
+    return await response.text()
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let content = ''
+  while (true) {
+    if (signal?.aborted) {
+      throw new DOMException('The Ollama request was cancelled.', 'AbortError')
+    }
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) {
+        continue
+      }
+      try {
+        const parsed = JSON.parse(trimmed) as { message?: { content?: string }; response?: string }
+        const piece = parsed.message?.content ?? parsed.response ?? ''
+        if (piece) {
+          content += piece
+          onChunk?.(piece)
+        }
+      } catch {
+        content += trimmed
+        onChunk?.(trimmed)
+      }
+    }
+  }
+  return content
+}
+
 export class OllamaService {
   private controller: AbortController | null = null
 
@@ -89,7 +143,6 @@ export class OllamaService {
     this.cancel()
     const controller = new AbortController()
     this.controller = controller
-
     const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
     try {
@@ -119,8 +172,8 @@ export class OllamaService {
             : 'Connected, but no models are installed yet.',
         recovery:
           models.length > 0
-            ? 'Generation is not implemented in Phase 1. Installed models are listed only.'
-            : 'Pull a model with `ollama pull <name>` in a terminal. CraftStudio will not download models for you in Phase 1.'
+            ? 'Pick a local model in Settings or Design. CraftStudio does not fall back to any cloud host.'
+            : 'Pull a model with `ollama pull <name>` in a terminal. CraftStudio will not download models for you.'
       }
     } catch (error) {
       const cancelled = controller.signal.aborted
@@ -128,11 +181,7 @@ export class OllamaService {
       if (cancelled || name === 'AbortError') {
         return unavailable(normalized, 'aborted', true)
       }
-
-      return unavailable(
-        normalized,
-        error instanceof Error ? error.stack ?? error.message : String(error)
-      )
+      return unavailable(normalized, error instanceof Error ? error.stack ?? error.message : String(error))
     } finally {
       clearTimeout(timeout)
       if (this.controller === controller) {
@@ -140,11 +189,74 @@ export class OllamaService {
       }
     }
   }
-}
 
-export const GENERATION_STUB = {
-  available: false as const,
-  phase: 'Phase 2' as const,
-  message:
-    'Structured Ollama generation is not implemented in Phase 1. The app only checks /api/tags and lists local models.'
+  async chatJson(options: ChatJsonOptions): Promise<string> {
+    const normalized = normalizeOllamaEndpoint(options.endpoint)
+    this.cancel()
+    const controller = new AbortController()
+    this.controller = controller
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs)
+
+    try {
+      const response = await fetch(`${normalized}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: options.model,
+          stream: true,
+          format: options.format ?? 'json',
+          options: {
+            num_predict: options.numPredict,
+            num_ctx: options.numCtx,
+            temperature: 0.1
+          },
+          messages: options.messages
+        })
+      })
+
+      if (!response.ok) {
+        throw new AppError({
+          code: 'OLLAMA_UNAVAILABLE',
+          message: `Ollama chat returned HTTP ${response.status}.`,
+          action: 'Confirm the local model name and that Ollama is running. There is no cloud fallback.',
+          details: await response.text().catch(() => '')
+        })
+      }
+
+      const text = await readOllamaStream(response, options.onChunk, controller.signal)
+      if (!text.trim()) {
+        throw new AppError({
+          code: 'GENERATION_FAILED',
+          message: 'Ollama returned an empty generation.',
+          action: 'Try another local model or generate from the trusted template only.'
+        })
+      }
+      return text
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error
+      }
+      const cancelled = controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')
+      if (cancelled) {
+        throw new AppError({
+          code: 'GENERATION_CANCELLED',
+          message: 'Generation was cancelled or timed out.',
+          action: 'Run generate again, raise the timeout in Settings, or use template-only generation.'
+        })
+      }
+      throw new AppError({
+        code: 'OLLAMA_UNAVAILABLE',
+        message: 'Ollama is not reachable for generation.',
+        action:
+          'Start Ollama locally or use “Generate from template” for a simple item. CraftStudio does not fall back to the cloud.',
+        details: error instanceof Error ? error.stack ?? error.message : String(error)
+      })
+    } finally {
+      clearTimeout(timeout)
+      if (this.controller === controller) {
+        this.controller = null
+      }
+    }
+  }
 }

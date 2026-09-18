@@ -132,6 +132,57 @@ export function assertInsideRoot(root: string, candidate: string): string {
   return resolvedCandidate
 }
 
+export function splitRelativePath(relativePath: string): string[] {
+  if (typeof relativePath !== 'string' || relativePath.trim().length === 0) {
+    throw new AppError({
+      code: 'PATH_ESCAPE',
+      message: 'Generated path is empty.',
+      action: 'Only known template paths are written.'
+    })
+  }
+  if (relativePath.includes('\0')) {
+    throw new AppError({
+      code: 'PATH_ESCAPE',
+      message: 'Generated path contains a null byte.',
+      action: 'Model output cannot choose file paths.'
+    })
+  }
+  if (relativePath.startsWith('/') || relativePath.startsWith('\\') || /^[a-zA-Z]:[\\/]/.test(relativePath)) {
+    throw new AppError({
+      code: 'PATH_ESCAPE',
+      message: 'Generated path cannot be absolute.',
+      action: 'Files are written only inside the open project folder.',
+      details: relativePath
+    })
+  }
+  const normalized = relativePath.replace(/\\/g, '/')
+  if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized)) {
+    throw new AppError({
+      code: 'PATH_ESCAPE',
+      message: 'Generated path cannot be absolute.',
+      action: 'Files are written only inside the open project folder.',
+      details: relativePath
+    })
+  }
+  const segments = normalized.split('/').filter((part) => part.length > 0)
+  if (segments.length === 0) {
+    throw new AppError({
+      code: 'PATH_ESCAPE',
+      message: 'Generated path has no segments.',
+      action: 'Use a project-relative file path.'
+    })
+  }
+  return segments.map((segment) => assertSafeSegment(segment, 'generated path segment'))
+}
+
+export function resolveProjectFile(projectsRoot: string, projectDirName: string, relativePath: string): string {
+  const projectRoot = resolveContainedPath(projectsRoot, projectDirName)
+  const segments = splitRelativePath(relativePath)
+  const target = resolveContainedPath(projectsRoot, projectDirName, ...segments)
+  assertInsideRoot(projectRoot, target)
+  return target
+}
+
 export function toProjectDirectoryName(name: string, id: string): string {
   const slug = name
     .toLowerCase()

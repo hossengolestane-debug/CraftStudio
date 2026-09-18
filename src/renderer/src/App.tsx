@@ -195,6 +195,7 @@ export default function App() {
             project={openProject}
             tab={workspaceTab}
             adapters={adapters}
+            settings={settings}
             onSave={async (id, input) => {
               const record = await api.updateProject(id, input)
               setOpenProject(record)

@@ -3,7 +3,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { AppError, toAppError } from '../../shared/errors'
 import {
+  DEFAULT_MAX_REPAIR_ATTEMPTS,
   DEFAULT_OLLAMA_ENDPOINT,
+  DEFAULT_OLLAMA_GENERATE_TIMEOUT_MS,
+  DEFAULT_OLLAMA_NUM_CTX,
+  DEFAULT_OLLAMA_NUM_PREDICT,
   DEFAULT_OLLAMA_TIMEOUT_MS,
   SETTINGS_SCHEMA_VERSION,
   type AppSettings,
@@ -77,11 +81,24 @@ function validateSettings(value: unknown, fallbackProjectsPath: string): AppSett
         ? value.lastOpenedProjectId
         : null
 
+  const ollamaModel =
+    typeof value.ollamaModel === 'string' && value.ollamaModel.trim().length > 0
+      ? value.ollamaModel.trim()
+      : null
+
+  const clamp = (raw: unknown, fallback: number, min: number, max: number): number =>
+    typeof raw === 'number' && Number.isFinite(raw) && raw >= min && raw <= max ? Math.round(raw) : fallback
+
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     projectsPath,
     ollamaEndpoint,
     ollamaTimeoutMs,
+    ollamaModel,
+    ollamaGenerateTimeoutMs: clamp(value.ollamaGenerateTimeoutMs, DEFAULT_OLLAMA_GENERATE_TIMEOUT_MS, 5000, 600000),
+    ollamaNumPredict: clamp(value.ollamaNumPredict, DEFAULT_OLLAMA_NUM_PREDICT, 128, 8192),
+    ollamaNumCtx: clamp(value.ollamaNumCtx, DEFAULT_OLLAMA_NUM_CTX, 512, 32768),
+    maxRepairAttempts: clamp(value.maxRepairAttempts, DEFAULT_MAX_REPAIR_ATTEMPTS, 0, 3),
     lastOpenedProjectId
   }
 }

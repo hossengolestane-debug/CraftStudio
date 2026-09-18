@@ -253,9 +253,9 @@ export class ProjectService {
       `- Minecraft: ${manifest.minecraftVersion}`,
       `- Created: ${manifest.createdAt}`,
       '',
-      'This folder was created by CraftStudio Local Phase 1.',
+      'This folder was created by CraftStudio Local.',
       'A create-time snapshot of the manifest is stored in `snapshots/created.manifest.json`.',
-      'Gradle sources, assets, and Minecraft test runs are not generated in Phase 1.',
+      'Use Design → Generate to emit a Fabric Gradle project from a validated spec (Phase 2).',
       ''
     ].join('\n')
   }

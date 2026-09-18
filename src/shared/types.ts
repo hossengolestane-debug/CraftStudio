@@ -8,10 +8,15 @@ export const COMPATIBILITY_STATUSES = ['tested', 'experimental', 'unsupported'] 
 export type CompatibilityStatus = (typeof COMPATIBILITY_STATUSES)[number]
 
 export const MANIFEST_SCHEMA_VERSION = 1
-export const SETTINGS_SCHEMA_VERSION = 1
+export const SETTINGS_SCHEMA_VERSION = 2
 export const MANIFEST_FILENAME = 'craftstudio.project.json'
+export const SPEC_FILENAME = 'craftstudio.spec.json'
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434'
 export const DEFAULT_OLLAMA_TIMEOUT_MS = 8000
+export const DEFAULT_OLLAMA_GENERATE_TIMEOUT_MS = 120000
+export const DEFAULT_OLLAMA_NUM_PREDICT = 2048
+export const DEFAULT_OLLAMA_NUM_CTX = 4096
+export const DEFAULT_MAX_REPAIR_ATTEMPTS = 2
 
 export interface ProjectFeatures {
   customItems: boolean
@@ -71,6 +76,11 @@ export interface AppSettings {
   projectsPath: string
   ollamaEndpoint: string
   ollamaTimeoutMs: number
+  ollamaModel: string | null
+  ollamaGenerateTimeoutMs: number
+  ollamaNumPredict: number
+  ollamaNumCtx: number
+  maxRepairAttempts: number
   lastOpenedProjectId: string | null
 }
 
@@ -78,6 +88,11 @@ export interface SettingsPatch {
   projectsPath?: string
   ollamaEndpoint?: string
   ollamaTimeoutMs?: number
+  ollamaModel?: string | null
+  ollamaGenerateTimeoutMs?: number
+  ollamaNumPredict?: number
+  ollamaNumCtx?: number
+  maxRepairAttempts?: number
   lastOpenedProjectId?: string | null
 }
 
@@ -127,7 +142,7 @@ export interface AdapterTemplate {
   id: string
   displayName: string
   description: string
-  status: 'stub'
+  status: 'stub' | 'available'
 }
 
 export interface ValidationRule {
@@ -140,7 +155,7 @@ export interface TestProcedure {
   id: string
   displayName: string
   description: string
-  status: 'stub'
+  status: 'stub' | 'available'
 }
 
 export interface PlatformAdapter {

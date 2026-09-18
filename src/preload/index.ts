@@ -2,17 +2,17 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { AppError, isAppErrorPayload } from '../shared/errors'
 import {
   IPC_CHANNELS,
+  IPC_EVENTS,
   type AppDefaults,
+  type BuildLogEvent,
   type CompatibilityLookupInput,
   type CraftStudioAPI,
+  type GenerateSpecInput,
+  type GenerationProgress,
   type IpcResult
 } from '../shared/ipc'
-import type {
-  CreateProjectInput,
-  PlatformId,
-  SettingsPatch,
-  UpdateProjectInput
-} from '../shared/types'
+import type { ProjectSpec } from '../shared/spec'
+import type { CreateProjectInput, PlatformId, SettingsPatch, UpdateProjectInput } from '../shared/types'
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   const result = (await ipcRenderer.invoke(channel, ...args)) as IpcResult<T>
@@ -45,7 +45,28 @@ const api: CraftStudioAPI = {
   lookupCompatibility: (input: CompatibilityLookupInput) => invoke(IPC_CHANNELS.COMPATIBILITY_LOOKUP, input),
   listCompatibility: (platform: PlatformId) => invoke(IPC_CHANNELS.COMPATIBILITY_LIST, platform),
   getAppDefaults: () => invoke<AppDefaults>(IPC_CHANNELS.APP_DEFAULTS),
-  selectDirectory: () => invoke(IPC_CHANNELS.APP_SELECT_DIRECTORY)
+  selectDirectory: () => invoke(IPC_CHANNELS.APP_SELECT_DIRECTORY),
+  getSpec: (projectId: string) => invoke(IPC_CHANNELS.SPEC_GET, projectId),
+  generateSpec: (input: GenerateSpecInput) => invoke(IPC_CHANNELS.SPEC_GENERATE, input),
+  previewApply: (projectId: string, spec: ProjectSpec) => invoke(IPC_CHANNELS.SPEC_PREVIEW, projectId, spec),
+  applySpec: (projectId: string, spec: ProjectSpec, confirmOverwrites: boolean) =>
+    invoke(IPC_CHANNELS.SPEC_APPLY, projectId, spec, confirmOverwrites),
+  cancelGeneration: () => invoke(IPC_CHANNELS.SPEC_CANCEL),
+  listProjectFiles: (projectId: string) => invoke(IPC_CHANNELS.FILES_TREE, projectId),
+  readProjectFile: (projectId: string, relativePath: string) => invoke(IPC_CHANNELS.FILES_READ, projectId, relativePath),
+  checkJava: (projectId: string) => invoke(IPC_CHANNELS.JAVA_CHECK, projectId),
+  runBuild: (projectId: string) => invoke(IPC_CHANNELS.BUILD_RUN, projectId),
+  cancelBuild: () => invoke(IPC_CHANNELS.BUILD_CANCEL),
+  onGenerationProgress: (handler: (event: GenerationProgress) => void) => {
+    const listener = (_event: unknown, payload: GenerationProgress): void => handler(payload)
+    ipcRenderer.on(IPC_EVENTS.GENERATION_PROGRESS, listener)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.GENERATION_PROGRESS, listener)
+  },
+  onBuildLog: (handler: (event: BuildLogEvent) => void) => {
+    const listener = (_event: unknown, payload: BuildLogEvent): void => handler(payload)
+    ipcRenderer.on(IPC_EVENTS.BUILD_LOG, listener)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.BUILD_LOG, listener)
+  }
 }
 
 contextBridge.exposeInMainWorld('craftstudio', api)

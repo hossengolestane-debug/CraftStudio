@@ -24,6 +24,11 @@ export function SettingsPage({
   const [projectsPath, setProjectsPath] = useState('')
   const [ollamaEndpoint, setOllamaEndpoint] = useState('')
   const [timeoutMs, setTimeoutMs] = useState('8000')
+  const [model, setModel] = useState('')
+  const [generateTimeout, setGenerateTimeout] = useState('120000')
+  const [numPredict, setNumPredict] = useState('2048')
+  const [numCtx, setNumCtx] = useState('4096')
+  const [repairs, setRepairs] = useState('2')
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [status, setStatus] = useState<OllamaStatus | null>(null)
   const [checking, setChecking] = useState(false)
@@ -39,6 +44,11 @@ export function SettingsPage({
     setProjectsPath(settings.projectsPath)
     setOllamaEndpoint(settings.ollamaEndpoint)
     setTimeoutMs(String(settings.ollamaTimeoutMs))
+    setModel(settings.ollamaModel ?? '')
+    setGenerateTimeout(String(settings.ollamaGenerateTimeoutMs))
+    setNumPredict(String(settings.ollamaNumPredict))
+    setNumCtx(String(settings.ollamaNumCtx))
+    setRepairs(String(settings.maxRepairAttempts))
   }, [settings])
 
   if (!settings || !defaults) {
@@ -111,7 +121,12 @@ export function SettingsPage({
               void onSave({
                 projectsPath,
                 ollamaEndpoint,
-                ollamaTimeoutMs: Number(timeoutMs)
+                ollamaTimeoutMs: Number(timeoutMs),
+                ollamaModel: model.trim() || null,
+                ollamaGenerateTimeoutMs: Number(generateTimeout),
+                ollamaNumPredict: Number(numPredict),
+                ollamaNumCtx: Number(numCtx),
+                maxRepairAttempts: Number(repairs)
               })
                 .then(() => setSaved(true))
                 .catch((err) => setError(asAppError(err)))
@@ -162,7 +177,8 @@ export function SettingsPage({
               </ul>
             ) : null}
             <p className="mt-3 text-sm text-muted">
-              Generation is Phase 2. This check only calls `/api/tags` and never invents a successful generation.
+              This check only calls `/api/tags`. Generation success requires a validated spec plus written files — never
+              the model saying it worked.
             </p>
           </div>
         ) : null}
@@ -180,8 +196,11 @@ export function SettingsPage({
         </button>
         {advancedOpen ? (
           <Card id={advancedId} className="mt-3 space-y-4">
+            <Field label="Preferred local model" htmlFor="ollama-model" hint="Must already be installed in Ollama.">
+              <TextInput id="ollama-model" value={model} onChange={(event) => setModel(event.target.value)} />
+            </Field>
             <Field
-              label="Ollama timeout (ms)"
+              label="Ollama check timeout (ms)"
               htmlFor="ollama-timeout"
               hint="1,000–60,000. Used for connection checks."
             >
@@ -191,6 +210,28 @@ export function SettingsPage({
                 value={timeoutMs}
                 onChange={(event) => setTimeoutMs(event.target.value)}
               />
+            </Field>
+            <Field label="Generation timeout (ms)" htmlFor="gen-timeout">
+              <TextInput
+                id="gen-timeout"
+                inputMode="numeric"
+                value={generateTimeout}
+                onChange={(event) => setGenerateTimeout(event.target.value)}
+              />
+            </Field>
+            <Field label="num_predict" htmlFor="num-predict" hint="Token cap sent to Ollama.">
+              <TextInput
+                id="num-predict"
+                inputMode="numeric"
+                value={numPredict}
+                onChange={(event) => setNumPredict(event.target.value)}
+              />
+            </Field>
+            <Field label="num_ctx" htmlFor="num-ctx">
+              <TextInput id="num-ctx" inputMode="numeric" value={numCtx} onChange={(event) => setNumCtx(event.target.value)} />
+            </Field>
+            <Field label="Max repair attempts" htmlFor="repairs" hint="0–3. Remaining problems are shown if repair fails.">
+              <TextInput id="repairs" inputMode="numeric" value={repairs} onChange={(event) => setRepairs(event.target.value)} />
             </Field>
             <p className="text-sm text-muted">Settings schema version: {settings.schemaVersion}</p>
             <p className="text-sm text-muted">
