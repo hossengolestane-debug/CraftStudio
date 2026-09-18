@@ -105,9 +105,11 @@ export function ProjectsPage({
 
       {filtered.length === 0 ? (
         <Card>
-          <p className="font-medium">No projects yet.</p>
+          <p className="font-medium">{projects.length === 0 ? 'No projects yet.' : 'No projects match this filter.'}</p>
           <p className="mt-2 text-muted">
-            Create a mod or plugin to write a real folder and `craftstudio.project.json` under your projects root.
+            {projects.length === 0
+              ? 'Create a mod or plugin to write a real folder and `craftstudio.project.json` under your projects root.'
+              : 'Clear the search box to see every local project, or open one from Recent.'}
           </p>
         </Card>
       ) : (

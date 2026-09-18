@@ -6,7 +6,8 @@ import { planPaperFiles } from '../src/main/codegen/paper/emitter'
 import { planAdapterFiles } from '../src/main/codegen/plan'
 import { AppError } from '../src/shared/errors'
 import { assessDoctor } from '../src/shared/doctor'
-import { parseProjectSpec } from '../src/shared/spec'
+import { OLLAMA_SPEC_JSON_SCHEMA, parseProjectSpec } from '../src/shared/spec'
+import { SpecHistoryStack } from '../src/shared/specHistoryStack'
 import { inferSpecFromPrompt } from '../src/shared/templateInfer'
 import { MANIFEST_SCHEMA_VERSION, type ProjectManifest } from '../src/shared/types'
 
@@ -136,6 +137,12 @@ describe('Phase 8 spec + emitters', () => {
         ]
       })
     ).toThrow(/unused/)
+    expect(() =>
+      parseProjectSpec({
+        ...phase8Spec,
+        worldgen: [{ ...phase8Spec.worldgen[0], minY: 40, maxY: -8 }]
+      })
+    ).toThrow(/maxY/)
   })
 
   it('emits Fabric worldgen, shaped recipe, loot, durability, new presets, and menu data slots', () => {
@@ -160,6 +167,10 @@ describe('Phase 8 spec + emitters', () => {
     const loot = files.find((file) => file.relativePath.endsWith('loot_table/entities/stone_mite.json'))?.contents.toString() ?? ''
     expect(loot).toContain('minecraft:entity')
     expect(loot).toContain('minecraft:iron_ingot')
+    const chest = files.find((file) => file.relativePath.endsWith('loot_table/chests/river_stones_bonus.json'))
+      ?.contents.toString() ?? ''
+    expect(chest).toContain('minecraft:chest')
+    expect(chest).toContain('river_stones:river_pick')
     const entity = files.find((file) => file.relativePath.endsWith('StoneMiteEntity.java'))?.contents.toString() ?? ''
     expect(entity).toContain('PounceAtTargetGoal')
     const follower = files.find((file) => file.relativePath.endsWith('PebblePupEntity.java'))?.contents.toString() ?? ''
@@ -185,6 +196,7 @@ describe('Phase 8 spec + emitters', () => {
       expect(files.some((file) => file.relativePath.includes('biome_modifier/iron_vein_ores.json'))).toBe(true)
       expect(files.some((file) => file.relativePath.endsWith('recipe/river_pick_shaped.json'))).toBe(true)
       expect(files.some((file) => file.relativePath.endsWith('loot_table/entities/stone_mite.json'))).toBe(true)
+      expect(files.some((file) => file.relativePath.endsWith('loot_table/chests/river_stones_bonus.json'))).toBe(true)
       const menu = files.find((file) => file.relativePath.endsWith('ExampleMenu.java'))?.contents.toString() ?? ''
       expect(menu).toContain('SimpleContainerData')
       expect(menu).toContain('addDataSlots')
@@ -216,6 +228,24 @@ describe('Phase 8 spec + emitters', () => {
     const plugin = inferSpecFromPrompt(manifestFor('paper', '1.21.1', 'plugin'), 'Add iron ore veins')
     expect(plugin.worldgen.length).toBe(0)
     expect(plugin.unsupportedRequests.some((item) => item.feature === 'worldgen')).toBe(true)
+    const paperDocs = planPaperFiles(manifestFor('paper', '1.21.1', 'plugin'), plugin)
+    const worldgenDoc = paperDocs.find((file) => file.relativePath === 'WORLDGEN.md')?.contents.toString() ?? ''
+    expect(worldgenDoc).toContain('unsupported on plugins')
+    expect(worldgenDoc).not.toContain('minecraft:ore')
+  })
+
+  it('keeps a 20-step Design undo stack and exposes Phase 8 fields to Ollama', () => {
+    const stack = new SpecHistoryStack(phase8Spec)
+    stack.set({ ...phase8Spec, displayName: 'Edited' })
+    expect(stack.canUndo).toBe(true)
+    stack.undo()
+    expect(stack.current?.displayName).toBe('River Stones')
+    stack.redo()
+    expect(stack.current?.displayName).toBe('Edited')
+    expect(OLLAMA_SPEC_JSON_SCHEMA.properties).toHaveProperty('worldgen')
+    expect(
+      (OLLAMA_SPEC_JSON_SCHEMA.properties.items as { items: { properties: Record<string, unknown> } }).items.properties
+    ).toHaveProperty('durability')
   })
 
   it('reports JDK major and wrapper failures from the doctor', () => {

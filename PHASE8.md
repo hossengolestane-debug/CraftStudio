@@ -27,7 +27,7 @@ Phase 8 keeps the Phase 1–7 Electron app and adds a trusted-template worldgen 
 
 ### Behavior presets
 - Cap: **7** presets (`MOB_PRESET_CAP`). Not a behavior tree.
-- New: `follow_player` (look-at + wander; not tameable follow-owner) and `leap_melee` (`LeapAtTargetGoal` + melee).
+- New: `follow_player` (look-at + wander; not tameable follow-owner) and `leap_melee` (Yarn `PounceAtTargetGoal`, official mappings `LeapAtTargetGoal` + melee).
 - Plugins remain vanilla disguises.
 
 ### Production polish
@@ -42,8 +42,9 @@ Phase 8 keeps the Phase 1–7 Electron app and adds a trusted-template worldgen 
 Automated:
 
 - Spec validation for durability, shaped keys, worldgen Y-range
-- Fabric / Forge / NeoForge goldens for ore JSON, shaped recipes, loot, durability/attributes, new presets, menu data slots
-- Plugin worldgen rejection + shaped recipe + death-drop listener
+- Fabric / Forge / NeoForge goldens for ore JSON, shaped recipes, entity + chest bonus loot, durability/attributes, new presets, menu data slots
+- Plugin worldgen rejection + honest WORLDGEN.md when the prompt asked for ores + shaped recipe + death-drop listener
+- Design undo stack (20 steps) and Ollama JSON schema coverage for durability / worldgen
 - Doctor JDK / wrapper / cache findings
 - Existing Phase 1–7 suites
 

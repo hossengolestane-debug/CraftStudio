@@ -126,10 +126,11 @@ export function worldgenDoc(spec: ProjectSpec, platform: 'fabric' | 'forge' | 'n
 }
 
 export function planWorldgenDocs(spec: ProjectSpec, platform: 'fabric' | 'forge' | 'neoforge' | 'plugin'): PlannedFile[] {
+  const pluginAsked = spec.unsupportedRequests.some((item) => item.feature === 'worldgen')
   if (spec.worldgen.length === 0 && platform !== 'plugin') {
     return []
   }
-  if (platform === 'plugin' && spec.worldgen.length === 0) {
+  if (platform === 'plugin' && spec.worldgen.length === 0 && !pluginAsked) {
     return []
   }
   return [

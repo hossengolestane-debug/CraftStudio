@@ -279,7 +279,9 @@ export const OLLAMA_SPEC_JSON_SCHEMA = {
           maxCount: { type: 'integer' },
           rarity: { type: 'string', enum: ['common', 'uncommon', 'rare', 'epic'] },
           modelStyle: { type: 'string', enum: ['generated', 'handheld'] },
-          layer1: { type: 'boolean' }
+          layer1: { type: 'boolean' },
+          durability: { type: 'integer' },
+          attributes: { type: 'array' }
         }
       }
     },
@@ -288,6 +290,7 @@ export const OLLAMA_SPEC_JSON_SCHEMA = {
     mobs: { type: 'array' },
     modGuis: { type: 'array' },
     pluginGuis: { type: 'array' },
+    worldgen: { type: 'array' },
     unsupportedRequests: { type: 'array' },
     source: { type: 'string', enum: ['template', 'ollama', 'merged'] },
     prompt: { type: 'string' }

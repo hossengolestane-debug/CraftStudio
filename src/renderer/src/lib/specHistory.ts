@@ -1,7 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
+import { SpecHistoryStack } from '../../../shared/specHistoryStack'
 import type { ProjectSpec } from '../../../shared/spec'
-
-const HISTORY_CAP = 20
 
 export function useSpecHistory(initial: ProjectSpec | null): {
   current: ProjectSpec | null
@@ -12,57 +11,35 @@ export function useSpecHistory(initial: ProjectSpec | null): {
   canUndo: boolean
   canRedo: boolean
 } {
-  const [current, setCurrentState] = useState<ProjectSpec | null>(initial)
-  const [canUndo, setCanUndo] = useState(false)
-  const [canRedo, setCanRedo] = useState(false)
-  const past = useRef<ProjectSpec[]>([])
-  const future = useRef<ProjectSpec[]>([])
+  const stack = useRef(new SpecHistoryStack(initial))
+  const [current, setCurrentState] = useState<ProjectSpec | null>(stack.current.current)
+  const [canUndo, setCanUndo] = useState(stack.current.canUndo)
+  const [canRedo, setCanRedo] = useState(stack.current.canRedo)
 
-  const refreshFlags = (): void => {
-    setCanUndo(past.current.length > 0)
-    setCanRedo(future.current.length > 0)
+  const refresh = (): void => {
+    setCurrentState(stack.current.current)
+    setCanUndo(stack.current.canUndo)
+    setCanRedo(stack.current.canRedo)
   }
 
   const setCurrent = useCallback((next: ProjectSpec): void => {
-    setCurrentState((prev) => {
-      if (prev) {
-        past.current = [...past.current.slice(-(HISTORY_CAP - 1)), prev]
-      }
-      future.current = []
-      return next
-    })
-    queueMicrotask(refreshFlags)
+    stack.current.set(next)
+    refresh()
   }, [])
 
   const replaceCurrent = useCallback((next: ProjectSpec | null): void => {
-    past.current = []
-    future.current = []
-    setCurrentState(next)
-    refreshFlags()
+    stack.current.replace(next)
+    refresh()
   }, [])
 
   const undo = useCallback((): void => {
-    setCurrentState((prev) => {
-      const last = past.current.pop()
-      if (!last || !prev) {
-        return prev
-      }
-      future.current.push(prev)
-      return last
-    })
-    queueMicrotask(refreshFlags)
+    stack.current.undo()
+    refresh()
   }, [])
 
   const redo = useCallback((): void => {
-    setCurrentState((prev) => {
-      const next = future.current.pop()
-      if (!next || !prev) {
-        return prev
-      }
-      past.current.push(prev)
-      return next
-    })
-    queueMicrotask(refreshFlags)
+    stack.current.redo()
+    refresh()
   }, [])
 
   return { current, setCurrent, replaceCurrent, undo, redo, canUndo, canRedo }
