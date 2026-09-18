@@ -107,7 +107,7 @@ function fabricImports(
   if (hasBlocks) {
     lines.push('import net.minecraft.block.AbstractBlock;')
     lines.push('import net.minecraft.block.Block;')
-    lines.push('import net.minecraft.block.BlockItem;')
+    lines.push('import net.minecraft.item.BlockItem;')
     lines.push('import net.minecraft.sound.BlockSoundGroup;')
     if (style === 'registry_key') {
       lines.push('import net.minecraft.registry.RegistryKey;')

@@ -43,11 +43,11 @@ Phase 9 keeps the Phase 1–8 Electron app and adds cube-all custom blocks, allo
 
 ## Live notes
 
-Recorded in this cloud environment after apply + `./gradlew build --no-daemon --stacktrace`. Compile-only remains `true`. No `craftstudio.runtime-evidence.json` was written from compile-only.
+Recorded in this cloud environment after emit + `./gradlew build --no-daemon --stacktrace`. Compile-only remains `true`. No `craftstudio.runtime-evidence.json` was written from compile-only.
 
 | Project | Result |
 | --- | --- |
-| Fabric 1.21.1 Phase 9 slice (cube-all block, mod-block ore vein, dandelion surface patch, composable goals, chest inject) | See live compile section after `./gradlew build`. |
-| Forge 1.21.1 same slice | See live compile section after `./gradlew build`. |
+| Fabric 1.21.1 Phase 9 slice (cube-all block, mod-block ore vein, dandelion surface patch, composable goals, loot-api-v2 chest inject) at `/tmp/cs-phase9-projects/fabric1211` | First compile failed (`BlockItem` is Yarn `net.minecraft.item.BlockItem`, not `net.minecraft.block.BlockItem`). After that import fix, **BUILD SUCCESSFUL** in 7s. Deprecation notes only. |
+| Forge 1.21.1 same slice at `/tmp/cs-phase9-projects/forge1211` | **BUILD SUCCESSFUL** in 16s (`AddBonusChestModifier` + cube-all block + surface-patch biome modifier). |
 
 This environment did **not** complete a Minecraft client. Compatibility stays Experimental.

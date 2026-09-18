@@ -155,6 +155,7 @@ describe('Phase 9 spec + emitters', () => {
     const main = files.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
     expect(main).toContain('RIVER_STONE_ORE_BLOCK')
     expect(main).toContain('RIVER_STONE_ORE_BLOCK_ITEM')
+    expect(main).toContain('import net.minecraft.item.BlockItem')
     expect(main).toContain('AbstractBlock.Settings.create()')
     expect(main).toContain('BlockSoundGroup.STONE')
     expect(main).toContain('LootTableEvents.MODIFY')
