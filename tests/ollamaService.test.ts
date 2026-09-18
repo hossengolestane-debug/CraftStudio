@@ -126,4 +126,52 @@ describe('ollama service', () => {
     await expect(first).rejects.toMatchObject({ code: 'GENERATION_CANCELLED' })
     expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toContain('/api/chat')
   })
+
+  it('reports GENERATION_TIMEOUT when the bounded wait expires', async () => {
+    const service = new OllamaService()
+    globalThis.fetch = vi.fn((_url: URL | RequestInfo, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const error = new Error('aborted')
+          error.name = 'AbortError'
+          reject(error)
+        })
+      })
+    }) as typeof fetch
+
+    await expect(
+      service.chatJson({
+        endpoint: 'http://localhost:11434',
+        model: 'qwen2.5-coder:7b',
+        timeoutMs: 25,
+        numPredict: 8,
+        numCtx: 512,
+        messages: [{ role: 'user', content: 'ping' }]
+      })
+    ).rejects.toMatchObject({ code: 'GENERATION_TIMEOUT' })
+  })
+
+  it('keeps GENERATION_CANCELLED distinct from timeout', async () => {
+    const service = new OllamaService()
+    globalThis.fetch = vi.fn((_url: URL | RequestInfo, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const error = new Error('aborted')
+          error.name = 'AbortError'
+          reject(error)
+        })
+      })
+    }) as typeof fetch
+
+    const pending = service.chatJson({
+      endpoint: 'http://localhost:11434',
+      model: 'qwen2.5-coder:7b',
+      timeoutMs: 30_000,
+      numPredict: 8,
+      numCtx: 512,
+      messages: [{ role: 'user', content: 'ping' }]
+    })
+    service.cancelInference()
+    await expect(pending).rejects.toMatchObject({ code: 'GENERATION_CANCELLED' })
+  })
 })

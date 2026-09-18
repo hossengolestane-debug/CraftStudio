@@ -2,7 +2,9 @@ export const OLLAMA_CHECK_TIMEOUT_CAP_MS = 5000
 export const OLLAMA_STREAM_CONTENT_CAP = 262144
 export const OLLAMA_TEST_NUM_PREDICT = 8
 export const OLLAMA_TEST_NUM_CTX = 512
-export const OLLAMA_TEST_TIMEOUT_MS = 20000
+/** Bounded model-test wait. First load of qwen2.5-coder:7b can exceed 20s; do not raise this for 14b/26b. */
+export const OLLAMA_TEST_TIMEOUT_MS = 45_000
+export const PREFERRED_LIVE_OLLAMA_MODEL = 'qwen2.5-coder:7b'
 export const OLLAMA_PROGRESS_BATCH_MS = 80
 export const OLLAMA_PROMPT_USER_CAP = 1200
 export const OLLAMA_REPAIR_ASSISTANT_CAP = 8000

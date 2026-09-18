@@ -6,7 +6,7 @@ Desktop app that helps beginners create **Minecraft Java Edition** mods and serv
 | --- | --- |
 | Fabric, NeoForge, Forge | Paper, Spigot |
 
-**Phase 10 / 1.0.2** keeps the 1.0.1 Ollama/Live Activity hotfix and makes the running build identifiable (Settings → About) plus a primary sidebar **Live Activity** item. Confirm you launched the exe whose About version is 1.0.2. See [PERF_OLLAMA_LIVE_ACTIVITY.md](PERF_OLLAMA_LIVE_ACTIVITY.md), [SMOKE.md](SMOKE.md), and [PHASE10.md](PHASE10.md).
+**Phase 10 / 1.0.3** keeps Phases 1–10 and the 1.0.1/1.0.2 Live Activity hotfix, and aligns Ollama JSON Schema with the Zod spec validator. Confirm Settings → About shows **1.0.3**. Install rebuilt Windows binaries into `E:\CraftStudio Local 1.0.3\` (keep older version folders). See [SPEC_OLLAMA_SCHEMA_FIX.md](SPEC_OLLAMA_SCHEMA_FIX.md), [PERF_OLLAMA_LIVE_ACTIVITY.md](PERF_OLLAMA_LIVE_ACTIVITY.md), [SMOKE.md](SMOKE.md), and [PHASE10.md](PHASE10.md).
 
 ## Quick start
 

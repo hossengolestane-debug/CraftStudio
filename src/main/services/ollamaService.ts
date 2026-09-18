@@ -223,6 +223,7 @@ export class OllamaService {
   private checkController: AbortController | null = null
   private inferController: AbortController | null = null
   private activeInference: OllamaInferenceState | null = null
+  private inferAbortReason: 'none' | 'timeout' | 'cancel' = 'none'
 
   constructor(private readonly onPreInference?: (diagnostic: PreInferenceDiagnostic) => void) {}
 
@@ -236,6 +237,9 @@ export class OllamaService {
   }
 
   cancelInference(): void {
+    if (this.inferAbortReason === 'none') {
+      this.inferAbortReason = 'cancel'
+    }
     this.inferController?.abort()
     this.inferController = null
     this.activeInference = null
@@ -405,13 +409,19 @@ export class OllamaService {
     }
     const requestId = options.requestId ?? randomUUID()
     const controller = new AbortController()
+    this.inferAbortReason = 'none'
     this.inferController = controller
     this.activeInference = {
       requestId,
       model: options.model,
       operation: options.operation ?? 'chat'
     }
-    const timeout = setTimeout(() => controller.abort(), options.timeoutMs)
+    const timeout = setTimeout(() => {
+      if (this.inferAbortReason === 'none') {
+        this.inferAbortReason = 'timeout'
+      }
+      controller.abort()
+    }, options.timeoutMs)
 
     try {
       const response = await fetch(`${normalized}/api/chat`, {
@@ -464,10 +474,19 @@ export class OllamaService {
       }
       const cancelled = controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')
       if (cancelled) {
+        if (this.inferAbortReason === 'timeout') {
+          throw new AppError({
+            code: 'GENERATION_TIMEOUT',
+            message: 'Generation timed out waiting for the local model.',
+            action:
+              'This is a bounded wait, not a manual cancel. First load of qwen2.5-coder:7b can take tens of seconds. Raise the generation timeout in Settings or use template-only generation. Do not switch to 14b/26b models to “fix” a timeout.'
+          })
+        }
         throw new AppError({
           code: 'GENERATION_CANCELLED',
-          message: 'Generation was cancelled or timed out.',
-          action: 'Run generate again, raise the timeout in Settings, or use template-only generation.'
+          message: 'Generation was cancelled.',
+          action:
+            'Generate again if you still want a spec. Cancel stops the CraftStudio HTTP request; Ollama may still finish server-side.'
         })
       }
       const details = error instanceof Error ? error.stack ?? error.message : String(error)

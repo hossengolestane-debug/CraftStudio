@@ -16,7 +16,8 @@ import {
   SPEC_FILENAME,
   type ProjectSpec
 } from '../../shared/spec'
-import { inferSpecFromPrompt, promptLooksComplex } from '../../shared/templateInfer'
+import { SPEC_REPAIR_CONSTRAINTS, SPEC_SYSTEM_PROMPT } from '../../shared/specPrompt'
+import { collectUnsupportedFromPrompt, inferSpecFromPrompt, promptLooksComplex } from '../../shared/templateInfer'
 import type { AppSettings, ProjectRecord } from '../../shared/types'
 import { isBuildScriptPath } from '../codegen/allowlist'
 import { attachGeneratedTextures } from '../codegen/pack/planner'
@@ -58,21 +59,14 @@ export interface ApplyResult extends ApplyPreview {
   applied: boolean
 }
 
-const SYSTEM_PROMPT = `You emit ONLY a JSON object for CraftStudio Local.
-Rules:
-- schemaVersion must be 1
-- items: 1-8 simple custom items (id lowercase [a-z0-9_])
-- recipes: shapeless or shaped; vanilla ingredients must be minecraft: ids from a small allowlist (stick, cobblestone, stone, dirt, iron_ingot, ...)
-- commands: names only; they will not be implemented
-- mobs: optional; presets expand into a capped goal list (max 5 of wander|look_player|melee|flee|avoid_player|leap|follow_look). Not a behavior tree.
-- blocks: optional cube_all blocks (id, material, hardness, dropItem self|item id)
-- worldgen: optional ore_vein or surface_patch; ore may place a spec block or vanilla ore
-- modGuis / pluginGuis: optional simple layouts (labels, buttons, slots, optional dataSlots)
-- Put dimensions, structures, and unrestricted behavior trees in unsupportedRequests
-- Never include file paths, shell commands, Gradle, or Java source
-- source must be "ollama"
-- packageName like local.craftstudio.mod_id
-- mainClass PascalCase`
+function mergeUnsupported(spec: ProjectSpec, extras: { feature: string; reason: string }[]): ProjectSpec {
+  const existing = new Set(spec.unsupportedRequests.map((item) => item.feature))
+  const added = extras.filter((item) => !existing.has(item.feature))
+  if (added.length === 0) {
+    return spec
+  }
+  return { ...spec, unsupportedRequests: [...spec.unsupportedRequests, ...added] }
+}
 
 export class GenerationService {
   private activeRequestId: string | null = null
@@ -313,7 +307,7 @@ export class GenerationService {
       numCtx: settings.ollamaNumCtx,
       temperature: 0.1,
       timeoutMs: settings.ollamaGenerateTimeoutMs,
-      format: 'json-schema'
+      format: 'craftstudio-spec-json-schema'
     }
     const persist = settings.persistFullAiLogs
     onProgress?.({
@@ -327,8 +321,8 @@ export class GenerationService {
       status: 'running',
       model,
       settings: settingsSnap,
-      messages: [
-        { role: 'system', ...previewText(SYSTEM_PROMPT, 500, persist) },
+        messages: [
+        { role: 'system', ...previewText(SPEC_SYSTEM_PROMPT, 500, persist) },
         {
           role: 'user',
           ...previewText(
@@ -371,7 +365,7 @@ export class GenerationService {
           }
         },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: SPEC_SYSTEM_PROMPT },
           {
             role: 'user',
             content: `Minecraft ${record.manifest.minecraftVersion} ${record.manifest.platform} project "${record.manifest.name}".\nUser request:\n${userPrompt}\n\nTemplate ids only (do not add file paths): ${hint}`
@@ -379,6 +373,18 @@ export class GenerationService {
         ]
       })
     } catch (error) {
+      if (error instanceof AppError && error.code === 'GENERATION_TIMEOUT') {
+        this.activity?.record({
+          channel: 'errors',
+          requestId,
+          title: 'Generation timed out.',
+          status: 'timeout',
+          model,
+          error: error.message,
+          detail: 'Bounded wait expired. This is not a manual cancel. Ollama may still be loading weights.'
+        })
+        throw error
+      }
       if (error instanceof AppError && (error.code === 'GENERATION_CANCELLED' || error.code === 'INFERENCE_BUSY')) {
         throw error
       }
@@ -404,9 +410,13 @@ export class GenerationService {
         spec: fallback,
         usedOllama: false,
         repairAttempts: 0,
-        remainingProblems: [error instanceof Error ? error.message : String(error)],
+        remainingProblems: [
+          error instanceof Error ? error.message : String(error),
+          ...collectUnsupportedFromPrompt(prompt).map((item) => `${item.feature}: ${item.reason}`),
+          'Ollama output was not applied. The trusted template is a fallback, not a completed implementation of the request.'
+        ],
         ollamaNote:
-          'Ollama did not respond. CraftStudio used trusted templates only. No cloud fallback was attempted.',
+          'Ollama did not respond. CraftStudio used trusted templates only. That is not success for unsupported features such as mace smash or life steal. No cloud fallback was attempted.',
         success: true,
         requestId
       }
@@ -435,12 +445,15 @@ export class GenerationService {
       }
       onProgress?.({ stage: 'validate', message: 'Validating the specification JSON.' })
       try {
-        const spec = parseProjectSpec({
-          ...fallback,
-          ...Object(extractJsonObject(current)),
-          source: 'merged',
-          prompt
-        })
+        const spec = mergeUnsupported(
+          parseProjectSpec({
+            ...fallback,
+            ...Object(extractJsonObject(current)),
+            source: 'merged',
+            prompt
+          }),
+          collectUnsupportedFromPrompt(prompt)
+        )
         onProgress?.({ stage: 'done', message: 'Validated specification from Ollama + schema checks.' })
         this.activity?.record({
           channel: 'results',
@@ -455,7 +468,8 @@ export class GenerationService {
           usedOllama: true,
           repairAttempts,
           remainingProblems: spec.unsupportedRequests.map((item) => `${item.feature}: ${item.reason}`),
-          ollamaNote: 'Model output was independently validated. Success is the schema, not the model saying it worked.',
+          ollamaNote:
+            'Model output was independently validated. Schema-valid is not the same as implemented mace smash, life steal, shockwaves, enchantments, or AI textures.',
           success: true,
           requestId
         }
@@ -485,19 +499,33 @@ export class GenerationService {
             timeoutMs: settings.ollamaGenerateTimeoutMs,
             numPredict: settings.ollamaNumPredict,
             numCtx: settings.ollamaNumCtx,
-            format: 'json',
+            format: OLLAMA_SPEC_JSON_SCHEMA,
             messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: SPEC_SYSTEM_PROMPT },
               { role: 'user', content: userPrompt },
               { role: 'assistant', content: current.slice(0, OLLAMA_REPAIR_ASSISTANT_CAP) },
               {
                 role: 'user',
-                content: `The spec failed validation:\n${lastError.slice(0, 1500)}\nReturn a corrected JSON object only.`
+                content: `Previous JSON (do not invent gameplay; do not drop unsupported asks — move them to unsupportedRequests):\nKeep the same request. Field-level Zod errors:\n${lastError.slice(0, 1500)}\n\n${SPEC_REPAIR_CONSTRAINTS}\nReturn a corrected JSON object only.`
               }
             ]
           })
         } catch (repairError) {
-          if (repairError instanceof AppError && repairError.code === 'GENERATION_CANCELLED') {
+          if (
+            repairError instanceof AppError &&
+            (repairError.code === 'GENERATION_CANCELLED' || repairError.code === 'GENERATION_TIMEOUT')
+          ) {
+            if (repairError.code === 'GENERATION_TIMEOUT') {
+              this.activity?.record({
+                channel: 'errors',
+                requestId,
+                title: 'Specification repair timed out.',
+                status: 'timeout',
+                model,
+                error: repairError.message,
+                detail: 'Bounded wait expired during repair. This is not a manual cancel.'
+              })
+            }
             throw repairError
           }
           lastError = repairError instanceof Error ? repairError.message : String(repairError)
@@ -523,9 +551,10 @@ export class GenerationService {
       repairAttempts,
       remainingProblems: [
         lastError || 'Model JSON never passed validation.',
-        'Trusted template spec is shown instead. Review it before applying files.'
+        ...collectUnsupportedFromPrompt(prompt).map((item) => `${item.feature}: ${item.reason}`),
+        'Trusted template spec is shown instead. This is not a completed implementation of the request. Review it before applying files.'
       ],
-      ollamaNote: `Repair budget exhausted (${attempts}). Model garbage was not written to disk.`,
+      ollamaNote: `Repair budget exhausted (${attempts}). Model garbage was not written to disk. Template fallback is not success for unsupported Legendary Mace-style features.`,
       success: true,
       requestId
     }

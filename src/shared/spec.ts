@@ -4,6 +4,7 @@ import { BLOCK_ENTRY_CAP, BLOCK_MATERIALS, BLOCK_SHAPES, derivedBlockIds } from 
 import { MOB_GOAL_CAP, MOB_GOALS, MOB_TARGETING, normalizeGoalEntry, type ResolvedMobGoal } from './goals'
 import { ITEM_ATTRIBUTE_CAP, ITEM_ATTRIBUTE_SLOTS, ITEM_ATTRIBUTES } from './itemStats'
 import { DEFAULT_MOB_SPAWN, SPAWN_BIOMES } from './spawn'
+import { normalizeSpecDraft } from './specNormalize'
 import { SPEC_FILENAME } from './types'
 import {
   isSpringFluid,
@@ -290,61 +291,200 @@ export type SpecMobGoal = (typeof MOB_GOALS)[number]
 export type SpecConfig = z.infer<typeof configSchema>
 export type SpecResolvedGoal = ResolvedMobGoal
 
-export const OLLAMA_SPEC_JSON_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: [
-    'schemaVersion',
-    'modId',
-    'displayName',
-    'description',
-    'packageName',
-    'mainClass',
-    'items',
-    'recipes',
-    'commands',
-    'unsupportedRequests',
-    'source'
-  ],
-  properties: {
-    schemaVersion: { type: 'integer', const: SPEC_SCHEMA_VERSION },
-    modId: { type: 'string' },
-    displayName: { type: 'string' },
-    description: { type: 'string' },
-    packageName: { type: 'string' },
-    mainClass: { type: 'string' },
-    items: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['id', 'displayName'],
-        properties: {
-          id: { type: 'string' },
-          displayName: { type: 'string' },
-          description: { type: 'string' },
-          maxCount: { type: 'integer' },
-          rarity: { type: 'string', enum: ['common', 'uncommon', 'rare', 'epic'] },
-          modelStyle: { type: 'string', enum: ['generated', 'handheld'] },
-          layer1: { type: 'boolean' },
-          durability: { type: 'integer' },
-          attributes: { type: 'array' }
-        }
-      }
-    },
-    blocks: { type: 'array' },
-    recipes: { type: 'array' },
-    commands: { type: 'array' },
-    mobs: { type: 'array' },
-    modGuis: { type: 'array' },
-    pluginGuis: { type: 'array' },
-    worldgen: { type: 'array' },
-    config: { type: 'object' },
-    unsupportedRequests: { type: 'array' },
-    source: { type: 'string', enum: ['template', 'ollama', 'merged'] },
-    prompt: { type: 'string' }
+function jsonEnum(values: readonly string[]): { type: 'string'; enum: string[] } {
+  return { type: 'string', enum: [...values] }
+}
+
+function jsonIdent(): Record<string, unknown> {
+  return { type: 'string', pattern: '^[a-z][a-z0-9_]{1,30}$', minLength: 2, maxLength: 31 }
+}
+
+function buildOllamaSpecJsonSchema(): Record<string, unknown> {
+  const attributeItem = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'amount'],
+    properties: {
+      id: jsonEnum(ITEM_ATTRIBUTES),
+      amount: { type: 'number', minimum: -64, maximum: 64 },
+      slot: jsonEnum(ITEM_ATTRIBUTE_SLOTS)
+    }
   }
-} as const
+  const ingredientItem = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['kind', 'id'],
+    properties: {
+      kind: jsonEnum(['vanilla', 'mod']),
+      id: { type: 'string', minLength: 3, maxLength: 64 }
+    }
+  }
+  const recipeKey = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['symbol', 'kind', 'id'],
+    properties: {
+      symbol: { type: 'string', pattern: '^[A-Z]$' },
+      kind: jsonEnum(['vanilla', 'mod']),
+      id: { type: 'string', minLength: 3, maxLength: 64 }
+    }
+  }
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['schemaVersion', 'modId', 'displayName', 'packageName', 'mainClass', 'items', 'source'],
+    properties: {
+      schemaVersion: { type: 'integer', const: SPEC_SCHEMA_VERSION },
+      modId: jsonIdent(),
+      displayName: { type: 'string', minLength: 1, maxLength: 80 },
+      description: { type: 'string', maxLength: 2000 },
+      packageName: { type: 'string' },
+      mainClass: { type: 'string' },
+      items: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 8,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'displayName'],
+          properties: {
+            id: jsonIdent(),
+            displayName: { type: 'string', minLength: 1, maxLength: 80 },
+            description: { type: 'string', maxLength: 400 },
+            maxCount: { type: 'integer', minimum: 1, maximum: 64 },
+            rarity: jsonEnum(['common', 'uncommon', 'rare', 'epic']),
+            modelStyle: jsonEnum(ITEM_MODEL_STYLES),
+            layer1: { type: 'boolean' },
+            durability: { type: 'integer', minimum: 0, maximum: 4096 },
+            attributes: { type: 'array', maxItems: ITEM_ATTRIBUTE_CAP, items: attributeItem }
+          }
+        }
+      },
+      blocks: {
+        type: 'array',
+        maxItems: BLOCK_ENTRY_CAP,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'displayName'],
+          properties: {
+            id: jsonIdent(),
+            displayName: { type: 'string', minLength: 1, maxLength: 80 },
+            material: jsonEnum(BLOCK_MATERIALS),
+            hardness: { type: 'number' },
+            resistance: { type: 'number' },
+            dropItem: { type: 'string' },
+            shape: jsonEnum(BLOCK_SHAPES),
+            slab: { type: 'boolean' },
+            stairs: { type: 'boolean' }
+          }
+        }
+      },
+      recipes: {
+        type: 'array',
+        maxItems: 8,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'type', 'resultItemId'],
+          properties: {
+            id: jsonIdent(),
+            type: jsonEnum(['shapeless', 'shaped']),
+            resultItemId: jsonIdent(),
+            resultCount: { type: 'integer', minimum: 1, maximum: 64 },
+            ingredients: { type: 'array', maxItems: 9, items: ingredientItem },
+            pattern: {
+              type: 'array',
+              maxItems: 3,
+              items: { type: 'string', pattern: '^[ A-Z#.]{1,3}$' }
+            },
+            keys: { type: 'array', maxItems: 9, items: recipeKey }
+          }
+        }
+      },
+      commands: {
+        type: 'array',
+        maxItems: 4,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['name'],
+          properties: {
+            name: jsonIdent(),
+            description: { type: 'string', maxLength: 200 },
+            permission: { type: 'string', maxLength: 80 }
+          }
+        }
+      },
+      mobs: {
+        type: 'array',
+        maxItems: 4,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'displayName'],
+          properties: {
+            id: jsonIdent(),
+            displayName: { type: 'string' },
+            health: { type: 'number' },
+            movementSpeed: { type: 'number' },
+            attackDamage: { type: 'number' },
+            preset: jsonEnum(MOB_PRESETS),
+            targeting: jsonEnum(MOB_TARGETING),
+            goals: {
+              type: 'array',
+              maxItems: MOB_GOAL_CAP,
+              items: {
+                anyOf: [
+                  jsonEnum(MOB_GOALS),
+                  {
+                    type: 'object',
+                    required: ['id'],
+                    properties: { id: jsonEnum(MOB_GOALS), priority: { type: 'integer' } }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      modGuis: { type: 'array', maxItems: 4, items: { type: 'object' } },
+      pluginGuis: { type: 'array', maxItems: 4, items: { type: 'object' } },
+      worldgen: {
+        type: 'array',
+        maxItems: WORLDGEN_ENTRY_CAP,
+        items: {
+          type: 'object',
+          required: ['id', 'block'],
+          properties: {
+            id: jsonIdent(),
+            kind: jsonEnum(WORLDGEN_KINDS),
+            block: { type: 'string' }
+          }
+        }
+      },
+      config: { type: 'object' },
+      unsupportedRequests: {
+        type: 'array',
+        maxItems: 16,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['feature', 'reason'],
+          properties: {
+            feature: { type: 'string', minLength: 1, maxLength: 80 },
+            reason: { type: 'string', minLength: 1, maxLength: 400 }
+          }
+        }
+      },
+      source: jsonEnum(['template', 'ollama', 'merged', 'editor']),
+      prompt: { type: 'string', maxLength: 4000 }
+    }
+  }
+}
+
+export const OLLAMA_SPEC_JSON_SCHEMA = buildOllamaSpecJsonSchema()
 
 export function specIssues(error: z.ZodError): string {
   return error.issues
@@ -352,8 +492,40 @@ export function specIssues(error: z.ZodError): string {
     .join('\n')
 }
 
+function noteOffAllowlistIngredients(draft: unknown): unknown {
+  if (!draft || typeof draft !== 'object' || Array.isArray(draft)) {
+    return draft
+  }
+  const record = draft as Record<string, unknown>
+  const unsupported = Array.isArray(record.unsupportedRequests)
+    ? [...(record.unsupportedRequests as { feature: string; reason: string }[])]
+    : []
+  const recipes = Array.isArray(record.recipes) ? record.recipes : []
+  for (const recipe of recipes) {
+    if (!recipe || typeof recipe !== 'object') {
+      continue
+    }
+    const rec = recipe as { id?: string; keys?: { id?: string; kind?: string }[]; ingredients?: { id?: string; kind?: string }[] }
+    const recipeId = rec.id ?? 'recipe'
+    const parts = [...(rec.keys ?? []), ...(rec.ingredients ?? [])]
+    for (const part of parts) {
+      const id = part.id ?? ''
+      if (part.kind === 'vanilla' && id.startsWith('minecraft:') && !(VANILLA_ITEMS as readonly string[]).includes(id)) {
+        const feature = `ingredient ${id}`
+        if (!unsupported.some((item) => item.feature === feature)) {
+          unsupported.push({
+            feature,
+            reason: `Recipe "${recipeId}" asked for ${id}. That id is not on the vanilla allowlist. It was not swapped for another item.`
+          })
+        }
+      }
+    }
+  }
+  return { ...record, unsupportedRequests: unsupported }
+}
+
 export function parseProjectSpec(input: unknown): ProjectSpec {
-  const parsed = projectSpecSchema.safeParse(input)
+  const parsed = projectSpecSchema.safeParse(noteOffAllowlistIngredients(normalizeSpecDraft(input)))
   if (!parsed.success) {
     throw new AppError({
       code: 'SPEC_INVALID',

@@ -90,7 +90,8 @@ export function SettingsPage({
       <Card className="space-y-2" id="about-build">
         <h2 className="text-lg font-semibold">About / Build information</h2>
         <p className="text-sm text-muted">
-          Use this to confirm you launched the 1.0.2+ binary, not an older copy left in another folder.
+          Use this to confirm you launched the 1.0.3 binary, not an older copy left in another folder. Install the rebuilt
+          portable/unpacked app into <code>E:\CraftStudio Local 1.0.3\</code> and keep older version folders.
         </p>
         {about ? (
           <dl className="space-y-1 text-sm">
@@ -281,8 +282,10 @@ export function SettingsPage({
         </div>
         <p className="text-sm text-muted">
           Check connection calls <code>/api/tags</code> only (metadata, 5s cap). It never starts inference or loads a
-          model. Test model is an explicit short ping and counts as the single active inference. Context and output
-          limits below apply only to CraftStudio requests — they do not control other programs using Ollama.
+          model. Test model is an explicit short ping (bounded 45s) and counts as the single active inference. A timeout
+          is not a cancel — Cancel inference is the only cancel path. Prefer <code>qwen2.5-coder:7b</code> for live
+          tests; do not raise waits for 14b/26b models. Context and output limits below apply only to CraftStudio
+          requests — they do not control other programs using Ollama.
         </p>
 
         <div className="border border-line p-4 space-y-2">

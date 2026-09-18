@@ -20,8 +20,40 @@ const UNSUPPORTED_PATTERNS: { pattern: RegExp; feature: string; reason: string }
     pattern: /\b(dimension|nether dimension|end dimension|custom structure|jigsaw)\b/i,
     feature: 'worldgen stack',
     reason: 'Phase 10 emits ore-vein, surface-patch, and spring features only. Dimensions and structures stay unsupported.'
+  },
+  {
+    pattern: /\b(mace|smash attack|density|breach enchantment|wind charge smash)\b/i,
+    feature: 'mace combat',
+    reason: 'CraftStudio items are generic custom items with optional attack_damage / attack_speed. 1.21 mace smash, Density, and Breach are not emitted.'
+  },
+  {
+    pattern: /\b(life ?steal|lifesteal|leech health)\b/i,
+    feature: 'life steal',
+    reason: 'No custom on-hit healing effect is generated.'
+  },
+  {
+    pattern: /\b(shockwave|quake|terrain smash|break blocks on hit)\b/i,
+    feature: 'shockwave / terrain',
+    reason: 'No area damage or terrain modification is generated.'
+  },
+  {
+    pattern: /\b(enchantment|enchanted with|custom enchant)\b/i,
+    feature: 'enchantments',
+    reason: 'Custom enchantments are not registered. This is not a completed enchantment implementation.'
+  },
+  {
+    pattern: /\b(ai texture|generated texture|paint a png|dall-e|image model)\b/i,
+    feature: 'generated textures',
+    reason: 'Ollama does not draw PNGs. Paint textures on the Assets tab.'
   }
 ]
+
+export function collectUnsupportedFromPrompt(text: string): { feature: string; reason: string }[] {
+  return UNSUPPORTED_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => ({
+    feature: entry.feature,
+    reason: entry.reason
+  }))
+}
 
 function titleCase(value: string): string {
   return value
@@ -58,10 +90,7 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
   const wantsBlock = /\b(custom block|new block|ore block|stone block|pillar|slab|stairs)\b/i.test(text)
   const wantsPillar = /\b(pillar|column|axis block|log.?shaped)\b/i.test(text)
   const wantsSlabStairs = /\b(slab|stairs|stair)\b/i.test(text)
-  const unsupportedRequests = UNSUPPORTED_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => ({
-    feature: entry.feature,
-    reason: entry.reason
-  }))
+  const unsupportedRequests = collectUnsupportedFromPrompt(text)
   if (wantsMob && (manifest.platform === 'paper' || manifest.platform === 'spigot')) {
     unsupportedRequests.push({
       feature: 'new client entity types',

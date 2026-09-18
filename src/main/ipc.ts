@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
 import { BrowserWindow, app, dialog, ipcMain } from 'electron'
-import { previewText } from '../shared/activity'
+import { activityStatusForError, previewText } from '../shared/activity'
 import { listAdapters } from '../shared/adapters/registry'
 import { listCompatibility, lookupCompatibility } from '../shared/compatibility'
 import { formatEvidenceSummary, type EvidenceDraft } from '../shared/evidence'
@@ -16,7 +16,7 @@ import {
   type RecordEvidenceInput,
   type SaveTextureInput
 } from '../shared/ipc'
-import { ACTIVITY_FLUSH_MS } from '../shared/ollamaLimits'
+import { ACTIVITY_FLUSH_MS, OLLAMA_TEST_TIMEOUT_MS } from '../shared/ollamaLimits'
 import { DEFAULT_PALETTE, paletteSuggestionSchema } from '../shared/pixelSpec'
 import { extractJsonObject, parseProjectSpec, type ProjectSpec } from '../shared/spec'
 import type { CreateProjectInput, SettingsPatch, UpdateProjectInput } from '../shared/types'
@@ -148,7 +148,7 @@ export function registerIpc(deps: {
           numPredict: 8,
           numCtx: 512,
           temperature: 0,
-          timeoutMs: 20000
+          timeoutMs: OLLAMA_TEST_TIMEOUT_MS
         },
         messages: [
           { role: 'system', content: 'Reply with the single word pong.', truncated: false },
@@ -175,13 +175,26 @@ export function registerIpc(deps: {
         })
         return result
       } catch (error) {
+        const payload = toAppError(error).toPayload()
+        const status = activityStatusForError(payload.code)
         deps.activity.record({
           channel: 'errors',
           requestId,
-          title: `Model test failed for ${tag}.`,
-          status: 'failure',
+          title:
+            status === 'timeout'
+              ? `Model test timed out for ${tag}.`
+              : status === 'cancelled'
+                ? `Model test was cancelled for ${tag}.`
+                : `Model test failed for ${tag}.`,
+          status,
           model: tag,
-          error: error instanceof Error ? error.message : String(error)
+          error: payload.message,
+          detail:
+            status === 'timeout'
+              ? 'Bounded wait expired. This is not a manual cancel. Prefer qwen2.5-coder:7b; do not raise waits for 14b/26b models.'
+              : status === 'cancelled'
+                ? 'The test HTTP request was aborted by Cancel inference.'
+                : undefined
         })
         throw error
       }

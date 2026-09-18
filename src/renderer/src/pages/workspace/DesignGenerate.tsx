@@ -377,6 +377,9 @@ export function DesignGenerate({
                 Cancel
               </Button>
             </div>
+            <p className="text-sm text-muted">
+              Cancel aborts the CraftStudio HTTP request. A timeout is a separate bounded-wait failure, not a cancel.
+            </p>
             {progress.length > 0 ? (
               <ol className="max-h-40 overflow-auto border border-line bg-[#f7f7f3] p-3 text-sm">
                 {progress.map((item, index) => (

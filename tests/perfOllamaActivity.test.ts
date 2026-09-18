@@ -153,9 +153,9 @@ describe('settings schema 4 defaults', () => {
     expect(got.activityRetentionHours).toBe(48)
   })
 
-  it('reports app version 1.0.2 from package-backed build info', () => {
-    expect(APP_VERSION).toBe('1.0.2')
-    expect(getStaticBuildInfo().version).toBe('1.0.2')
+  it('reports app version 1.0.3 from package-backed build info', () => {
+    expect(APP_VERSION).toBe('1.0.3')
+    expect(getStaticBuildInfo().version).toBe('1.0.3')
   })
 })
 

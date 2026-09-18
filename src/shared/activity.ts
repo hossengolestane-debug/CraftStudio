@@ -8,6 +8,7 @@ export const ACTIVITY_STATUSES = [
   'success',
   'failure',
   'cancelled',
+  'timeout',
   'paused-display'
 ] as const
 export type ActivityStatus = (typeof ACTIVITY_STATUSES)[number]
@@ -51,6 +52,16 @@ export interface ActivityEvent {
   exitCode?: number | null
   cancelled?: boolean
   error?: string
+}
+
+export function activityStatusForError(code: string | undefined): ActivityStatus {
+  if (code === 'GENERATION_TIMEOUT') {
+    return 'timeout'
+  }
+  if (code === 'GENERATION_CANCELLED' || code === 'OLLAMA_CANCELLED') {
+    return 'cancelled'
+  }
+  return 'failure'
 }
 
 export function redactSecrets(text: string): string {

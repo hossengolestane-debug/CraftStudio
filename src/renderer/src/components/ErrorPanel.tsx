@@ -12,6 +12,7 @@ export function ErrorPanel({ error, onDismiss }: { error: AppErrorPayload; onDis
     >
       <div className="flex items-start justify-between gap-4">
         <div>
+          <p className="text-xs font-semibold uppercase tracking-wide">{error.code}</p>
           <p className="font-semibold">{error.message}</p>
           <p className="mt-1 text-[15px]">{error.action}</p>
         </div>

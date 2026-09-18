@@ -153,7 +153,12 @@ export function LiveActivityFeed({
                     <p>
                       <span className="font-medium">{event.title}</span>{' '}
                       <span className="text-xs uppercase text-muted">{event.channel}</span>
-                      {event.status ? <span className="text-xs text-muted"> · {event.status}</span> : null}
+                      {event.status ? (
+                        <span className="text-xs text-muted">
+                          {' '}
+                          · {event.status === 'timeout' ? 'timed out (not cancelled)' : event.status}
+                        </span>
+                      ) : null}
                     </p>
                     <time className="text-xs text-muted" dateTime={event.timestamp}>
                       {event.timestamp}
