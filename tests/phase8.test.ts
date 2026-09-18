@@ -161,7 +161,7 @@ describe('Phase 8 spec + emitters', () => {
     expect(loot).toContain('minecraft:entity')
     expect(loot).toContain('minecraft:iron_ingot')
     const entity = files.find((file) => file.relativePath.endsWith('StoneMiteEntity.java'))?.contents.toString() ?? ''
-    expect(entity).toContain('LeapAtTargetGoal')
+    expect(entity).toContain('PounceAtTargetGoal')
     const follower = files.find((file) => file.relativePath.endsWith('PebblePupEntity.java'))?.contents.toString() ?? ''
     expect(follower).toContain('LookAtEntityGoal')
     const handler = files.find((file) => file.relativePath.endsWith('ExampleScreenHandler.java'))?.contents.toString() ?? ''

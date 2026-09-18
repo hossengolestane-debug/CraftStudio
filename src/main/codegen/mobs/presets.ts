@@ -37,7 +37,7 @@ export function yarnGoalBlock(mob: SpecMob): string {
 ${targeting || '    this.targetSelector.add(2, new ActiveTargetGoal<>(this, PlayerEntity.class, true));\n'}`
   }
   if (mob.preset === 'leap_melee') {
-    return `    this.goalSelector.add(1, new LeapAtTargetGoal(this, 0.4f));
+    return `    this.goalSelector.add(1, new PounceAtTargetGoal(this, 0.4f));
     this.goalSelector.add(2, new MeleeAttackGoal(this, 1.1, true));
     this.targetSelector.add(1, new RevengeGoal(this));
 ${targeting || '    this.targetSelector.add(2, new ActiveTargetGoal<>(this, PlayerEntity.class, true));\n'}`

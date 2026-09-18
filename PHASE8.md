@@ -81,4 +81,12 @@ Manual / agent: see “Live notes” after compile runs in this environment.
 
 Recorded in this cloud environment after apply + `./gradlew build --no-daemon --stacktrace`. Compile-only remains `true`. No `craftstudio.runtime-evidence.json` was written from compile-only.
 
-This environment cannot finish a Minecraft client. Compatibility stays Experimental.
+| Project | Result |
+| --- | --- |
+| Fabric 1.21.4 Phase 8 slice (durability + attribute, shaped recipe, ore vein, leap_melee + follow_player, two screens + data slot) at `/tmp/cs-phase8-projects/fabric214` | First compile failed (Yarn has `PounceAtTargetGoal`, not `LeapAtTargetGoal`). After that template fix, **BUILD SUCCESSFUL** in 7s. |
+| Forge 1.21.1 same slice at `/tmp/cs-phase8-projects/forge1211` | **BUILD SUCCESSFUL** in 10s (`LeapAtTargetGoal` is the official-mapping name). |
+| NeoForge 1.21.4 same slice at `/tmp/cs-phase8-projects/neo214` | **BUILD SUCCESSFUL** in 7s (`EventBusSubscriber.bus` deprecated warnings only). |
+| `npm run dist:linux` | Unsigned `release/CraftStudio Local-0.8.0.AppImage` (~131MB) plus `release/linux-unpacked`. Default Electron icon. Not signed. |
+| `npm run dist:mac` | electron-builder wrote an unsigned `release/mac/CraftStudio Local.app` directory on Linux and **skipped code signing** (`supported only on macOS`). This is not a notarized installer and is not a signed certificate claim. |
+
+This environment did **not** complete a Minecraft client. Compatibility stays Experimental.
