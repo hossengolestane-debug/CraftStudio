@@ -242,9 +242,10 @@ describe('Phase 8 spec + emitters', () => {
     expect(stack.current?.displayName).toBe('River Stones')
     stack.redo()
     expect(stack.current?.displayName).toBe('Edited')
-    expect(OLLAMA_SPEC_JSON_SCHEMA.properties).toHaveProperty('worldgen')
+    const schemaProperties = OLLAMA_SPEC_JSON_SCHEMA.properties as Record<string, unknown>
+    expect(schemaProperties).toHaveProperty('worldgen')
     expect(
-      (OLLAMA_SPEC_JSON_SCHEMA.properties.items as { items: { properties: Record<string, unknown> } }).items.properties
+      (schemaProperties.items as { items: { properties: Record<string, unknown> } }).items.properties
     ).toHaveProperty('durability')
   })
 

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { planForgeFiles } from '../src/main/codegen/forge/emitter'
 import { OllamaService } from '../src/main/services/ollamaService'
+import { AppError } from '../src/shared/errors'
 import { ITEM_ATTRIBUTES } from '../src/shared/itemStats'
 import { JSON_SCHEMA_CROSS_FIELD_RULES, summarizeJsonSchema } from '../src/shared/ollamaSpecSchema'
 import { OLLAMA_SPEC_JSON_SCHEMA, parseProjectSpec, projectSpecSchema } from '../src/shared/spec'
@@ -180,7 +181,7 @@ describe('Legendary Mace regression fixture', () => {
 
   it('normalizes documented aliases without swapping breeze_rod', () => {
     const normalized = normalizeSpecDraft(LEGENDARY_MACE_INVALID_OLLAMA) as {
-      items: { attributes: { id: string }[] }[]
+      items: { attributes: { id?: string }[] }[]
       recipes: { resultItemId: string; pattern: string[]; keys: { id: string }[] }[]
       commands: { name: string }[]
       unsupportedRequests: { feature: string }[]
@@ -195,7 +196,24 @@ describe('Legendary Mace regression fixture', () => {
     ])
     expect(normalized.commands[0]?.name).toBe('givemace')
     expect(normalized.unsupportedRequests[0]?.feature).toBe('life steal')
-    expect(() => parseProjectSpec(normalized)).toThrow(/allowlist/)
+    const withAllowlistedShape = {
+      ...normalized,
+      items: [
+        {
+          ...normalized.items[0],
+          attributes: normalized.items[0]!.attributes.filter((attr) => typeof attr.id === 'string')
+        }
+      ]
+    }
+    expect(() => parseProjectSpec(withAllowlistedShape)).toThrow(AppError)
+    try {
+      parseProjectSpec(withAllowlistedShape)
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError)
+      const details = error instanceof AppError ? `${error.message}\n${error.details ?? ''}` : String(error)
+      expect(details).toMatch(/allowlist/)
+      expect(details).toMatch(/breeze_rod/)
+    }
   })
 
   it('parses a corrected spec and emits Forge files without claiming mace smash', () => {

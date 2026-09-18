@@ -223,7 +223,7 @@ export class OllamaService {
   private checkController: AbortController | null = null
   private inferController: AbortController | null = null
   private activeInference: OllamaInferenceState | null = null
-  private inferAbortReason: 'none' | 'timeout' | 'cancel' = 'none'
+  private inferAbortReason = 'none'
 
   constructor(private readonly onPreInference?: (diagnostic: PreInferenceDiagnostic) => void) {}
 
@@ -410,6 +410,7 @@ export class OllamaService {
     const requestId = options.requestId ?? randomUUID()
     const controller = new AbortController()
     this.inferAbortReason = 'none'
+    let timedOut = false
     this.inferController = controller
     this.activeInference = {
       requestId,
@@ -417,6 +418,7 @@ export class OllamaService {
       operation: options.operation ?? 'chat'
     }
     const timeout = setTimeout(() => {
+      timedOut = true
       if (this.inferAbortReason === 'none') {
         this.inferAbortReason = 'timeout'
       }
@@ -474,7 +476,8 @@ export class OllamaService {
       }
       const cancelled = controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')
       if (cancelled) {
-        if (this.inferAbortReason === 'timeout') {
+        const userCancelled = this.inferAbortReason === 'cancel'
+        if (timedOut && !userCancelled) {
           throw new AppError({
             code: 'GENERATION_TIMEOUT',
             message: 'Generation timed out waiting for the local model.',

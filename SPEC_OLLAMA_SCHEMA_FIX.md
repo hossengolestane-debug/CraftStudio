@@ -45,7 +45,7 @@ Observed Zod failures from Ollama output:
 | Unit: `/api/chat` body `format` is the complete object, not `'json-schema'` | Run with `npm test` |
 | Unit: timeout vs cancel error codes | Run with `npm test` |
 | Forge emitter golden for corrected Legendary Mace spec | Run with `npm test` (item + attributes + shaped recipe + stub command; no smash/lifesteal/shockwave Java) |
-| `npm test` / lint / typecheck / `electron-vite build` | Run on this revision before packaging |
+| `npm test` / lint / typecheck / `electron-vite build` | **PASS** — 146 tests, eslint clean, `tsc` both projects, `electron-vite build` wrote `out/` and `out/build-info.json` (1.0.3) |
 | Live Ollama (`qwen2.5-coder:7b`) | **NOT RUN** — this cloud VM has no Ollama / GPU |
 | Minecraft client / `runClient` | **NOT RUN** |
 
