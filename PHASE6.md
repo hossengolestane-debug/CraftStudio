@@ -75,7 +75,16 @@ Manual / agent:
 
 ## Live notes
 
-Recorded after apply + `./gradlew build --no-daemon --stacktrace` in this environment when feasible. Compile-only remains `true`. No `craftstudio.runtime-evidence.json` is written from this VM.
+Recorded in this cloud environment after apply + `./gradlew build --no-daemon --stacktrace`. Compile-only remains `true`. No `craftstudio.runtime-evidence.json` was written.
+
+| Project | Result |
+| --- | --- |
+| NeoForge 1.21.4 item + `avoid_players` mob + preview menu at `/tmp/cs-phase6-projects/glow-mite-neo214` | First compile failed (`FeatureFlags.VANILLA` is a FeatureFlag on this pin). After switching to `IMenuTypeExtension.create`, **BUILD SUCCESSFUL** in 5s. |
+| NeoForge 1.21.8 same slice at `/tmp/cs-phase6-projects/glow-mite-neo218` | First compile failed (`EventBusSubscriber.bus` removed). After omitting `bus=`, **BUILD SUCCESSFUL** in 6s. |
+| Forge 1.21.1 item + mob + menu at `/tmp/cs-phase6-projects/glow-mite-forge` | **BUILD SUCCESSFUL** in 9s. |
+| Fabric 1.21.1 item + cube renderer + preview screen at `/tmp/cs-phase6-projects/glow-mite-fabric` | **BUILD SUCCESSFUL** in 22s. |
+
+This environment did **not** complete a Minecraft client. Compatibility stays Experimental.
 
 ## Recommended Phase 7
 

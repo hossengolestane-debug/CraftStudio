@@ -15,17 +15,18 @@ export function forgeLikeMenuFields(spec: ProjectSpec, flavor: ForgeLikeFlavor):
   if (flavor === 'neoforge') {
     return `  public static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(Registries.MENU, MOD_ID);
   public static final DeferredHolder<MenuType<?>, MenuType<ExampleMenu>> EXAMPLE_MENU = MENUS.register("example_menu",
-    () -> new MenuType<>(ExampleMenu::new, FeatureFlags.VANILLA));`
+    () -> IMenuTypeExtension.create((windowId, inv, buf) -> new ExampleMenu(windowId, inv)));`
   }
   return `  public static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(ForgeRegistries.MENU_TYPES, MOD_ID);
   public static final RegistryObject<MenuType<ExampleMenu>> EXAMPLE_MENU = MENUS.register("example_menu",
-    () -> new MenuType<>(ExampleMenu::new, FeatureFlags.VANILLA));`
+    () -> IForgeMenuType.create((windowId, inv, data) -> new ExampleMenu(windowId, inv)));`
 }
 
 export function planForgeLikeMenuFiles(
   spec: ProjectSpec,
   packagePath: string,
-  flavor: ForgeLikeFlavor
+  flavor: ForgeLikeFlavor,
+  options: { omitEventBusSubscriberBus?: boolean } = {}
 ): PlannedFile[] {
   const gui = firstGui(spec)
   if (!gui) {
@@ -56,7 +57,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraft.client.gui.screens.MenuScreens;`
   const clientClass =
     flavor === 'neoforge'
-      ? `@EventBusSubscriber(modid = ${spec.mainClass}.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+      ? `@EventBusSubscriber(modid = ${spec.mainClass}.MOD_ID${options.omitEventBusSubscriberBus ? '' : ', bus = EventBusSubscriber.Bus.MOD'}, value = Dist.CLIENT)
 public final class ClientScreens {
   private ClientScreens() {}
 

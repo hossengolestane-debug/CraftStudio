@@ -132,7 +132,12 @@ describe('NeoForge adapter generation', () => {
     const java214 = v214.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
     expect(java214).toContain('ResourceKey.create')
     expect(v214.some((file) => file.relativePath.endsWith('ExampleMenu.java'))).toBe(true)
+    expect(java214).toContain('IMenuTypeExtension.create')
+    expect(java214).not.toContain('FeatureFlags.VANILLA')
     const v218 = planNeoForgeFiles({ ...manifest, minecraftVersion: '1.21.8' }, withMob)
     expect(v218.some((file) => file.relativePath.endsWith('StoneMiteEntity.java'))).toBe(true)
+    const client218 = v218.find((file) => file.relativePath.endsWith('ClientScreens.java'))?.contents.toString() ?? ''
+    expect(client218).toContain('@EventBusSubscriber')
+    expect(client218).not.toContain('EventBusSubscriber.Bus')
   })
 })

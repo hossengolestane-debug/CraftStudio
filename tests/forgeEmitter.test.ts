@@ -114,6 +114,7 @@ describe('Forge adapter generation', () => {
     expect(files.some((file) => file.relativePath.endsWith('ModScreens.java'))).toBe(false)
     const main = files.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
     expect(main).toContain('opencustommenu')
+    expect(main).toContain('IForgeMenuType.create')
     const entity = files.find((file) => file.relativePath.endsWith('StoneMiteEntity.java'))?.contents.toString() ?? ''
     expect(entity).toContain('LookAtPlayerGoal')
     expect(entity).toContain('NearestAttackableTargetGoal')

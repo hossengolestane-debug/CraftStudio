@@ -133,9 +133,9 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;` : ''}
-${spec.modGuis.length ? `import net.minecraft.world.flag.FeatureFlags;
-import net.minecraft.world.inventory.MenuType;
+${spec.modGuis.length ? `import net.minecraft.world.inventory.MenuType;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;` : ''}
 ${needsHolder ? 'import net.neoforged.neoforge.registries.DeferredHolder;' : ''}
 import net.neoforged.bus.api.IEventBus;
@@ -405,7 +405,11 @@ jar {
     })
   }
 
-  files.push(...planForgeLikeMenuFiles(spec, packagePath, 'neoforge'))
+  files.push(
+    ...planForgeLikeMenuFiles(spec, packagePath, 'neoforge', {
+      omitEventBusSubscriberBus: pins.minecraft === '1.21.8'
+    })
+  )
 
   files.push({
     relativePath: 'INSTALL.md',

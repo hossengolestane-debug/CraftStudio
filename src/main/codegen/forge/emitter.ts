@@ -295,9 +295,9 @@ jar {
 ${spec.mobs.length ? `import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraftforge.event.entity.EntityAttributeCreationEvent;` : ''}
-${spec.modGuis.length ? `import net.minecraft.world.flag.FeatureFlags;
-import net.minecraft.world.inventory.MenuType;
+${spec.modGuis.length ? `import net.minecraft.world.inventory.MenuType;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.common.extensions.IForgeMenuType;
 import net.minecraftforge.event.RegisterCommandsEvent;` : ''}
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
