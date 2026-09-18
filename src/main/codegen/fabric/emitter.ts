@@ -8,6 +8,8 @@ import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
 import { defaultCommandPermission } from '../../../shared/spawn'
 import { fabricItemSettings, fabricNeedsAttributeImports } from '../items/settings'
+import { fabricBlockCreativeAdds, fabricBlockFields, planBlockAssetFiles, planBlockDocs } from '../blocks/registration'
+import { fabricLootModify } from '../loot/inject'
 import { planEntityLootFiles, planItemLootFiles, planLootDocs } from '../loot/tables'
 import { planRecipeFiles } from '../recipes/json'
 import { planOreFeatureJson, planWorldgenDocs } from '../worldgen/oreVeins'
@@ -79,6 +81,8 @@ function fabricImports(
   const hasGuis = spec.modGuis.length > 0
   const hasSpawn = spec.mobs.some((mob) => mob.spawn.enabled && mob.spawn.biomes.length > 0)
   const hasWorldgen = spec.worldgen.length > 0
+  const hasBlocks = spec.blocks.length > 0
+  const hasLootInject = spec.items.length > 0 || spec.blocks.length > 0
   const lines = [
     'import net.fabricmc.api.ModInitializer;',
     'import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;',
@@ -96,9 +100,28 @@ function fabricImports(
     lines.push('import net.minecraft.registry.RegistryKey;')
     lines.push('import net.minecraft.registry.RegistryKeys;')
   }
-  if (style === 'classic' || hasMobs || hasGuis) {
+  if (style === 'classic' || hasMobs || hasGuis || hasBlocks) {
     lines.push('import net.minecraft.registry.Registries;')
     lines.push('import net.minecraft.registry.Registry;')
+  }
+  if (hasBlocks) {
+    lines.push('import net.minecraft.block.AbstractBlock;')
+    lines.push('import net.minecraft.block.Block;')
+    lines.push('import net.minecraft.block.BlockItem;')
+    lines.push('import net.minecraft.sound.BlockSoundGroup;')
+    if (style === 'registry_key') {
+      lines.push('import net.minecraft.registry.RegistryKey;')
+      lines.push('import net.minecraft.registry.RegistryKeys;')
+    }
+  }
+  if (hasLootInject) {
+    lines.push(
+      style === 'classic'
+        ? 'import net.fabricmc.fabric.api.loot.v2.LootTableEvents;'
+        : 'import net.fabricmc.fabric.api.loot.v3.LootTableEvents;'
+    )
+    lines.push('import net.minecraft.loot.LootPool;')
+    lines.push('import net.minecraft.loot.entry.ItemEntry;')
   }
   lines.push('import net.minecraft.util.Identifier;')
   if (hasMobs) {
@@ -142,6 +165,7 @@ function mainJava(spec: ProjectSpec, style: FabricItemRegistration): string {
     style === 'registry_key'
       ? `${itemKeys(spec)}\n\n${itemJavaRegistryKey(spec)}`
       : itemJavaClassic(spec)
+  const blocks = spec.blocks.length ? `\n\n${fabricBlockFields(spec, style === 'classic')}` : ''
   const entities = spec.mobs.length ? `\n\n${fabricEntityFields(spec, style)}` : ''
   const menu = spec.modGuis.length ? `\n\n${fabricMenuField(spec, style)}` : ''
   const commandBody = fabricCommandBlocks(spec)
@@ -154,6 +178,8 @@ ${commandBody}
   const attrs = spec.mobs.length ? `\n${fabricAttributeLines(spec)}` : ''
   const spawns = fabricSpawnInit(spec)
   const ores = fabricWorldgenInit(spec)
+  const loot = fabricLootModify(spec, style === 'classic')
+  const blockAdds = fabricBlockCreativeAdds(spec)
 
   return `package ${spec.packageName};
 
@@ -163,17 +189,19 @@ public class ${spec.mainClass} implements ModInitializer {
   public static final String MOD_ID = "${javaEscape(spec.modId)}";
   public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-${items}${entities}${menu}
+${items}${blocks}${entities}${menu}
 
   @Override
   public void onInitialize() {
-    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 8");
+    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 9");
     ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
 ${itemAdds(spec)}
+${blockAdds}
     });
 ${attrs}
 ${spawns}
 ${ores}
+${loot}
 ${commands}
   }
 }
@@ -324,6 +352,10 @@ jar {
   for (const item of spec.items) {
     lang[`item.${spec.modId}.${item.id}`] = item.displayName
   }
+  for (const block of spec.blocks) {
+    lang[`block.${spec.modId}.${block.id}`] = block.displayName
+    lang[`item.${spec.modId}.${block.id}`] = block.displayName
+  }
   for (const mob of spec.mobs) {
     lang[`entity.${spec.modId}.${mob.id}`] = mob.displayName
   }
@@ -348,10 +380,12 @@ jar {
   }
 
   files.push(...planRecipeFiles(spec))
+  files.push(...planBlockAssetFiles(spec))
+  files.push(...planBlockDocs(spec, 'fabric'))
   files.push(...planOreFeatureJson(spec))
   files.push(...planEntityLootFiles(spec))
   files.push(...planItemLootFiles(spec))
-  files.push(...planLootDocs(spec))
+  files.push(...planLootDocs(spec, true))
   files.push(...planWorldgenDocs(spec, 'fabric'))
 
   files.push({
@@ -404,7 +438,13 @@ jar {
         ? 'Open a preview screen with `/opencustommenu [id]`. Client clicks are untrusted; the server menu validates slots and refuses illegal transfers.'
         : '',
       spec.mobs.length > 0
-        ? 'Summon preset mobs with `/summon ' + spec.modId + ':' + spec.mobs[0]!.id + '`. See ENTITY_RENDERING.md and SPAWNS.md.'
+        ? 'Summon preset mobs with `/summon ' + spec.modId + ':' + spec.mobs[0]!.id + '`. See ENTITY_RENDERING.md and SPAWNS.md. Presets expand into a capped goal list (max 5).'
+        : '',
+      spec.blocks.length > 0
+        ? 'Custom blocks are cube_all + BlockItem. Paint a block texture in Assets. Ore veins may place a spec block. See BLOCKS.md and WORLDGEN.md.'
+        : '',
+      spec.items.length > 0
+        ? 'Chest bonus loot is injected into simple_dungeon, abandoned_mineshaft, spawn_bonus_chest, and village_toolsmith only. See LOOT.md.'
         : '',
       '',
       '## Permission nodes',
@@ -429,7 +469,7 @@ jar {
       '',
       spec.description || '_No description._',
       '',
-      `Generated by CraftStudio Local Phase 8 for **Fabric ${pins.minecraft}** (${pins.itemRegistration} item registration).`,
+      `Generated by CraftStudio Local Phase 9 for **Fabric ${pins.minecraft}** (${pins.itemRegistration} item registration).`,
       'Build files come from trusted templates. The model never writes Gradle or Java directly.',
       '',
       '## Build',

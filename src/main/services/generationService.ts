@@ -54,10 +54,11 @@ Rules:
 - items: 1-8 simple custom items (id lowercase [a-z0-9_])
 - recipes: shapeless or shaped; vanilla ingredients must be minecraft: ids from a small allowlist (stick, cobblestone, stone, dirt, iron_ingot, ...)
 - commands: names only; they will not be implemented
-- mobs: optional; only presets passive_wanderer | hostile_melee | neutral_flee | avoid_players | stationary_lookout | follow_player | leap_melee (7-preset cap, not a tree)
-- worldgen: optional ore_vein entries of allowlisted vanilla ores only (no dimensions/structures)
+- mobs: optional; presets expand into a capped goal list (max 5 of wander|look_player|melee|flee|avoid_player|leap|follow_look). Not a behavior tree.
+- blocks: optional cube_all blocks (id, material, hardness, dropItem self|item id)
+- worldgen: optional ore_vein or surface_patch; ore may place a spec block or vanilla ore
 - modGuis / pluginGuis: optional simple layouts (labels, buttons, slots, optional dataSlots)
-- Put custom blocks, dimensions, structures, and full behavior trees in unsupportedRequests
+- Put dimensions, structures, and unrestricted behavior trees in unsupportedRequests
 - Never include file paths, shell commands, Gradle, or Java source
 - source must be "ollama"
 - packageName like local.craftstudio.mod_id
@@ -129,7 +130,10 @@ export class GenerationService {
     assertCanGenerate(record.manifest.platform, record.manifest.minecraftVersion)
     const spec = parseProjectSpec(specInput)
     const root = (await this.settings.get()).projectsPath
-    const textures = await loadProjectTextures(root, record.directoryName, spec.items.map((item) => item.id))
+    const textures = await loadProjectTextures(root, record.directoryName, [
+      ...spec.items.map((item) => item.id),
+      ...spec.blocks.map((block) => block.id)
+    ])
     const files = attachGeneratedTextures(planAdapterFiles(record.manifest, spec), record.manifest, spec, textures)
     const specFile = {
       relativePath: SPEC_FILENAME,
@@ -162,7 +166,7 @@ export class GenerationService {
     const textures = await loadProjectTextures(
       root,
       record.directoryName,
-      preview.spec.items.map((item) => item.id)
+      [...preview.spec.items.map((item) => item.id), ...preview.spec.blocks.map((block) => block.id)]
     )
     const files = attachGeneratedTextures(
       planAdapterFiles(record.manifest, preview.spec),
@@ -186,7 +190,8 @@ export class GenerationService {
         customItems: preview.spec.items.length > 0,
         recipes: preview.spec.recipes.length > 0,
         customMobs: preview.spec.mobs.length > 0,
-        customGuis: preview.spec.modGuis.length > 0 || preview.spec.pluginGuis.length > 0
+        customGuis: preview.spec.modGuis.length > 0 || preview.spec.pluginGuis.length > 0,
+        customBlocks: preview.spec.blocks.length > 0
       }
     })
     return { ...preview, applied: true }

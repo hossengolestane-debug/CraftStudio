@@ -1,5 +1,6 @@
 import { defaultMob } from '../../../../shared/defaults'
-import { MOB_PRESETS, SPAWN_BIOMES, VANILLA_MOB_BASES, type ProjectSpec, type SpecMob } from '../../../../shared/spec'
+import { PRESET_GOAL_LISTS, resolveMobGoals, type MobGoal } from '../../../../shared/goals'
+import { MOB_GOAL_CAP, MOB_GOALS, MOB_PRESETS, SPAWN_BIOMES, VANILLA_MOB_BASES, type ProjectSpec, type SpecMob } from '../../../../shared/spec'
 import { Button, Card, Field, TextInput } from '../../components/ui'
 
 export function MobEditor({
@@ -21,8 +22,8 @@ export function MobEditor({
       <div>
         <h2 className="text-lg font-semibold">Custom mobs</h2>
         <p className="mt-1 text-sm text-muted">
-          Phase 8 emits seven movement presets (not a behavior tree) plus optional biome spawn tables, drops, and
-          follow_player / leap_melee. Java stays template-authored. Cap: 7 presets.
+          Presets are shortcuts that expand into a capped goal list (max {MOB_GOAL_CAP} of {MOB_GOALS.join(', ')}).
+          Not a behavior tree. Optional biome spawn tables and drops still apply.
         </p>
         {pluginLimits ? (
           <p className="mt-2 text-sm">
@@ -90,7 +91,10 @@ export function MobEditor({
                 id={`mob-preset-${index}`}
                 className="w-full border border-line bg-white px-3 py-2"
                 value={mob.preset}
-                onChange={(event) => update(index, { preset: event.target.value as SpecMob['preset'] })}
+                onChange={(event) => {
+                  const preset = event.target.value as SpecMob['preset']
+                  update(index, { preset, goals: [] })
+                }}
               >
                 {MOB_PRESETS.map((preset) => (
                   <option key={preset} value={preset}>
@@ -132,6 +136,44 @@ export function MobEditor({
                 ))}
               </select>
             </Field>
+          </div>
+          <div className="space-y-2 border border-dashed border-line p-2">
+            <p className="text-xs text-muted">
+              Goal list (max {MOB_GOAL_CAP}). Empty list expands from the preset:{' '}
+              {(PRESET_GOAL_LISTS[mob.preset] ?? ['wander']).join(', ')}. Active:{' '}
+              {resolveMobGoals(mob).join(', ')}.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {MOB_GOALS.map((goal) => {
+                const checked = mob.goals.includes(goal)
+                const atCap = !checked && mob.goals.length >= MOB_GOAL_CAP
+                return (
+                  <label key={goal} className="flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={atCap}
+                      onChange={(event) => {
+                        const goals = event.target.checked
+                          ? ([...mob.goals, goal] as MobGoal[])
+                          : mob.goals.filter((entry) => entry !== goal)
+                        update(index, { goals })
+                      }}
+                    />
+                    {goal}
+                  </label>
+                )
+              })}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() =>
+                update(index, { goals: [...(PRESET_GOAL_LISTS[mob.preset] ?? ['wander'])] })
+              }
+            >
+              Fill from preset
+            </Button>
           </div>
           <div className="space-y-2 border border-dashed border-line p-2">
             <label className="flex items-center gap-2 text-sm">

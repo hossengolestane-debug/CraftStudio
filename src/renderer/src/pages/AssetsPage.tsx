@@ -29,14 +29,17 @@ export function AssetsPage({ project }: { project: ProjectRecord | null }) {
       <div>
         <h1 className="text-2xl font-semibold">Assets</h1>
         <p className="mt-1 text-muted">
-          Paint or import item textures, then export a resource pack from the Export tab. Paths stay inside the open
-          project.
+          Paint or import item and block textures, then export a resource pack from the Export tab. Paths stay inside
+          the open project.
         </p>
       </div>
       {error ? <ErrorPanel error={error} onDismiss={() => setError(null)} /> : null}
       {!project ? (
         <Card>
-          <p>Open a project to edit textures. The editor writes <code>craftstudio/textures/&lt;item&gt;.png</code>.</p>
+          <p>
+            Open a project to edit textures. The editor writes <code>craftstudio/textures/&lt;id&gt;.png</code> for
+            items and cube-all blocks.
+          </p>
         </Card>
       ) : (
         <TextureEditor project={project} spec={spec} />

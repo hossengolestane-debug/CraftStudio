@@ -53,6 +53,12 @@ export function assessVersionChange(
   if (features.customGuis) {
     notes.push('GUI layouts are preview-only until a Minecraft runtime is recorded as evidence.')
   }
+  if (features.customBlocks && (platform === 'paper' || platform === 'spigot')) {
+    incompatible.push('Plugins cannot register custom blocks. Remove blocks before changing to a plugin pin.')
+  }
+  if (features.customBlocks && (platform === 'fabric' || platform === 'forge' || platform === 'neoforge')) {
+    notes.push('Custom blocks re-emit on the target pin. Ore veins that place those blocks stay valid. Plugins are not inferred from this.')
+  }
   notes.push('A snapshot is taken before the version change is written.')
   return {
     fromVersion,

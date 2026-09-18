@@ -20,7 +20,8 @@ export const TRUSTED_OUTPUT_PATHS = new Set([
   'MOBS.md',
   'SPAWNS.md',
   'WORLDGEN.md',
-  'LOOT.md'
+  'LOOT.md',
+  'BLOCKS.md'
 ])
 
 export const BUILD_SCRIPT_PATHS = new Set([

@@ -72,7 +72,7 @@ export function describeCapabilityGap(adapter: PlatformAdapter, feature: keyof P
       return `${adapter.displayName} emits dedicated biome spawn table entries for an allowlisted biome set. This is not a worldgen stack.`
     }
     if (feature === 'worldgen') {
-      return `${adapter.displayName} emits ore-vein configured/placed features that place allowlisted vanilla ores. No custom blocks, dimensions, or structures.`
+      return `${adapter.displayName} emits ore-vein and surface-patch configured/placed features. Ore veins may place a spec block or an allowlisted vanilla ore. Not a dimension or structure stack.`
     }
     return `${adapter.displayName} can only approximate ${feature} (vanilla ids, inventories, or disguises).`
   }
@@ -80,7 +80,10 @@ export function describeCapabilityGap(adapter: PlatformAdapter, feature: keyof P
     return `${adapter.displayName} cannot register biome spawn tables for custom entity types. Plugin mobs stay summon/command disguises.`
   }
   if (feature === 'worldgen') {
-    return `${adapter.displayName} cannot emit worldgen. CraftStudio will not write fake ore JSON for plugins.`
+    return `${adapter.displayName} cannot emit worldgen. CraftStudio will not write fake ore or random_patch JSON for plugins.`
+  }
+  if (feature === 'customBlocks') {
+    return `${adapter.displayName} cannot register a new block id. CraftStudio will not disguise a vanilla block as a custom type.`
   }
   return `${adapter.displayName} cannot implement ${feature}. Example: plugins cannot add arbitrary new client-side entities.`
 }

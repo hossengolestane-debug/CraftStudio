@@ -42,6 +42,13 @@ export function assertSpecCapabilities(manifest: ProjectManifest, spec: ProjectS
       action: 'Remove worldgen entries or use Fabric / Forge / NeoForge. Paper/Spigot stay honest: no fake worldgen.'
     })
   }
+  if (spec.blocks.length > 0 && (manifest.platform === 'paper' || manifest.platform === 'spigot')) {
+    throw new AppError({
+      code: 'ADAPTER_UNSUPPORTED',
+      message: `${manifest.platform} cannot register custom blocks.`,
+      action: 'Remove blocks or use Fabric / Forge / NeoForge. Plugins will not disguise a vanilla block as a new id.'
+    })
+  }
 }
 
 export function planAdapterFiles(manifest: ProjectManifest, spec: ProjectSpec): PlannedFile[] {

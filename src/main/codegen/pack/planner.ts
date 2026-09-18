@@ -1,4 +1,5 @@
 import { AppError } from '../../../shared/errors'
+import { blockItemModelJson, blockModelJson, blockStateJson } from '../blocks/registration'
 import { itemModelJson } from '../../../shared/itemModels'
 import { craftstudioPackPng } from '../../../shared/packIcon'
 import { countOpaquePixels } from '../../../shared/pixelSpec'
@@ -161,6 +162,17 @@ export function planStandaloneResourcePack(
       packRoot(`assets/${spec.modId}/textures/item/${item.id}_layer1.png`, overlay, 'binary')
     }
   }
+  if (manifest.platform === 'fabric' || manifest.platform === 'forge' || manifest.platform === 'neoforge') {
+    for (const block of spec.blocks) {
+      if (!textures[block.id]) {
+        continue
+      }
+      packRoot(`assets/${spec.modId}/blockstates/${block.id}.json`, blockStateJson(spec.modId, block), 'utf8')
+      packRoot(`assets/${spec.modId}/models/block/${block.id}.json`, blockModelJson(spec.modId, block, true), 'utf8')
+      packRoot(`assets/${spec.modId}/models/item/${block.id}.json`, blockItemModelJson(spec.modId, block), 'utf8')
+      packRoot(`assets/${spec.modId}/textures/block/${block.id}.png`, textures[block.id]!, 'binary')
+    }
+  }
 
   return files
 }
@@ -221,6 +233,28 @@ export function attachGeneratedTextures(
       if (textures[item.id]) {
         replaceModel(item.id)
       }
+    }
+    for (const block of spec.blocks) {
+      if (!textures[block.id]) {
+        continue
+      }
+      const modelPath = `src/main/resources/assets/${spec.modId}/models/block/${block.id}.json`
+      const modelIndex = next.findIndex((file) => file.relativePath === modelPath)
+      const model = {
+        relativePath: modelPath,
+        encoding: 'utf8' as const,
+        contents: blockModelJson(spec.modId, block, true)
+      }
+      if (modelIndex >= 0) {
+        next[modelIndex] = model
+      } else {
+        next.push(model)
+      }
+      next.push({
+        relativePath: `src/main/resources/assets/${spec.modId}/textures/block/${block.id}.png`,
+        encoding: 'binary',
+        contents: textures[block.id]!
+      })
     }
   }
 

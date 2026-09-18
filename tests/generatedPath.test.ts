@@ -32,6 +32,7 @@ describe('generated path safety', () => {
     expect(isTrustedOutputPath('ENTITY_RENDERING.md')).toBe(true)
     expect(isTrustedOutputPath('WORLDGEN.md')).toBe(true)
     expect(isTrustedOutputPath('LOOT.md')).toBe(true)
+    expect(isTrustedOutputPath('BLOCKS.md')).toBe(true)
     expect(isTrustedOutputPath('../craftstudio.project.json')).toBe(false)
     expect(isTrustedOutputPath('evil.sh')).toBe(false)
   })

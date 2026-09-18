@@ -6,7 +6,7 @@ Desktop app that helps beginners create **Minecraft Java Edition** mods and serv
 | --- | --- |
 | Fabric, NeoForge, Forge | Paper, Spigot |
 
-**Phase 8** is implemented: Phase 7 plus a trusted-template ore-vein worldgen MVP, item durability/attributes, shaped recipes, JSON loot tables, menu data slots + ghost items, two new mob presets, Linux/macOS packaging scripts (unsigned), Design undo, recent projects, and a dependency/cache doctor. A compile-only Gradle build never flips **Tested**.
+**Phase 9** is implemented: Phase 8 plus cube-all custom blocks, allowlisted chest loot injection on mods, a capped composable mob goal list (presets still expand), and `surface_patch` worldgen (`minecraft:random_patch`). A compile-only Gradle build never flips **Tested**.
 
 ## Requirements
 
@@ -35,7 +35,7 @@ npm run dist:linux
 npm run dist:mac
 ```
 
-Packaging is **unsigned**. `dist:linux` builds a directory + AppImage on Linux x64. `dist:mac` is a directory target and typically fails on Linux (no macOS SDK / notarization). `dist:win` may only produce an unpacked/`portable` artifact on Linux (NSIS often needs Wine). See [PHASE8.md](PHASE8.md).
+Packaging is **unsigned**. `dist:linux` builds a directory + AppImage on Linux x64. `dist:mac` is a directory target and typically fails on Linux (no macOS SDK / notarization). `dist:win` may only produce an unpacked/`portable` artifact on Linux (NSIS often needs Wine). See [PHASE9.md](PHASE9.md).
 
 On some Linux containers:
 
@@ -43,17 +43,17 @@ On some Linux containers:
 CRAFTSTUDIO_NO_SANDBOX=1 npm run dev
 ```
 
-## Vertical slice (Phase 8)
+## Vertical slice (Phase 9)
 
 1. Create **Fabric** 1.21.x, **Paper** 1.21.x, **NeoForge** 1.21.1 / 1.21.4 / 1.21.8, **Forge 1.21.1**, or **Spigot** 1.21 / 1.21.1 / 1.21.4.
-2. Open **Design**. Edit items (durability / attributes), shapeless or shaped recipes, a preset mob (`passive_wanderer`, `hostile_melee`, `neutral_flee`, `avoid_players`, `stationary_lookout`, `follow_player`, `leap_melee` — 7-preset cap), ore veins, and a GUI with optional data slots. Generate a spec (templates first). Undo keeps a 20-step history.
+2. Open **Design**. Edit items, cube-all **blocks**, recipes, a mob (preset shortcut or up to 5 allowlisted goals), ore veins / surface patches, and a GUI. Generate a spec (templates first). Undo keeps a 20-step history.
 3. **Review file changes**, then **Apply files**. A snapshot is written first.
-4. Change Minecraft version only after **Assess change** lists incompatible features. A snapshot is written first.
-5. Open **Assets**. Paint layer0 and a dedicated **layer1** overlay. Bind handheld + layer1 on the item.
-6. Open **Export** for a source ZIP, a built JAR after `./gradlew build`, or a resource pack that includes `pack.png` and layer1 when present.
+4. Change Minecraft version only after **Assess change** lists incompatible features. Adding blocks on a plugin pin is blocked. A snapshot is written first.
+5. Open **Assets**. Paint item layer0 / layer1 or a **block** cube-all texture.
+6. Open **Export** for a source ZIP, a built JAR after `./gradlew build`, or a resource pack that includes `pack.png`, layer1, and painted block textures when present.
 7. Open **Test** for a real Gradle compile. Failed builds show actionable diagnostics; known template mismatches can be repaired without touching `build.gradle`. Runtime verification (and Tested) is a separate, evidence-gated step.
 
-Fabric 1.21 / 1.21.1 uses classic `Registry.register` and a custom cube entity renderer. Fabric 1.21.2+ uses `Items.register` + `RegistryKey` and a compiling **visible** `LivingEntityRenderer` cube (render-state API). NeoForge and Forge emit client entity renderers for preset mobs. NeoForge is **not** Forge. Forge 1.21.1 uses ForgeGradle 6 + `mods.toml` `mandatory=true`. Mods emit every designed container screen with server-side transfer checks and a data-slot / ghost-item subset. Paper items are vanilla `Material.PAPER` + PDC + CustomModelData. Spigot uses `org.spigotmc:spigot-api` and legacy `setDisplayName` — **Paper APIs are not copied**. Plugin mobs are **vanilla disguises**, not new client entity types. Plugin menus paginate when slots overflow. Biome spawn tables and ore-vein worldgen emit for Fabric / Forge / NeoForge only; plugins reject worldgen.
+Fabric 1.21 / 1.21.1 uses classic `Registry.register` (items + blocks) and loot-api-v2 chest injection. Fabric 1.21.2+ uses `Items.register` + `RegistryKey` (blocks also take `.registryKey`) and loot-api-v3. NeoForge and Forge emit `Block` + `BlockItem`, GLM chest injection, and client entity renderers. NeoForge is **not** Forge. Forge 1.21.1 uses ForgeGradle 6 + `mods.toml` `mandatory=true`. Paper items are vanilla `Material.PAPER` + PDC + CustomModelData. Spigot uses `org.spigotmc:spigot-api` — **Paper APIs are not copied**. Plugin mobs are **vanilla disguises**. Plugins **cannot** register custom blocks or inject vanilla chests. Biome spawn tables, ore veins, and surface patches emit for Fabric / Forge / NeoForge only.
 
 Ollama may only propose spec JSON (or a color palette). That JSON is independently validated. **Nothing is written from unvalidated model text.** Java and Gradle stay template-authored.
 
@@ -76,6 +76,8 @@ Fabric pins come from [fabricmc.net/develop](https://fabricmc.net/develop/) / Fa
 - NeoForge success is not Forge compatibility
 - Paper success is not Spigot compatibility
 - Plugin custom mobs are vanilla disguises; they are not new client entity types
+- Plugin custom blocks are unsupported; they are not equal to Fabric/Forge/NeoForge blocks
+- Chest bonus loot is injected on mods into four allowlisted vanilla chests only; plugins do not inject
 - GUI designers are labeled **preview**; they are not Minecraft-verified UIs
 - Compatibility rows are **not Tested** until a runtime evidence record exists
 - `runClient` requires an explicit Minecraft EULA checkbox; CraftStudio never silent-accepts and never distributes game files
@@ -83,4 +85,4 @@ Fabric pins come from [fabricmc.net/develop](https://fabricmc.net/develop/) / Fa
 - The texture editor does not pretend Ollama painted a PNG
 - Build repair only rewrites allowlisted Java for known template mismatches — never model shell, never silent `build.gradle` mutation
 
-See [PHASE1.md](PHASE1.md), [PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md), [PHASE5.md](PHASE5.md), [PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md), and [PHASE8.md](PHASE8.md).
+See [PHASE1.md](PHASE1.md), [PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md), [PHASE5.md](PHASE5.md), [PHASE6.md](PHASE6.md), [PHASE7.md](PHASE7.md), [PHASE8.md](PHASE8.md), and [PHASE9.md](PHASE9.md).

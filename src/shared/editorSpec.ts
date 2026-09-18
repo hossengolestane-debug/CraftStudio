@@ -1,5 +1,6 @@
-import { parseProjectSpec, VANILLA_ITEMS, type ProjectSpec, type SpecItem, type SpecRecipe, type SpecWorldgen } from './spec'
-import { defaultWorldgen } from './worldgen'
+import { defaultBlock } from './blocks'
+import { parseProjectSpec, VANILLA_ITEMS, type ProjectSpec, type SpecBlock, type SpecItem, type SpecRecipe, type SpecWorldgen } from './spec'
+import { defaultSurfacePatch, defaultWorldgen } from './worldgen'
 
 export function withEditorSource(spec: ProjectSpec): ProjectSpec {
   return parseProjectSpec({ ...spec, source: 'editor' })
@@ -86,6 +87,14 @@ export function defaultShapedRecipe(resultItemId: string): SpecRecipe {
 
 export function defaultWorldgenEntry(id = 'iron_vein'): SpecWorldgen {
   return defaultWorldgen(id)
+}
+
+export function defaultSurfacePatchEntry(id = 'flower_patch'): SpecWorldgen {
+  return defaultSurfacePatch(id)
+}
+
+export function defaultSpecBlock(id = 'river_stone'): SpecBlock {
+  return defaultBlock(id)
 }
 
 export const EDITOR_VANILLA_ITEMS = VANILLA_ITEMS

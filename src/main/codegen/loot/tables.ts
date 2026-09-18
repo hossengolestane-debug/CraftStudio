@@ -91,27 +91,30 @@ export function planItemLootFiles(spec: ProjectSpec): PlannedFile[] {
   ]
 }
 
-export function lootDoc(spec: ProjectSpec): string {
+export function lootDoc(spec: ProjectSpec, injected = false): string {
   const mobs = spec.mobs
     .filter((mob) => mob.drops.length > 0)
     .map((mob) => `- ${mob.id}: ${mob.drops.map((drop) => `${drop.itemId} ${drop.min}-${drop.max} @${drop.chance}`).join(', ')}`)
     .join('\n')
+  const chestLine = injected
+    ? `Chest bonus table \`${spec.modId}:chests/${spec.modId}_bonus\` lists spec items and is injected into minecraft:chests/simple_dungeon, abandoned_mineshaft, spawn_bonus_chest, and village/village_toolsmith only.`
+    : `Chest bonus table \`${spec.modId}:chests/${spec.modId}_bonus\` lists spec items but is **not** injected into vanilla chests.`
   return [
     '# Loot tables',
     '',
     'Mods emit JSON at `data/<modid>/loot_table/` (1.21 singular path). Entity tables match the entity id automatically.',
-    `Chest bonus table \`${spec.modId}:chests/${spec.modId}_bonus\` lists spec items but is **not** injected into vanilla chests.`,
-    'Plugins cannot register datapack loot tables; they drop from EntityDeathEvent when the disguise PDC matches.',
+    chestLine,
+    'Plugins cannot register datapack loot tables or global loot modifiers; they drop from EntityDeathEvent when the disguise PDC matches.',
     mobs || '- No mob drop lists in this spec.',
     ''
   ].join('\n')
 }
 
-export function planLootDocs(spec: ProjectSpec): PlannedFile[] {
-  if (spec.mobs.every((mob) => mob.drops.length === 0) && spec.items.length === 0) {
+export function planLootDocs(spec: ProjectSpec, injected = false): PlannedFile[] {
+  if (spec.mobs.every((mob) => mob.drops.length === 0) && spec.items.length === 0 && spec.blocks.length === 0) {
     return []
   }
-  return [{ relativePath: 'LOOT.md', encoding: 'utf8', contents: lootDoc(spec) }]
+  return [{ relativePath: 'LOOT.md', encoding: 'utf8', contents: lootDoc(spec, injected) }]
 }
 
 export function pluginLootListenerJava(spec: ProjectSpec, mainClass: string, style: 'adventure' | 'legacy'): string {

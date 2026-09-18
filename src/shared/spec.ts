@@ -1,13 +1,23 @@
 import { z } from 'zod'
 import { AppError } from './errors'
+import { BLOCK_ENTRY_CAP, BLOCK_MATERIALS } from './blocks'
+import { MOB_GOAL_CAP, MOB_GOALS } from './goals'
 import { ITEM_ATTRIBUTE_CAP, ITEM_ATTRIBUTE_SLOTS, ITEM_ATTRIBUTES } from './itemStats'
 import { DEFAULT_MOB_SPAWN, SPAWN_BIOMES } from './spawn'
 import { SPEC_FILENAME } from './types'
-import { WORLDGEN_BLOCKS, WORLDGEN_ENTRY_CAP, WORLDGEN_KIND } from './worldgen'
+import {
+  isSurfacePatchPlant,
+  isVanillaOre,
+  SURFACE_PATCH_BLOCKS,
+  WORLDGEN_ENTRY_CAP,
+  WORLDGEN_KINDS
+} from './worldgen'
 
 export { SPAWN_BIOMES }
 export { ITEM_ATTRIBUTES, ITEM_ATTRIBUTE_SLOTS } from './itemStats'
-export { WORLDGEN_BLOCKS } from './worldgen'
+export { WORLDGEN_BLOCKS, WORLDGEN_KINDS, SURFACE_PATCH_BLOCKS } from './worldgen'
+export { BLOCK_MATERIALS, BLOCK_ENTRY_CAP } from './blocks'
+export { MOB_GOALS, MOB_GOAL_CAP } from './goals'
 
 export const SPEC_SCHEMA_VERSION = 1
 export { SPEC_FILENAME }
@@ -110,6 +120,7 @@ const mobSchema = z.object({
     })
     .default(DEFAULT_MOB_SPAWN),
   drops: z.array(mobDropSchema).max(4).default([]),
+  goals: z.array(z.enum(MOB_GOALS)).max(MOB_GOAL_CAP).default([]),
   appearance: z
     .object({
       model: z.enum(MOB_MODELS).default('humanoid'),
@@ -183,10 +194,19 @@ const recipeSchema = z.object({
   keys: z.array(recipeKeySchema).max(9).default([])
 })
 
+const blockSchema = z.object({
+  id: ident,
+  displayName: z.string().trim().min(1).max(80),
+  material: z.enum(BLOCK_MATERIALS).default('stone'),
+  hardness: z.number().min(0.1).max(50).default(1.5),
+  resistance: z.number().min(0).max(1200).default(6),
+  dropItem: z.string().trim().min(1).max(64).default('self')
+})
+
 const worldgenSchema = z.object({
   id: ident,
-  kind: z.literal(WORLDGEN_KIND).default(WORLDGEN_KIND),
-  block: z.enum(WORLDGEN_BLOCKS),
+  kind: z.enum(WORLDGEN_KINDS).default('ore_vein'),
+  block: z.string().trim().min(3).max(64),
   size: z.number().int().min(1).max(16).default(9),
   count: z.number().int().min(1).max(32).default(10),
   minY: z.number().int().min(-64).max(320).default(-24),
@@ -222,6 +242,7 @@ export const projectSpecSchema = z.object({
     }),
   mainClass: z.string().trim().regex(/^[A-Z][A-Za-z0-9]{0,47}$/, 'Main class must be PascalCase'),
   items: z.array(itemSchema).min(1).max(8),
+  blocks: z.array(blockSchema).max(BLOCK_ENTRY_CAP).default([]),
   recipes: z.array(recipeSchema).max(8).default([]),
   commands: z.array(commandSchema).max(4).default([]),
   mobs: z.array(mobSchema).max(4).default([]),
@@ -240,8 +261,10 @@ export type SpecMob = z.infer<typeof mobSchema>
 export type SpecModGui = z.infer<typeof modGuiSchema>
 export type SpecPluginGui = z.infer<typeof pluginGuiSchema>
 export type SpecWorldgen = z.infer<typeof worldgenSchema>
+export type SpecBlock = z.infer<typeof blockSchema>
 export type SpecDataSlot = z.infer<typeof dataSlotSchema>
 export type SpecItemAttribute = z.infer<typeof itemAttributeSchema>
+export type SpecMobGoal = (typeof MOB_GOALS)[number]
 
 export const OLLAMA_SPEC_JSON_SCHEMA = {
   type: 'object',
@@ -285,6 +308,7 @@ export const OLLAMA_SPEC_JSON_SCHEMA = {
         }
       }
     },
+    blocks: { type: 'array' },
     recipes: { type: 'array' },
     commands: { type: 'array' },
     mobs: { type: 'array' },
@@ -316,6 +340,42 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
 
   const spec = parsed.data
   const itemIds = new Set(spec.items.map((item) => item.id))
+  const blockIds = new Set(spec.blocks.map((block) => block.id))
+
+  for (const block of spec.blocks) {
+    if (itemIds.has(block.id)) {
+      throw new AppError({
+        code: 'SPEC_INVALID',
+        message: `Block "${block.id}" reuses an item id.`,
+        action: 'Give the block a unique id. Block items occupy the same registry path.'
+      })
+    }
+    if (block.dropItem !== 'self') {
+      const vanilla = block.dropItem.startsWith('minecraft:')
+      if (!vanilla && !itemIds.has(block.dropItem) && !blockIds.has(block.dropItem)) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Block "${block.id}" drops unknown item "${block.dropItem}".`,
+          action: 'Use self, a spec item/block id, or an allowlisted minecraft: id.'
+        })
+      }
+      if (vanilla && !VANILLA_ITEMS.includes(block.dropItem as (typeof VANILLA_ITEMS)[number])) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Block "${block.id}" drop "${block.dropItem}" is not on the vanilla allowlist.`,
+          action: 'Use self, a spec item id, or an allowlisted minecraft: id.'
+        })
+      }
+    }
+  }
+  const uniqueBlockIds = spec.blocks.map((block) => block.id)
+  if (new Set(uniqueBlockIds).size !== uniqueBlockIds.length) {
+    throw new AppError({
+      code: 'SPEC_INVALID',
+      message: 'Block ids must be unique.',
+      action: 'Rename duplicate blocks.'
+    })
+  }
 
   for (const item of spec.items) {
     if (item.durability > 0 && item.maxCount > 1) {
@@ -343,6 +403,22 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
         action: 'Set maxY at least as high as minY.'
       })
     }
+    const bare = entry.block.includes(':') ? entry.block.slice(entry.block.indexOf(':') + 1) : entry.block
+    if (entry.kind === 'ore_vein') {
+      if (!isVanillaOre(entry.block) && !blockIds.has(bare) && !blockIds.has(entry.block)) {
+        throw new AppError({
+          code: 'SPEC_INVALID',
+          message: `Ore vein "${entry.id}" block "${entry.block}" is not a vanilla ore or spec block.`,
+          action: 'Pick an allowlisted minecraft ore or a block defined in this spec.'
+        })
+      }
+    } else if (!isSurfacePatchPlant(entry.block) && !blockIds.has(bare) && !blockIds.has(entry.block)) {
+      throw new AppError({
+        code: 'SPEC_INVALID',
+        message: `Surface patch "${entry.id}" block "${entry.block}" is not an allowlisted plant or spec block.`,
+        action: 'Use dandelion, poppy, short_grass, fern, dead_bush, or a spec block.'
+      })
+    }
   }
   const worldgenIds = spec.worldgen.map((entry) => entry.id)
   if (new Set(worldgenIds).size !== worldgenIds.length) {
@@ -366,11 +442,11 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
           action: 'Use a spec item id or an allowlisted minecraft: id.'
         })
       }
-      if (!vanilla && !itemIds.has(slot.ghostItemId)) {
+      if (!vanilla && !itemIds.has(slot.ghostItemId) && !blockIds.has(slot.ghostItemId)) {
         throw new AppError({
           code: 'SPEC_INVALID',
           message: `GUI "${gui.id}" ghost item "${slot.ghostItemId}" is unknown.`,
-          action: 'Use a spec item id or an allowlisted minecraft: id.'
+          action: 'Use a spec item/block id or an allowlisted minecraft: id.'
         })
       }
     }
@@ -393,13 +469,20 @@ export function parseProjectSpec(input: unknown): ProjectSpec {
     }
     for (const drop of mob.drops) {
       const vanilla = drop.itemId.startsWith('minecraft:')
-      if (!vanilla && !itemIds.has(drop.itemId)) {
+      if (!vanilla && !itemIds.has(drop.itemId) && !blockIds.has(drop.itemId)) {
         throw new AppError({
           code: 'SPEC_INVALID',
           message: `Mob "${mob.id}" drops unknown item "${drop.itemId}".`,
-          action: 'Use a spec item id or a minecraft: vanilla id.'
+          action: 'Use a spec item/block id or a minecraft: vanilla id.'
         })
       }
+    }
+    if (new Set(mob.goals).size !== mob.goals.length) {
+      throw new AppError({
+        code: 'SPEC_INVALID',
+        message: `Mob "${mob.id}" repeats a goal.`,
+        action: `Use each of ${MOB_GOALS.join(', ')} at most once (cap ${MOB_GOAL_CAP}).`
+      })
     }
   }
 

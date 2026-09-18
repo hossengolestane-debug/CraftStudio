@@ -3,7 +3,7 @@ import { encodePngRgba } from '../../../shared/png'
 import { defaultCommandPermission, minecraftBiomeId, yarnBiomeKey } from '../../../shared/spawn'
 import type { ProjectSpec, SpecModGui } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
-import { isHostilePreset, yarnGoalBlock, yarnParent } from '../mobs/presets'
+import { isHostileMob, yarnGoalBlock, yarnParent } from '../mobs/presets'
 import { entityClassName, fabricHandlerClass, fabricScreenClass, menuFieldName, menuRegistryName } from '../naming'
 import type { PlannedFile } from '../types'
 import { javaEscape } from '../wrapper'
@@ -102,7 +102,7 @@ export function fabricEntityFields(spec: ProjectSpec, style: FabricItemRegistrat
     .map((mob) => {
       const cls = entityClassName(mob.id)
       const constant = toConstName(mob.id)
-      const group = isHostilePreset(mob.preset) ? 'SpawnGroup.MONSTER' : 'SpawnGroup.CREATURE'
+      const group = isHostileMob(mob) ? 'SpawnGroup.MONSTER' : 'SpawnGroup.CREATURE'
       const size = mob.appearance.model === 'quadruped' ? '0.9f, 0.9f' : '0.6f, 1.95f'
       if (style === 'registry_key') {
         return `  public static final RegistryKey<EntityType<?>> ${constant}_KEY = RegistryKey.of(
@@ -136,7 +136,7 @@ export function fabricSpawnInit(spec: ProjectSpec): string {
     .filter((mob) => mob.spawn.enabled && mob.spawn.biomes.length > 0)
     .map((mob) => {
       const keys = mob.spawn.biomes.map((biome) => `BiomeKeys.${yarnBiomeKey(biome)}`).join(', ')
-      const group = isHostilePreset(mob.preset) ? 'SpawnGroup.MONSTER' : 'SpawnGroup.CREATURE'
+      const group = isHostileMob(mob) ? 'SpawnGroup.MONSTER' : 'SpawnGroup.CREATURE'
       return `    BiomeModifications.addSpawn(BiomeSelectors.includeByKey(${keys}), ${group}, ${toConstName(mob.id)}, ${mob.spawn.weight}, ${mob.spawn.minGroup}, ${mob.spawn.maxGroup});`
     })
   return lines.join('\n')
@@ -148,7 +148,8 @@ export function fabricWorldgenInit(spec: ProjectSpec): string {
       const biomes = entry.biomes.length
         ? `BiomeSelectors.includeByKey(${entry.biomes.map((biome) => `BiomeKeys.${yarnBiomeKey(biome)}`).join(', ')})`
         : 'BiomeSelectors.foundInOverworld()'
-      return `    BiomeModifications.addFeature(${biomes}, GenerationStep.Feature.UNDERGROUND_ORES, RegistryKey.of(RegistryKeys.PLACED_FEATURE, Identifier.of(MOD_ID, "${entry.id}")));`
+      const step = entry.kind === 'surface_patch' ? 'VEGETAL_DECORATION' : 'UNDERGROUND_ORES'
+      return `    BiomeModifications.addFeature(${biomes}, GenerationStep.Feature.${step}, RegistryKey.of(RegistryKeys.PLACED_FEATURE, Identifier.of(MOD_ID, "${entry.id}")));`
     })
     .join('\n')
 }
@@ -703,7 +704,7 @@ export function fabricSpawnDoc(spec: ProjectSpec, pluginUnsupported = false): st
     '',
     pluginUnsupported
       ? 'This adapter cannot register biome spawn tables. Plugin mobs stay vanilla disguises summoned by command.'
-      : 'Dedicated biome spawn entries only. Ore-vein worldgen is a separate Phase 8 MVP (see WORLDGEN.md).',
+      : 'Dedicated biome spawn entries only. Ore veins and surface patches are a separate Worldgen editor (see WORLDGEN.md).',
     rows || '- No mobs in this spec.',
     ''
   ].join('\n')

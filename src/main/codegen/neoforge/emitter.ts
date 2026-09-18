@@ -11,9 +11,11 @@ import {
 } from '../entities/forgeLikeClient'
 import { defaultCommandPermission } from '../../../shared/spawn'
 import { fabricSpawnDoc, placeholderEntityPng } from '../fabric/extras'
-import { isHostilePreset, mojangGoalBlock, mojangParent } from '../mobs/presets'
+import { isHostileMob, mojangGoalBlock, mojangParent } from '../mobs/presets'
 import { forgeLikeCommandMethod, forgeLikeMenuFields, planForgeLikeMenuFiles } from '../modgui/forgeLike'
 import { mojangItemProperties, mojangNeedsAttributeImports } from '../items/settings'
+import { forgeBlockCreative, neoBlockRegs, planBlockAssetFiles, planBlockDocs } from '../blocks/registration'
+import { planForgeLikeLootModifierFiles } from '../loot/inject'
 import { planEntityLootFiles, planItemLootFiles, planLootDocs } from '../loot/tables'
 import { entityClassName } from '../naming'
 import { planRecipeFiles } from '../recipes/json'
@@ -43,7 +45,7 @@ function entityRegistrations(spec: ProjectSpec, pins: NeoForgeVersionPins): stri
     .map((mob) => {
       const cls = entityClassName(mob.id)
       const size = mob.appearance.model === 'quadruped' ? '0.9f, 0.9f' : '0.6f, 1.95f'
-      const category = isHostilePreset(mob.preset) ? 'MobCategory.MONSTER' : 'MobCategory.CREATURE'
+      const category = isHostileMob(mob) ? 'MobCategory.MONSTER' : 'MobCategory.CREATURE'
       const buildCall =
         pins.entityTypeBuild === 'resource_key'
           ? `build(ResourceKey.create(Registries.ENTITY_TYPE, ResourceLocation.fromNamespaceAndPath(MOD_ID, "${mob.id}")))`
@@ -131,6 +133,7 @@ function mainJava(spec: ProjectSpec, pins: NeoForgeVersionPins): string {
   const needsRegistries = emitEntities || spec.modGuis.length > 0
   const needsHolder = emitEntities || spec.modGuis.length > 0
   const needsCommands = spec.modGuis.length > 0 || spec.commands.length > 0
+  const hasLoot = spec.items.length > 0 || spec.blocks.length > 0
   return `package ${spec.packageName};
 
 import net.minecraft.world.item.CreativeModeTabs;
@@ -150,7 +153,15 @@ ${spec.modGuis.length ? `import net.minecraft.world.inventory.MenuType;
 import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;` : ''}
 ${needsCommands ? `import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;` : ''}
-${needsHolder ? 'import net.neoforged.neoforge.registries.DeferredHolder;' : ''}
+${needsHolder || hasLoot ? 'import net.neoforged.neoforge.registries.DeferredHolder;' : ''}
+${spec.blocks.length ? `import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.neoforged.neoforge.registries.DeferredBlock;` : ''}
+${hasLoot ? `import com.mojang.serialization.MapCodec;
+import net.neoforged.neoforge.common.loot.IGlobalLootModifier;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;` : ''}
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
@@ -161,14 +172,20 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 public class ${spec.mainClass} {
   public static final String MOD_ID = "${javaEscape(spec.modId)}";
   public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MOD_ID);
+${spec.blocks.length ? `  public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(MOD_ID);` : ''}
+${hasLoot ? `  public static final DeferredRegister<MapCodec<? extends IGlobalLootModifier>> LOOT_MODIFIERS = DeferredRegister.create(NeoForgeRegistries.GLOBAL_LOOT_MODIFIER_SERIALIZERS, MOD_ID);` : ''}
 ${emitEntities ? `  public static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(Registries.ENTITY_TYPE, MOD_ID);` : ''}
 ${spec.modGuis.length ? forgeLikeMenuFields(spec, 'neoforge') : ''}
 
 ${itemRegistrations(spec)}
+${spec.blocks.length ? `\n${neoBlockRegs(spec)}` : ''}
+${hasLoot ? `  public static final DeferredHolder<MapCodec<? extends IGlobalLootModifier>, MapCodec<AddBonusChestModifier>> ADD_BONUS_CHEST = LOOT_MODIFIERS.register("add_bonus_chest", () -> AddBonusChestModifier.CODEC);` : ''}
 ${emitEntities ? `\n${entityRegistrations(spec, pins)}` : ''}
 
   public ${spec.mainClass}(IEventBus modEventBus) {
+    ${spec.blocks.length ? 'BLOCKS.register(modEventBus);' : ''}
     ITEMS.register(modEventBus);
+    ${hasLoot ? 'LOOT_MODIFIERS.register(modEventBus);' : ''}
     ${emitEntities ? 'ENTITIES.register(modEventBus);' : ''}
     ${spec.modGuis.length ? 'MENUS.register(modEventBus);' : ''}
     modEventBus.addListener(this::addCreative);
@@ -179,6 +196,7 @@ ${emitEntities ? `\n${entityRegistrations(spec, pins)}` : ''}
   private void addCreative(BuildCreativeModeTabContentsEvent event) {
     if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
 ${creativeAccepts(spec)}
+${forgeBlockCreative(spec)}
     }
   }
 
@@ -370,6 +388,10 @@ jar {
   for (const item of spec.items) {
     lang[`item.${spec.modId}.${item.id}`] = item.displayName
   }
+  for (const block of spec.blocks) {
+    lang[`block.${spec.modId}.${block.id}`] = block.displayName
+    lang[`item.${spec.modId}.${block.id}`] = block.displayName
+  }
   if (pins.entityRegistration) {
     for (const mob of spec.mobs) {
       lang[`entity.${spec.modId}.${mob.id}`] = mob.displayName
@@ -401,11 +423,14 @@ jar {
     contents: mainJava(spec, pins)
   })
   files.push(...planRecipeFiles(spec))
+  files.push(...planBlockAssetFiles(spec))
+  files.push(...planBlockDocs(spec, 'neoforge'))
   files.push(...planOreFeatureJson(spec))
   files.push(...planOreBiomeModifiers(spec, 'neoforge'))
   files.push(...planEntityLootFiles(spec))
   files.push(...planItemLootFiles(spec))
-  files.push(...planLootDocs(spec))
+  files.push(...planLootDocs(spec, true))
+  files.push(...planForgeLikeLootModifierFiles(spec, packagePath, 'neoforge'))
   files.push(...planWorldgenDocs(spec, 'neoforge'))
 
   if (pins.entityRegistration && spec.mobs.length > 0) {
@@ -476,7 +501,11 @@ jar {
         ? '6. Accept the Minecraft EULA yourself. CraftStudio never distributes game files or bypasses auth.'
         : '',
       spec.mobs.length > 0 && pins.entityRegistration
-        ? `Summon a preset mob with \`/summon ${spec.modId}:${spec.mobs[0]!.id}\`. See ENTITY_RENDERING.md and SPAWNS.md.`
+        ? `Summon a preset mob with \`/summon ${spec.modId}:${spec.mobs[0]!.id}\`. See ENTITY_RENDERING.md and SPAWNS.md. Presets expand into a capped goal list (max 5).`
+        : '',
+      spec.blocks.length > 0 ? 'Custom blocks are cube_all + BlockItem. Paint a block texture in Assets. See BLOCKS.md.' : '',
+      spec.items.length > 0
+        ? 'Chest bonus loot is injected via a NeoForge global loot modifier into four allowlisted vanilla chests. See LOOT.md.'
         : '',
       '',
       '## Permission nodes',

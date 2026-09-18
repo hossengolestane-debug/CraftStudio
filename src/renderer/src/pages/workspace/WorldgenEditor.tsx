@@ -1,5 +1,11 @@
-import { defaultWorldgenEntry } from '../../../../shared/editorSpec'
-import { SPAWN_BIOMES, WORLDGEN_BLOCKS, type ProjectSpec, type SpecWorldgen } from '../../../../shared/spec'
+import { defaultSurfacePatchEntry, defaultWorldgenEntry } from '../../../../shared/editorSpec'
+import {
+  SPAWN_BIOMES,
+  SURFACE_PATCH_BLOCKS,
+  WORLDGEN_BLOCKS,
+  type ProjectSpec,
+  type SpecWorldgen
+} from '../../../../shared/spec'
 import { Button, Card, Field, TextInput } from '../../components/ui'
 
 export function WorldgenEditor({
@@ -18,22 +24,24 @@ export function WorldgenEditor({
     onChange({ ...spec, worldgen, source: 'editor' })
   }
 
+  const oreBlocks = [...WORLDGEN_BLOCKS, ...spec.blocks.map((block) => block.id)]
+  const patchBlocks = [...SURFACE_PATCH_BLOCKS, ...spec.blocks.map((block) => block.id)]
+
   return (
     <Card className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Worldgen MVP (ore veins)</h2>
+        <h2 className="text-lg font-semibold">Worldgen (ore veins + surface patches)</h2>
         <p className="mt-1 text-sm text-muted">
-          Trusted-template ore veins only: configured_feature + placed_feature JSON that place allowlisted vanilla ores.
-          Not a dimension or structure stack. Cap: 4 veins.
+          Trusted-template features only. ore_vein uses minecraft:ore (vanilla ore or a spec block). surface_patch uses
+          minecraft:random_patch. Not a dimension or structure stack. Cap: 4 entries.
         </p>
         {pluginLimits ? (
           <p className="mt-2 text-sm">
-            Paper and Spigot cannot emit worldgen. Apply will reject ore-vein entries on plugin projects. This is an
-            honest gap — no fake ore JSON.
+            Paper and Spigot cannot emit worldgen. Apply rejects these entries. No fake ore JSON.
           </p>
         ) : (
           <p className="mt-2 text-sm">
-            Fabric adds the placed feature with BiomeModifications. Forge/NeoForge use an add_features biome modifier.
+            Fabric uses BiomeModifications. Forge/NeoForge use add_features biome modifiers.
           </p>
         )}
       </div>
@@ -41,7 +49,7 @@ export function WorldgenEditor({
       {spec.worldgen.map((entry, index) => (
         <div key={`${entry.id}-${index}`} className="space-y-3 border border-line p-3">
           <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Vein id" htmlFor={`wg-id-${index}`}>
+            <Field label="Feature id" htmlFor={`wg-id-${index}`}>
               <TextInput
                 id={`wg-id-${index}`}
                 value={entry.id}
@@ -49,21 +57,38 @@ export function WorldgenEditor({
                 onChange={(event) => update(index, { id: event.target.value })}
               />
             </Field>
-            <Field label="Vanilla block" htmlFor={`wg-block-${index}`}>
+            <Field label="Kind" htmlFor={`wg-kind-${index}`}>
+              <select
+                id={`wg-kind-${index}`}
+                className="w-full border border-line bg-white px-3 py-2"
+                value={entry.kind}
+                onChange={(event) => {
+                  const kind = event.target.value as SpecWorldgen['kind']
+                  update(index, {
+                    kind,
+                    block: kind === 'surface_patch' ? SURFACE_PATCH_BLOCKS[0] : WORLDGEN_BLOCKS[1]
+                  })
+                }}
+              >
+                <option value="ore_vein">ore_vein</option>
+                <option value="surface_patch">surface_patch</option>
+              </select>
+            </Field>
+            <Field label={entry.kind === 'surface_patch' ? 'Plant / block' : 'Ore / spec block'} htmlFor={`wg-block-${index}`}>
               <select
                 id={`wg-block-${index}`}
                 className="w-full border border-line bg-white px-3 py-2"
                 value={entry.block}
-                onChange={(event) => update(index, { block: event.target.value as SpecWorldgen['block'] })}
+                onChange={(event) => update(index, { block: event.target.value })}
               >
-                {WORLDGEN_BLOCKS.map((block) => (
+                {(entry.kind === 'surface_patch' ? patchBlocks : oreBlocks).map((block) => (
                   <option key={block} value={block}>
                     {block}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="Vein size" htmlFor={`wg-size-${index}`}>
+            <Field label={entry.kind === 'surface_patch' ? 'XZ spread' : 'Vein size'} htmlFor={`wg-size-${index}`}>
               <TextInput
                 id={`wg-size-${index}`}
                 inputMode="numeric"
@@ -73,7 +98,7 @@ export function WorldgenEditor({
                 }
               />
             </Field>
-            <Field label="Count per chunk" htmlFor={`wg-count-${index}`}>
+            <Field label={entry.kind === 'surface_patch' ? 'Tries' : 'Count per chunk'} htmlFor={`wg-count-${index}`}>
               <TextInput
                 id={`wg-count-${index}`}
                 inputMode="numeric"
@@ -83,26 +108,30 @@ export function WorldgenEditor({
                 }
               />
             </Field>
-            <Field label="Min Y" htmlFor={`wg-min-${index}`}>
-              <TextInput
-                id={`wg-min-${index}`}
-                inputMode="numeric"
-                value={String(entry.minY)}
-                onChange={(event) =>
-                  update(index, { minY: Math.min(320, Math.max(-64, Number(event.target.value) || -24)) })
-                }
-              />
-            </Field>
-            <Field label="Max Y" htmlFor={`wg-max-${index}`}>
-              <TextInput
-                id={`wg-max-${index}`}
-                inputMode="numeric"
-                value={String(entry.maxY)}
-                onChange={(event) =>
-                  update(index, { maxY: Math.min(320, Math.max(-64, Number(event.target.value) || 56)) })
-                }
-              />
-            </Field>
+            {entry.kind === 'ore_vein' ? (
+              <>
+                <Field label="Min Y" htmlFor={`wg-min-${index}`}>
+                  <TextInput
+                    id={`wg-min-${index}`}
+                    inputMode="numeric"
+                    value={String(entry.minY)}
+                    onChange={(event) =>
+                      update(index, { minY: Math.min(320, Math.max(-64, Number(event.target.value) || -24)) })
+                    }
+                  />
+                </Field>
+                <Field label="Max Y" htmlFor={`wg-max-${index}`}>
+                  <TextInput
+                    id={`wg-max-${index}`}
+                    inputMode="numeric"
+                    value={String(entry.maxY)}
+                    onChange={(event) =>
+                      update(index, { maxY: Math.min(320, Math.max(-64, Number(event.target.value) || 56)) })
+                    }
+                  />
+                </Field>
+              </>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {SPAWN_BIOMES.map((biome) => (
@@ -132,25 +161,41 @@ export function WorldgenEditor({
               })
             }
           >
-            Remove vein
+            Remove feature
           </Button>
         </div>
       ))}
 
-      <Button
-        type="button"
-        variant="secondary"
-        disabled={spec.worldgen.length >= 4}
-        onClick={() =>
-          onChange({
-            ...spec,
-            worldgen: [...spec.worldgen, defaultWorldgenEntry(`ore_vein_${spec.worldgen.length + 1}`)],
-            source: 'editor'
-          })
-        }
-      >
-        Add ore vein
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={spec.worldgen.length >= 4}
+          onClick={() =>
+            onChange({
+              ...spec,
+              worldgen: [...spec.worldgen, defaultWorldgenEntry(`ore_vein_${spec.worldgen.length + 1}`)],
+              source: 'editor'
+            })
+          }
+        >
+          Add ore vein
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={spec.worldgen.length >= 4}
+          onClick={() =>
+            onChange({
+              ...spec,
+              worldgen: [...spec.worldgen, defaultSurfacePatchEntry(`flower_patch_${spec.worldgen.length + 1}`)],
+              source: 'editor'
+            })
+          }
+        >
+          Add surface patch
+        </Button>
+      </div>
     </Card>
   )
 }

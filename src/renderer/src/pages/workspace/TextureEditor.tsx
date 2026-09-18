@@ -21,7 +21,10 @@ const api = window.craftstudio
 
 export function TextureEditor({ project, spec }: { project: ProjectRecord; spec: ProjectSpec | null }) {
   const items = useMemo(() => spec?.items ?? [], [spec])
+  const blocks = useMemo(() => spec?.blocks ?? [], [spec])
+  const [kind, setKind] = useState<'item' | 'block'>('item')
   const [itemId, setItemId] = useState(items[0]?.id ?? '')
+  const [blockId, setBlockId] = useState(blocks[0]?.id ?? '')
   const [layer, setLayer] = useState<TextureLayer>('layer0')
   const [size, setSize] = useState<16 | 32>(16)
   const [pixels, setPixels] = useState(() => blankTexture(16, 16))
@@ -92,6 +95,9 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
     paintCanvas()
   }, [paintCanvas])
 
+  const selectedId = kind === 'block' ? blockId : itemId
+  const activeLayer: TextureLayer = kind === 'block' ? 'layer0' : layer
+
   useEffect(() => {
     if (items[0] && !items.some((item) => item.id === itemId)) {
       setItemId(items[0].id)
@@ -99,11 +105,26 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
   }, [items, itemId])
 
   useEffect(() => {
-    if (!itemId) {
+    if (blocks[0] && !blocks.some((block) => block.id === blockId)) {
+      setBlockId(blocks[0].id)
+    }
+  }, [blocks, blockId])
+
+  useEffect(() => {
+    if (kind === 'block' && blocks.length === 0 && items.length > 0) {
+      setKind('item')
+    }
+    if (kind === 'item' && items.length === 0 && blocks.length > 0) {
+      setKind('block')
+    }
+  }, [kind, items.length, blocks.length])
+
+  useEffect(() => {
+    if (!selectedId) {
       return
     }
     void api
-      .getTexture(project.manifest.id, itemId, layer)
+      .getTexture(project.manifest.id, selectedId, activeLayer)
       .then((texture) => {
         history.current = new PixelHistory()
         if (!texture) {
@@ -121,7 +142,7 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
         )
       })
       .catch((err) => setError(asAppError(err)))
-  }, [itemId, layer, project.manifest.id])
+  }, [selectedId, activeLayer, project.manifest.id])
 
   const paintAt = (event: MouseEvent<HTMLCanvasElement>): void => {
     const canvas = canvasRef.current
@@ -145,10 +166,10 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
     history.current.push(pixels)
   }
 
-  if (!spec || items.length === 0) {
+  if (!spec || (items.length === 0 && blocks.length === 0)) {
     return (
       <Card>
-        <p>Generate and apply a spec on Design first. The texture editor binds to spec item ids.</p>
+        <p>Generate and apply a spec on Design first. The texture editor binds to spec item and block ids.</p>
       </Card>
     )
   }
@@ -160,37 +181,75 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
         <div>
           <h2 className="text-lg font-semibold">Pixel texture editor</h2>
           <p className="mt-1 text-sm text-muted">
-            Pencil, eraser, fill, palette, grid, zoom, undo/redo, and PNG import/export. Paint layer0 or a dedicated
-            layer1 overlay. Bind handheld + layer1 on Design so pack export includes both. Ollama may suggest colors
-            only — it does not draw this image.
+            Pencil, eraser, fill, palette, grid, zoom, undo/redo, and PNG import/export. Items can use layer0 or a
+            dedicated layer1 overlay. Blocks are cube-all layer0 only (reuses the same painter). Ollama may suggest
+            colors only — it does not draw this image.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Field label="Item" htmlFor="tex-item">
+          <Field label="Kind" htmlFor="tex-kind">
             <select
-              id="tex-item"
+              id="tex-kind"
               className="border border-line bg-white px-3 py-2"
-              value={itemId}
-              onChange={(event) => setItemId(event.target.value)}
+              value={kind}
+              onChange={(event) => {
+                const next = event.target.value === 'block' ? 'block' : 'item'
+                setKind(next)
+                if (next === 'block') {
+                  setLayer('layer0')
+                }
+              }}
             >
-              {items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.displayName} ({item.id})
-                </option>
-              ))}
+              {items.length > 0 ? <option value="item">item</option> : null}
+              {blocks.length > 0 ? <option value="block">block</option> : null}
             </select>
           </Field>
-          <Field label="Layer" htmlFor="tex-layer">
-            <select
-              id="tex-layer"
-              className="border border-line bg-white px-3 py-2"
-              value={layer}
-              onChange={(event) => setLayer(event.target.value === 'layer1' ? 'layer1' : 'layer0')}
-            >
-              <option value="layer0">layer0 (base)</option>
-              <option value="layer1">layer1 (overlay)</option>
-            </select>
-          </Field>
+          {kind === 'block' ? (
+            <Field label="Block" htmlFor="tex-block">
+              <select
+                id="tex-block"
+                className="border border-line bg-white px-3 py-2"
+                value={blockId}
+                onChange={(event) => setBlockId(event.target.value)}
+              >
+                {blocks.map((block) => (
+                  <option key={block.id} value={block.id}>
+                    {block.displayName} ({block.id})
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : (
+            <Field label="Item" htmlFor="tex-item">
+              <select
+                id="tex-item"
+                className="border border-line bg-white px-3 py-2"
+                value={itemId}
+                onChange={(event) => setItemId(event.target.value)}
+              >
+                {items.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.displayName} ({item.id})
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {kind === 'item' ? (
+            <Field label="Layer" htmlFor="tex-layer">
+              <select
+                id="tex-layer"
+                className="border border-line bg-white px-3 py-2"
+                value={layer}
+                onChange={(event) => setLayer(event.target.value === 'layer1' ? 'layer1' : 'layer0')}
+              >
+                <option value="layer0">layer0 (base)</option>
+                <option value="layer1">layer1 (overlay)</option>
+              </select>
+            </Field>
+          ) : (
+            <Badge>cube_all layer0</Badge>
+          )}
           <Field label="Size" htmlFor="tex-size">
             <select
               id="tex-size"
@@ -304,7 +363,7 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
-            disabled={busy || !itemId}
+            disabled={busy || !selectedId}
             onClick={() => {
               setBusy(true)
               setError(null)
@@ -312,8 +371,8 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
               void api
                 .saveTexture({
                   projectId: project.manifest.id,
-                  itemId,
-                  layer,
+                  itemId: selectedId,
+                  layer: activeLayer,
                   width: size,
                   height: size,
                   pixels: Array.from(pixels),
@@ -321,7 +380,9 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
                 })
                 .then(() =>
                   setNote(
-                    `Saved ${layer === 'layer1' ? `${itemId}_layer1.png` : `${itemId}.png`} under craftstudio/textures/. Enable layer1 on the item in Design, then re-apply so the pack and jar include it.`
+                    kind === 'block'
+                      ? `Saved ${selectedId}.png under craftstudio/textures/. Re-apply so the jar uses the cube-all block texture.`
+                      : `Saved ${activeLayer === 'layer1' ? `${selectedId}_layer1.png` : `${selectedId}.png`} under craftstudio/textures/. Enable layer1 on the item in Design, then re-apply so the pack and jar include it.`
                   )
                 )
                 .catch((err) => setError(asAppError(err)))
@@ -334,8 +395,8 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
             variant="secondary"
             onClick={() => {
               history.current.push(pixels)
-              setPixels(hashDefaultTexture(size, size, itemId || project.manifest.id))
-              setNote('Filled a deterministic placeholder from the item id. This is not an AI drawing.')
+              setPixels(hashDefaultTexture(size, size, selectedId || project.manifest.id))
+              setNote('Filled a deterministic placeholder from the id. This is not an AI drawing.')
             }}
           >
             Fill default pattern
@@ -405,7 +466,7 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
                 const url = URL.createObjectURL(blob)
                 const link = document.createElement('a')
                 link.href = url
-                link.download = `${itemId || 'texture'}${layer === 'layer1' ? '_layer1' : ''}.png`
+                link.download = `${selectedId || 'texture'}${activeLayer === 'layer1' ? '_layer1' : ''}.png`
                 link.click()
                 URL.revokeObjectURL(url)
               })
@@ -419,7 +480,7 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
             {note}
           </p>
         ) : null}
-        {layer === 'layer1' && items.find((item) => item.id === itemId)?.layer1 !== true ? (
+        {kind === 'item' && layer === 'layer1' && items.find((item) => item.id === itemId)?.layer1 !== true ? (
           <p className="text-sm">
             This item does not have <code>layer1</code> enabled in Design yet. The PNG still saves; pack export only
             ships it after you toggle layer1 on the item and re-apply.

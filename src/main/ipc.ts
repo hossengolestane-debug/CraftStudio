@@ -373,7 +373,7 @@ export function registerIpc(deps: {
       const textures = await loadProjectTextures(
         settings.projectsPath,
         record.directoryName,
-        spec.items.map((item) => item.id)
+        [...spec.items.map((item) => item.id), ...spec.blocks.map((block) => block.id)]
       )
       const window = senderWindow(event)
       const dialogOpts = {

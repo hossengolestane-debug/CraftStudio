@@ -14,6 +14,7 @@ import {
 } from '../plugin/bukkit'
 import { pluginLootListenerJava, pluginLootRegister, planLootDocs } from '../loot/tables'
 import { planPluginSpawnGap } from '../spawn/biomeTables'
+import { planBlockDocs } from '../blocks/registration'
 import { planWorldgenDocs } from '../worldgen/oreVeins'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape, yamlEscape } from '../wrapper'
@@ -278,6 +279,7 @@ ${spec.items.map((item) => `      case "${item.id}" -> create${toConstName(item.
   }
   files.push(...planPluginSpawnGap(spec))
   files.push(...planWorldgenDocs(spec, 'plugin'))
+  files.push(...planBlockDocs(spec, 'plugin'))
   files.push(...planLootDocs(spec))
 
   files.push({
@@ -332,6 +334,7 @@ ${spec.items.map((item) => `      case "${item.id}" -> create${toConstName(item.
       spec.mobs.some((mob) => mob.spawn.enabled)
         ? 'Biome spawn tables are unsupported on Spigot. See SPAWNS.md.'
         : '',
+      'Spigot cannot register custom blocks or inject vanilla chest loot. Drops stay EntityDeathEvent only; see LOOT.md.',
       ''
     ].join('\n')
   })

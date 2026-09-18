@@ -14,6 +14,7 @@ import type { AppSettings, OllamaStatus, PlatformAdapterInfo, ProjectRecord } fr
 import { ErrorPanel } from '../../components/ErrorPanel'
 import { Badge, Button, Card, Field, TextArea, TextInput } from '../../components/ui'
 import { asAppError } from '../../lib/errors'
+import { BlockEditor } from './BlockEditor'
 import { ItemEditor } from './ItemEditor'
 import { MobEditor } from './MobEditor'
 import { ModGuiEditor } from './ModGuiEditor'
@@ -249,7 +250,7 @@ export function DesignGenerate({
         <h2 className="text-lg font-semibold">Generate specification</h2>
         {!codegenReady ? (
           <p>
-            Phase 8 codegen is Fabric 1.21.x, Paper 1.21.x, NeoForge 1.21.1/1.21.4/1.21.8, Forge 1.21.1, and Spigot
+            Phase 9 codegen is Fabric 1.21.x, Paper 1.21.x, NeoForge 1.21.1/1.21.4/1.21.8, Forge 1.21.1, and Spigot
             1.21/1.21.1/1.21.4. This {project.manifest.platform} {project.manifest.minecraftVersion} project cannot emit
             Gradle files. The adapter will not pretend otherwise.
             {project.manifest.platform === 'spigot' ? ' Spigot is not inferred from Paper success.' : ''}
@@ -364,6 +365,7 @@ export function DesignGenerate({
             <p className="self-center text-xs text-muted">Design editors keep a 20-step history. Autosave still writes on Apply.</p>
           </div>
           <ItemEditor spec={workingSpec} paperLimits={pluginLimits} onChange={applyWorking} />
+          <BlockEditor spec={workingSpec} pluginLimits={pluginLimits} onChange={applyWorking} />
           <MobEditor spec={workingSpec} pluginLimits={pluginLimits} onChange={applyWorking} />
           <WorldgenEditor spec={workingSpec} pluginLimits={pluginLimits} onChange={applyWorking} />
           {project.manifest.type === 'mod' ? (
@@ -401,6 +403,11 @@ export function DesignGenerate({
             {generation.spec.items.map((item) => (
               <li key={item.id}>
                 <span className="font-medium">{item.displayName}</span> ({item.id}) max {item.maxCount}
+              </li>
+            ))}
+            {generation.spec.blocks.map((block) => (
+              <li key={`block-${block.id}`}>
+                Block <span className="font-medium">{block.displayName}</span> ({block.id}) {block.material}
               </li>
             ))}
           </ul>
@@ -525,9 +532,9 @@ export function DesignGenerate({
           <h2 className="text-lg font-semibold">Adapter capabilities</h2>
           <p className="mt-2 text-sm text-muted">
             Gradle emission: {adapter.capabilities.gradleProject}. Client entities: {adapter.capabilities.clientEntities}.
-            Custom items: {adapter.capabilities.customItems}. Custom entities: {adapter.capabilities.customEntities}.
-            GUIs: {adapter.capabilities.customGuis}. Worldgen: {adapter.capabilities.worldgen}. Recipes:{' '}
-            {adapter.capabilities.recipes}.
+            Custom items: {adapter.capabilities.customItems}. Custom blocks: {adapter.capabilities.customBlocks}.
+            Custom entities: {adapter.capabilities.customEntities}. GUIs: {adapter.capabilities.customGuis}. Worldgen:{' '}
+            {adapter.capabilities.worldgen}. Recipes: {adapter.capabilities.recipes}.
           </p>
         </Card>
       ) : null}

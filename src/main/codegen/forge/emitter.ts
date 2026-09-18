@@ -11,9 +11,11 @@ import {
   planForgeLikeEntityClientFiles
 } from '../entities/forgeLikeClient'
 import { fabricSpawnDoc, placeholderEntityPng } from '../fabric/extras'
-import { isHostilePreset, mojangGoalBlock, mojangParent } from '../mobs/presets'
+import { isHostileMob, mojangGoalBlock, mojangParent } from '../mobs/presets'
 import { forgeLikeCommandMethod, forgeLikeMenuFields, planForgeLikeMenuFiles } from '../modgui/forgeLike'
 import { mojangItemProperties, mojangNeedsAttributeImports } from '../items/settings'
+import { forgeBlockCreative, forgeBlockRegs, planBlockAssetFiles, planBlockDocs } from '../blocks/registration'
+import { planForgeLikeLootModifierFiles } from '../loot/inject'
 import { planEntityLootFiles, planItemLootFiles, planLootDocs } from '../loot/tables'
 import { entityClassName } from '../naming'
 import { planRecipeFiles } from '../recipes/json'
@@ -282,7 +284,7 @@ jar {
     .map((mob) => {
       const cls = entityClassName(mob.id)
       const size = mob.appearance.model === 'quadruped' ? '0.9f, 0.9f' : '0.6f, 1.95f'
-      const category = isHostilePreset(mob.preset) ? 'MobCategory.MONSTER' : 'MobCategory.CREATURE'
+      const category = isHostileMob(mob) ? 'MobCategory.MONSTER' : 'MobCategory.CREATURE'
       return `  public static final RegistryObject<EntityType<${cls}>> ${toConstName(mob.id)} = ENTITIES.register("${mob.id}",
     () -> EntityType.Builder.of(${cls}::new, ${category}).sized(${size}).build("${mob.id}"));`
     })
@@ -308,6 +310,12 @@ ${spec.modGuis.length > 0 || spec.commands.length > 0 ? `import net.minecraftfor
 import net.minecraftforge.event.RegisterCommandsEvent;` : ''}
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
+${spec.blocks.length ? `import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.state.BlockBehaviour;` : ''}
+${spec.items.length > 0 || spec.blocks.length > 0 ? `import net.minecraftforge.common.loot.IGlobalLootModifier;
+import com.mojang.serialization.MapCodec;` : ''}
 ${mojangNeedsAttributeImports(spec.items) ? `import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -325,15 +333,21 @@ import net.minecraftforge.registries.RegistryObject;
 public class ${spec.mainClass} {
   public static final String MOD_ID = "${javaEscape(spec.modId)}";
   public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MOD_ID);
+${spec.blocks.length ? `  public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MOD_ID);
+  public static final DeferredRegister<MapCodec<? extends IGlobalLootModifier>> LOOT_MODIFIERS = DeferredRegister.create(ForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, MOD_ID);` : spec.items.length > 0 ? `  public static final DeferredRegister<MapCodec<? extends IGlobalLootModifier>> LOOT_MODIFIERS = DeferredRegister.create(ForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, MOD_ID);` : ''}
 ${spec.mobs.length ? `  public static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, MOD_ID);` : ''}
 ${spec.modGuis.length ? forgeLikeMenuFields(spec, 'forge') : ''}
 
 ${itemRegs(spec)}
+${spec.blocks.length ? `\n${forgeBlockRegs(spec)}` : ''}
+${spec.items.length > 0 || spec.blocks.length > 0 ? `  public static final RegistryObject<MapCodec<? extends IGlobalLootModifier>> ADD_BONUS_CHEST = LOOT_MODIFIERS.register("add_bonus_chest", () -> AddBonusChestModifier.CODEC);` : ''}
 ${entityRegs}
 
   public ${spec.mainClass}(FMLJavaModLoadingContext context) {
     IEventBus bus = context.getModEventBus();
+    ${spec.blocks.length ? 'BLOCKS.register(bus);' : ''}
     ITEMS.register(bus);
+    ${spec.items.length > 0 || spec.blocks.length > 0 ? 'LOOT_MODIFIERS.register(bus);' : ''}
     ${spec.mobs.length ? 'ENTITIES.register(bus);' : ''}
     ${spec.modGuis.length ? 'MENUS.register(bus);' : ''}
     bus.addListener(this::addCreative);
@@ -344,6 +358,7 @@ ${entityRegs}
   private void addCreative(BuildCreativeModeTabContentsEvent event) {
     if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
 ${creative}
+${forgeBlockCreative(spec)}
     }
   }
 
@@ -386,6 +401,10 @@ ${forgeLikeCommandMethod(spec)}
   for (const item of spec.items) {
     lang[`item.${spec.modId}.${item.id}`] = item.displayName
   }
+  for (const block of spec.blocks) {
+    lang[`block.${spec.modId}.${block.id}`] = block.displayName
+    lang[`item.${spec.modId}.${block.id}`] = block.displayName
+  }
   for (const mob of spec.mobs) {
     lang[`entity.${spec.modId}.${mob.id}`] = mob.displayName
   }
@@ -409,11 +428,14 @@ ${forgeLikeCommandMethod(spec)}
   }
 
   files.push(...planRecipeFiles(spec))
+  files.push(...planBlockAssetFiles(spec))
+  files.push(...planBlockDocs(spec, 'forge'))
   files.push(...planOreFeatureJson(spec))
   files.push(...planOreBiomeModifiers(spec, 'forge'))
   files.push(...planEntityLootFiles(spec))
   files.push(...planItemLootFiles(spec))
-  files.push(...planLootDocs(spec))
+  files.push(...planLootDocs(spec, true))
+  files.push(...planForgeLikeLootModifierFiles(spec, packagePath, 'forge'))
   files.push(...planWorldgenDocs(spec, 'forge'))
   files.push(...planForgeLikeMenuFiles(spec, packagePath, 'forge'))
 
@@ -437,7 +459,11 @@ ${forgeLikeCommandMethod(spec)}
         ? '5. Accept the Minecraft EULA yourself. CraftStudio never distributes game files.'
         : '',
       spec.mobs.length > 0
-        ? `Summon a preset mob with \`/summon ${spec.modId}:${spec.mobs[0]!.id}\`. See ENTITY_RENDERING.md and SPAWNS.md.`
+        ? `Summon a preset mob with \`/summon ${spec.modId}:${spec.mobs[0]!.id}\`. See ENTITY_RENDERING.md and SPAWNS.md. Presets expand into a capped goal list (max 5).`
+        : '',
+      spec.blocks.length > 0 ? 'Custom blocks are cube_all + BlockItem. Paint a block texture in Assets. See BLOCKS.md.' : '',
+      spec.items.length > 0
+        ? 'Chest bonus loot is injected via a Forge global loot modifier into four allowlisted vanilla chests. See LOOT.md.'
         : '',
       '',
       '## Permission nodes',
