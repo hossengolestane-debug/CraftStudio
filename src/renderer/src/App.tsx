@@ -14,6 +14,7 @@ import { asAppError } from './lib/errors'
 import { AssetsPage } from './pages/AssetsPage'
 import { CreateWizard } from './pages/CreateWizard'
 import { ProjectsPage } from './pages/ProjectsPage'
+import { ActivityPage } from './pages/ActivityPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { WorkspacePage } from './pages/WorkspacePage'
 
@@ -76,7 +77,8 @@ export default function App() {
         '1': 'projects',
         '2': 'create',
         '3': 'assets',
-        '4': 'settings'
+        '4': 'settings',
+        '5': 'activity'
       }
       const next = map[event.key]
       if (next) {
@@ -144,6 +146,10 @@ export default function App() {
       ) : null}
 
       {view === 'assets' ? <AssetsPage project={openProject} /> : null}
+
+      {view === 'activity' ? (
+        <ActivityPage onOpenWindow={() => void api.openActivityWindow()} />
+      ) : null}
 
       {view === 'settings' ? (
         <SettingsPage

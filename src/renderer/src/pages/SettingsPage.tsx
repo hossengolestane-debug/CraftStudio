@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { AppErrorPayload } from '../../../shared/errors'
 import type { AppSettings, OllamaStatus } from '../../../shared/types'
-import type { AppDefaults, ModelTestResultDto, OllamaUnloadResultDto } from '../../../shared/ipc'
+import type { AppAboutDto, AppDefaults, ModelTestResultDto, OllamaUnloadResultDto } from '../../../shared/ipc'
 import { EnvironmentDoctor } from '../components/EnvironmentDoctor'
 import { ErrorPanel } from '../components/ErrorPanel'
 import { Badge, Button, Card, Field, TextInput } from '../components/ui'
@@ -48,9 +48,14 @@ export function SettingsPage({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<AppErrorPayload | null>(null)
   const [saved, setSaved] = useState(false)
+  const [about, setAbout] = useState<AppAboutDto | null>(null)
   const checkLock = useRef(false)
   const testLock = useRef(false)
   const advancedId = useId()
+
+  useEffect(() => {
+    void window.craftstudio.getAbout().then(setAbout).catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     if (!settings) {
@@ -76,8 +81,40 @@ export function SettingsPage({
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
         <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="mt-1 text-muted">Saved as JSON in the app userData folder. Ollama stays local — no cloud fallback.</p>
+        <p className="mt-1 text-muted">
+          Saved as JSON in the app userData folder. Ollama stays local — no cloud fallback. Open{' '}
+          <strong>Live Activity</strong> from the left sidebar (no project required).
+        </p>
       </div>
+
+      <Card className="space-y-2" id="about-build">
+        <h2 className="text-lg font-semibold">About / Build information</h2>
+        <p className="text-sm text-muted">
+          Use this to confirm you launched the 1.0.2+ binary, not an older copy left in another folder.
+        </p>
+        {about ? (
+          <dl className="space-y-1 text-sm">
+            <div>
+              <dt className="font-medium">App version</dt>
+              <dd>{about.version}</dd>
+            </div>
+            <div>
+              <dt className="font-medium">Build timestamp</dt>
+              <dd>{about.buildTime}</dd>
+            </div>
+            <div>
+              <dt className="font-medium">Commit</dt>
+              <dd>{about.commit}</dd>
+            </div>
+            <div>
+              <dt className="font-medium">Running executable</dt>
+              <dd className="break-all">{about.executablePath}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="text-sm text-muted">Loading build information…</p>
+        )}
+      </Card>
 
       {error ? <ErrorPanel error={error} onDismiss={() => setError(null)} /> : null}
       {saved ? (

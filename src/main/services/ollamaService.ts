@@ -85,6 +85,15 @@ function parseModels(payload: unknown): OllamaModel[] {
   return parsed
 }
 
+export interface PreInferenceDiagnostic {
+  endpoint: string
+  operation: string
+  model: string
+  requestSettings: { numPredict: number; numCtx: number; timeoutMs: number; temperature: number }
+  promptSizeChars: number
+  activeRequestCount: number
+}
+
 export interface ChatJsonOptions {
   endpoint: string
   model: string
@@ -214,6 +223,8 @@ export class OllamaService {
   private checkController: AbortController | null = null
   private inferController: AbortController | null = null
   private activeInference: OllamaInferenceState | null = null
+
+  constructor(private readonly onPreInference?: (diagnostic: PreInferenceDiagnostic) => void) {}
 
   getActiveInference(): OllamaInferenceState | null {
     return this.activeInference
@@ -369,6 +380,22 @@ export class OllamaService {
 
   async chatJson(options: ChatJsonOptions): Promise<string> {
     const normalized = normalizeOllamaEndpoint(options.endpoint)
+    const temperature = options.operation === 'test-model' ? 0 : 0.1
+    const diagnostic: PreInferenceDiagnostic = {
+      endpoint: normalized,
+      operation: options.operation ?? 'chat',
+      model: options.model,
+      requestSettings: {
+        numPredict: options.numPredict,
+        numCtx: options.numCtx,
+        timeoutMs: options.timeoutMs,
+        temperature
+      },
+      promptSizeChars: options.messages.reduce((sum, message) => sum + message.content.length, 0),
+      activeRequestCount: this.activeInference ? 1 : 0
+    }
+    console.log(`[craftstudio] pre-inference ${JSON.stringify(diagnostic)}`)
+    this.onPreInference?.(diagnostic)
     if (this.activeInference) {
       throw new AppError({
         code: 'INFERENCE_BUSY',
@@ -398,7 +425,7 @@ export class OllamaService {
           options: {
             num_predict: options.numPredict,
             num_ctx: options.numCtx,
-            temperature: options.operation === 'test-model' ? 0 : 0.1
+            temperature
           },
           messages: options.messages
         })

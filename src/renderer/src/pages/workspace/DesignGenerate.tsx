@@ -102,7 +102,7 @@ export function DesignGenerate({
   const versionChoices = adapter?.compatibility.map((row) => row.minecraftVersion) ?? [project.manifest.minecraftVersion]
 
   const refreshModels = async (): Promise<OllamaStatus> => {
-    const status = await api.checkOllama()
+    const status = await api.checkOllama(undefined, 'list-models')
     setModels(status.models.map((item) => item.name))
     return status
   }

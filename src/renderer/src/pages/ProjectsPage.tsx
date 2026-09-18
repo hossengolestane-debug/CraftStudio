@@ -58,7 +58,10 @@ export function ProjectsPage({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Projects</h1>
-          <p className="mt-1 text-muted">Local folders with a CraftStudio manifest. Nothing is uploaded.</p>
+          <p className="mt-1 text-muted">
+            Local folders with a CraftStudio manifest. Nothing is uploaded. Open <strong>Live Activity</strong> in the
+            left sidebar at any time — no project required.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => void onRefresh()} disabled={busy}>

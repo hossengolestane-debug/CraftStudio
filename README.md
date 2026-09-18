@@ -6,7 +6,7 @@ Desktop app that helps beginners create **Minecraft Java Edition** mods and serv
 | --- | --- |
 | Fabric, NeoForge, Forge | Paper, Spigot |
 
-**Phase 10 / 1.0.1** is a performance + observability hotfix on the 1.0.0 feature set: Check connection is metadata-only, Test model is explicit and bounded, one active inference, working cancel/unload, batched Live Activity, and bounded logs. See [PERF_OLLAMA_LIVE_ACTIVITY.md](PERF_OLLAMA_LIVE_ACTIVITY.md), [SMOKE.md](SMOKE.md), and [PHASE10.md](PHASE10.md).
+**Phase 10 / 1.0.2** keeps the 1.0.1 Ollama/Live Activity hotfix and makes the running build identifiable (Settings → About) plus a primary sidebar **Live Activity** item. Confirm you launched the exe whose About version is 1.0.2. See [PERF_OLLAMA_LIVE_ACTIVITY.md](PERF_OLLAMA_LIVE_ACTIVITY.md), [SMOKE.md](SMOKE.md), and [PHASE10.md](PHASE10.md).
 
 ## Quick start
 

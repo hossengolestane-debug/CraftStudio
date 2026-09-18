@@ -11,3 +11,4 @@ Thumbs.db
 .env.*
 !.env.example
 .tmp
+src/shared/buildInfo.generated.ts

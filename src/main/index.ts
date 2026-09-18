@@ -102,8 +102,23 @@ app.whenReady().then(() => {
 
   const settings = new SettingsService({ userDataPath: app.getPath('userData') })
   const projects = new ProjectService(settings)
-  const ollama = new OllamaService()
   const activity = new ActivityService(app.getPath('userData'))
+  const ollama = new OllamaService((diagnostic) => {
+    activity.record({
+      channel: 'ai',
+      title: `Pre-inference diagnostic for ${diagnostic.operation}.`,
+      status: 'queued',
+      model: diagnostic.model,
+      settings: {
+        model: diagnostic.model,
+        numPredict: diagnostic.requestSettings.numPredict,
+        numCtx: diagnostic.requestSettings.numCtx,
+        temperature: diagnostic.requestSettings.temperature,
+        timeoutMs: diagnostic.requestSettings.timeoutMs
+      },
+      detail: `endpoint=${diagnostic.endpoint} promptChars=${diagnostic.promptSizeChars} activeRequests=${diagnostic.activeRequestCount}`
+    })
+  })
   const generation = new GenerationService(projects, settings, ollama, activity)
   const gradle = new GradleService()
   const evidence = new EvidenceService(app.getPath('userData'))

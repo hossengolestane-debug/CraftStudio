@@ -1,6 +1,28 @@
-# 1.0.1 Performance + Live Activity hotfix
+# 1.0.2 Performance + Live Activity hotfix
 
 This is a hotfix on the existing Phase 10 / 1.0.0 product. It does **not** start a new feature phase. User projects and assets stay in the configured projects folder (including any Legendary Mace project). CraftStudio never deletes that folder during this change.
+
+## 1.0.2 user verification (Windows)
+
+The first 1.0.1 package **was built** but **was not the binary the user launched**.
+
+| Path | LastWrite (user report) | Version |
+| --- | --- | --- |
+| `E:\CraftStudio Local\CraftStudio Local.exe` (shortcuts) | 2026-09-18 **09:19** | **1.0.0** packaged app — no Live Activity UI |
+| `E:\CraftStudio\release\win-unpacked` | **10:20** | 1.0.1 unpacked |
+| `E:\CraftStudio\release\CraftStudio Local-1.0.1-portable.exe` | **10:23** | 1.0.1 portable |
+
+**Missing Live Activity cause:** outdated launch path **plus** weak discoverability (1.0.1 only had a footer underline). 1.0.1 source already contained `AppShell` footer, `LiveActivityFeed`, `ActivityPage`, and `activityService`. The user correctly saw freezes and no Live Activity because shortcuts still opened the 09:19 1.0.0 exe.
+
+1.0.2 adds:
+
+- Settings **About / Build information**: package version, build timestamp (`electron-vite` define + `out/build-info.json`), commit (`git` / `GITHUB_SHA`), **running executable path** (`app.getPath('exe')`).
+- Primary sidebar item **Live Activity** (Ctrl+5), available with **no project open**, on Projects and Settings and every other main screen.
+- Footer panel + separate window kept.
+- Pre-inference diagnostic (activity + main `console.log`) **before** `/api/chat`: endpoint, operation, model, request settings, prompt size chars, active request count.
+- Check connection and List models still **only** `GET /api/tags`.
+
+**What still needs desktop measurement for freezes:** GPU/VRAM, app RSS vs Ollama RSS, and whole-PC hitch timings on the **1.0.2 exe shown in About**. Do not invent those readings. After copying 1.0.2 over `E:\CraftStudio Local\CraftStudio Local.exe`, confirm About version is 1.0.2 and the executable path is that file before judging freezes.
 
 ## Root cause + evidence
 
@@ -25,7 +47,7 @@ Investigation of connection testing, model listing, specification generation, re
 - `src/main/services/settingsService.ts` — `persistFullAiLogs`, `activityRetentionHours`
 - Preload + Settings / Design / Test / AppShell Live Activity panel + detached `#/activity` window
 - `tests/ollamaService.test.ts`, `tests/perfOllamaActivity.test.ts`
-- `package.json` **1.0.1**, this document, README pointers
+- `package.json` **1.0.2**, `src/shared/buildInfo.ts`, `electron.vite.config.ts` define + `out/build-info.json`, this document, README pointers
 
 ## Before / after measurements
 
@@ -66,7 +88,7 @@ npm run typecheck
 npm run dist:win:portable
 ```
 
-Copy the new portable exe over `E:\CraftStudio Local\CraftStudio Local.exe` only after you confirm the projects folder path in Settings still points at your existing CraftStudioProjects directory (Legendary Mace and other projects live there, not inside the exe).
+Copy the new portable / unpacked `CraftStudio Local.exe` over `E:\CraftStudio Local\CraftStudio Local.exe` only after you confirm the projects folder path in Settings still points at your existing CraftStudioProjects directory (Legendary Mace and other projects live there, not inside the exe). Then **quit every running CraftStudio window**, launch from that folder (or update shortcuts), and open **Settings → About / Build information**. Version must be **1.0.2**. The running executable path must be `E:\CraftStudio Local\CraftStudio Local.exe` (or the unpacked path you actually started). If About still says 1.0.0 / 1.0.1, you are still on the old binary.
 
 Linux / CI packaging is still unsigned. `CRAFTSTUDIO_NO_SANDBOX=1` remains the container launch flag.
 
@@ -86,7 +108,11 @@ Prefer a **small** local model first (`tinyllama`, `llama3.2:1b`, etc.) if you m
 | Project save / reopen works | **PASS** existing project/generation pipeline tests (including a Legendary Mace-named Fabric project in the cancel test). Desktop reopen **NOT RUN**. | Windows: save Legendary Mace, quit, reopen. Spec + assets must still be there. |
 | Prefer smaller model first | Documented. Live Ollama **NOT RUN** here. | Do not loop large-model freezes to “confirm” the fix. |
 | Real request → validation → files → Gradle | Template path **PASS** in existing pipeline tests (Fabric/Paper/NeoForge/Forge apply). Live Ollama spec + live Gradle **NOT RUN** in this hotfix VM. Phase 10 already recorded live Gradle on Fabric (19s) and Forge (8s) for 1.0.0. | Windows: Generate (template or small model) → Review → Apply → Test → Gradle build. Report the real exit code. |
-| `npm test` / lint / typecheck / build | **PASS** — 136 tests, eslint clean, `tsc` both projects, `electron-vite build` wrote `out/`. | Cloud VM, 2026-09-18. |
+| About shows 1.0.2 + build time + commit + exe path | **PASS** in unit (`APP_VERSION`). Packaged About IPC **code review**; desktop screenshot **NOT RUN**. | Windows: Settings → About. Path must match the exe you launched. |
+| Sidebar Live Activity on Projects/Settings with no project | **PASS** by code (`PrimaryView` includes `activity`). Desktop **NOT RUN**. | Left nav, fifth item, no project required. |
+| Pre-inference diagnostic before `/api/chat` | **PASS** unit. | Activity row + main log: endpoint, operation, model, settings, promptChars, activeRequests. |
+| Check / List models never `/api/chat` | **PASS** unit (only `/api/tags`). | Design **List** uses purpose `list-models`; still tags-only. |
+| `npm test` / lint / typecheck / build | **PASS** — 138 tests, eslint clean, `tsc` both projects, `electron-vite build` wrote `out/` and `out/build-info.json` (1.0.2). | Cloud VM, 2026-09-18. |
 
 ## Remaining limitations (including hardware)
 
@@ -100,7 +126,8 @@ Prefer a **small** local model first (`tinyllama`, `llama3.2:1b`, etc.) if you m
 
 ## Manual Windows checklist (copy)
 
-1. Confirm Settings → projects folder still points at your existing projects (Legendary Mace).
+1. Confirm Settings → About version is **1.0.2** and the running executable path is the file you intended. Confirm projects folder still points at your existing projects (Legendary Mace).
+1b. Open **Live Activity** from the left sidebar with no project open. Check connection, List models, Generate, Apply, and Gradle must each add a real row.
 2. With Ollama **stopped**: Check connection fails in ≤5s; UI stays clickable.
 3. Start Ollama. `ollama ps`. Check connection. `ollama ps` again — no new model load.
 4. Select a **small** model yourself. Do not let the app pick one.

@@ -3,14 +3,15 @@ import type { ProjectRecord } from '../../../shared/types'
 import { Button } from './ui'
 import { LiveActivityFeed } from './LiveActivityFeed'
 
-export type PrimaryView = 'projects' | 'create' | 'assets' | 'settings'
+export type PrimaryView = 'projects' | 'create' | 'assets' | 'settings' | 'activity'
 export type WorkspaceTab = 'design' | 'code' | 'test' | 'export'
 
 const PRIMARY_ITEMS: { id: PrimaryView; label: string; shortcut: string }[] = [
   { id: 'projects', label: 'Projects', shortcut: '1' },
   { id: 'create', label: 'Create', shortcut: '2' },
   { id: 'assets', label: 'Assets', shortcut: '3' },
-  { id: 'settings', label: 'Settings', shortcut: '4' }
+  { id: 'settings', label: 'Settings', shortcut: '4' },
+  { id: 'activity', label: 'Live Activity', shortcut: '5' }
 ]
 
 export function AppShell({
@@ -55,7 +56,7 @@ export function AppShell({
       <aside className="flex w-56 shrink-0 flex-col bg-sidebar text-sidebar-text">
         <div className="border-b border-white/15 px-4 py-5">
           <p className="text-lg font-semibold tracking-tight">CraftStudio Local</p>
-          <p className="mt-1 text-sm text-sidebar-muted">1.0.1 · Live Activity</p>
+          <p className="mt-1 text-sm text-sidebar-muted">1.0.2</p>
         </div>
         <nav aria-label="Primary" className="flex flex-col gap-1 p-3" onKeyDown={onSidebarKeyDown}>
           {PRIMARY_ITEMS.map((item) => {
@@ -126,15 +127,18 @@ export function AppShell({
         </main>
         <section className="border-t border-line bg-paper-raised">
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
-            <button
+            <Button
               type="button"
-              className="text-sm font-medium underline"
+              variant="secondary"
               aria-expanded={activityOpen}
               onClick={() => onActivityOpenChange(!activityOpen)}
             >
-              {activityOpen ? 'Hide Live Activity' : 'Show Live Activity'}
-            </button>
+              {activityOpen ? 'Hide Live Activity panel' : 'Show Live Activity panel'}
+            </Button>
             <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => onViewChange('activity')}>
+                Open Live Activity
+              </Button>
               <Button type="button" variant="ghost" onClick={onOpenActivityWindow}>
                 Open in separate window
               </Button>

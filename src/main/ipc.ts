@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain } from 'electron'
 import { previewText } from '../shared/activity'
 import { listAdapters } from '../shared/adapters/registry'
 import { listCompatibility, lookupCompatibility } from '../shared/compatibility'
@@ -12,6 +12,7 @@ import {
   type CompatibilityLookupInput,
   type GenerateSpecInput,
   type IpcResult,
+  type OllamaCheckPurpose,
   type RecordEvidenceInput,
   type SaveTextureInput
 } from '../shared/ipc'
@@ -19,6 +20,7 @@ import { ACTIVITY_FLUSH_MS } from '../shared/ollamaLimits'
 import { DEFAULT_PALETTE, paletteSuggestionSchema } from '../shared/pixelSpec'
 import { extractJsonObject, parseProjectSpec, type ProjectSpec } from '../shared/spec'
 import type { CreateProjectInput, SettingsPatch, UpdateProjectInput } from '../shared/types'
+import { getStaticBuildInfo } from '../shared/buildInfo'
 import { DEFAULT_OLLAMA_ENDPOINT } from '../shared/types'
 import { isCodegenSupported, requiredJava } from '../shared/platformPins'
 import { createTextBatcher } from './logBatcher'
@@ -77,14 +79,15 @@ export function registerIpc(deps: {
   ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE, (_event, patch: SettingsPatch) =>
     wrap(() => deps.settings.update(patch))
   )
-  ipcMain.handle(IPC_CHANNELS.OLLAMA_CHECK, async (_event, endpoint?: string) =>
+  ipcMain.handle(IPC_CHANNELS.OLLAMA_CHECK, async (_event, endpoint?: string, purpose?: OllamaCheckPurpose) =>
     wrap(async () => {
       const settings = await deps.settings.get()
       const requestId = randomUUID()
+      const listing = purpose === 'list-models'
       deps.activity.record({
         channel: 'ai',
         requestId,
-        title: 'Checking the Ollama connection.',
+        title: listing ? 'Listing installed Ollama models.' : 'Checking the Ollama connection.',
         status: 'running',
         detail: 'GET /api/tags only. This does not load a model or start inference.'
       })
@@ -92,12 +95,29 @@ export function registerIpc(deps: {
       deps.activity.record({
         channel: status.connected ? 'results' : 'errors',
         requestId,
-        title: status.connected ? 'Ollama connection check succeeded.' : 'Ollama connection check failed.',
+        title: listing
+          ? status.connected
+            ? `Listed ${status.models.length} installed model${status.models.length === 1 ? '' : 's'}.`
+            : 'Listing installed models failed.'
+          : status.connected
+            ? 'Ollama connection check succeeded.'
+            : 'Ollama connection check failed.',
         status: status.connected ? 'success' : 'failure',
         detail: status.message,
         error: status.connected ? undefined : status.message
       })
       return status
+    })
+  )
+  ipcMain.handle(IPC_CHANNELS.APP_ABOUT, () =>
+    wrap(() => {
+      const info = getStaticBuildInfo()
+      return {
+        version: info.version,
+        buildTime: info.buildTime,
+        commit: info.commit,
+        executablePath: app.getPath('exe')
+      }
     })
   )
   ipcMain.handle(IPC_CHANNELS.OLLAMA_CANCEL, () =>
@@ -697,7 +717,7 @@ export function registerIpc(deps: {
         })
       }
       const contents = formatEvidenceSummary(records, {
-        appVersion: '1.0.1',
+        appVersion: getStaticBuildInfo().version,
         generatedAt: new Date().toISOString()
       })
       await writeFile(result.filePath, contents, 'utf8')

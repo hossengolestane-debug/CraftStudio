@@ -9,9 +9,10 @@ import {
   OLLAMA_STREAM_CONTENT_CAP
 } from '../src/shared/ollamaLimits'
 import { SETTINGS_SCHEMA_VERSION } from '../src/shared/types'
+import { APP_VERSION, getStaticBuildInfo } from '../src/shared/buildInfo'
 import { ActivityService } from '../src/main/services/activityService'
 import { GenerationService } from '../src/main/services/generationService'
-import { OllamaService, readOllamaStream } from '../src/main/services/ollamaService'
+import { OllamaService, readOllamaStream, type PreInferenceDiagnostic } from '../src/main/services/ollamaService'
 import { ProjectService } from '../src/main/services/projectService'
 import { SettingsService } from '../src/main/services/settingsService'
 
@@ -101,6 +102,30 @@ describe('Ollama check vs inference', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('emits a pre-inference diagnostic before any /api/chat fetch', async () => {
+    const seen: PreInferenceDiagnostic[] = []
+    const service = new OllamaService((diagnostic) => seen.push(diagnostic))
+    globalThis.fetch = vi.fn(async (input: URL | RequestInfo) => {
+      expect(seen).toHaveLength(1)
+      expect(String(input)).toBe('http://localhost:11434/api/chat')
+      return ndjsonResponse([JSON.stringify({ message: { content: 'ok' } })])
+    }) as typeof fetch
+    await service.chatJson({
+      endpoint: 'http://localhost:11434',
+      model: 'tinyllama:latest',
+      timeoutMs: 2000,
+      numPredict: 16,
+      numCtx: 512,
+      operation: 'generate-spec',
+      messages: [{ role: 'user', content: 'hello world' }]
+    })
+    expect(seen[0]?.model).toBe('tinyllama:latest')
+    expect(seen[0]?.operation).toBe('generate-spec')
+    expect(seen[0]?.promptSizeChars).toBe('hello world'.length)
+    expect(seen[0]?.activeRequestCount).toBe(0)
+    expect(seen[0]?.requestSettings.numPredict).toBe(16)
+  })
+
   it('bounds streamed content and cancels the reader', async () => {
     const huge = 'x'.repeat(OLLAMA_STREAM_CONTENT_CAP + 80)
     const result = await readOllamaStream(ndjsonResponse([JSON.stringify({ message: { content: huge } })]))
@@ -126,6 +151,11 @@ describe('settings schema 4 defaults', () => {
     expect(got.ollamaNumCtx).toBe(2048)
     expect(got.persistFullAiLogs).toBe(false)
     expect(got.activityRetentionHours).toBe(48)
+  })
+
+  it('reports app version 1.0.2 from package-backed build info', () => {
+    expect(APP_VERSION).toBe('1.0.2')
+    expect(getStaticBuildInfo().version).toBe('1.0.2')
   })
 })
 

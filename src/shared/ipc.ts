@@ -35,6 +35,7 @@ export const IPC_CHANNELS = {
   ACTIVITY_CLEAR: 'activity:clear',
   ACTIVITY_EXPORT: 'activity:export',
   ACTIVITY_OPEN_WINDOW: 'activity:open-window',
+  APP_ABOUT: 'app:about',
   ADAPTERS_LIST: 'adapters:list',
   COMPATIBILITY_LOOKUP: 'compatibility:lookup',
   COMPATIBILITY_LIST: 'compatibility:list',
@@ -247,7 +248,8 @@ export interface CraftStudioAPI {
   deleteProject: (id: string) => Promise<void>
   getSettings: () => Promise<AppSettings>
   updateSettings: (patch: SettingsPatch) => Promise<AppSettings>
-  checkOllama: (endpoint?: string) => Promise<OllamaStatus>
+  checkOllama: (endpoint?: string, purpose?: OllamaCheckPurpose) => Promise<OllamaStatus>
+  getAbout: () => Promise<AppAboutDto>
   cancelOllamaCheck: () => Promise<void>
   listAdapters: () => Promise<PlatformAdapterInfo[]>
   lookupCompatibility: (input: CompatibilityLookupInput) => Promise<CompatibilityEntry>
@@ -302,4 +304,13 @@ export interface ModelTestResultDto {
 export interface OllamaUnloadResultDto {
   model: string
   message: string
+}
+
+export type OllamaCheckPurpose = 'connection' | 'list-models'
+
+export interface AppAboutDto {
+  version: string
+  buildTime: string
+  commit: string
+  executablePath: string
 }
