@@ -8,6 +8,7 @@ import { EnvironmentDoctor } from '../../components/EnvironmentDoctor'
 import { ErrorPanel } from '../../components/ErrorPanel'
 import { Badge, Button, Card, ComingSoon, Field, TextArea } from '../../components/ui'
 import { asAppError } from '../../lib/errors'
+import { DISPLAY_LOG_CAP } from '../../../../shared/ollamaLimits'
 
 const api = window.craftstudio
 
@@ -79,7 +80,10 @@ export function TestBuildView({
     }
     void api.checkJava(project.manifest.id).then(setJava).catch((err) => setError(asAppError(err)))
     const off = api.onBuildLog((event) => {
-      setLogs((current) => `${current}${event.text}`)
+      setLogs((current) => {
+        const next = `${current}${event.text}`
+        return next.length > DISPLAY_LOG_CAP ? next.slice(next.length - DISPLAY_LOG_CAP) : next
+      })
     })
     return off
   }, [supported, project.manifest.id])

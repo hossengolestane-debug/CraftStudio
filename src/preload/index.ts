@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { AppError, isAppErrorPayload } from '../shared/errors'
+import type { ActivityEvent } from '../shared/activity'
 import {
   IPC_CHANNELS,
   IPC_EVENTS,
@@ -42,6 +43,13 @@ const api: CraftStudioAPI = {
   updateSettings: (patch: SettingsPatch) => invoke(IPC_CHANNELS.SETTINGS_UPDATE, patch),
   checkOllama: (endpoint?: string) => invoke(IPC_CHANNELS.OLLAMA_CHECK, endpoint),
   cancelOllamaCheck: () => invoke(IPC_CHANNELS.OLLAMA_CANCEL),
+  testOllamaModel: (endpoint?: string, model?: string) => invoke(IPC_CHANNELS.OLLAMA_TEST, endpoint, model),
+  unloadOllamaModel: (endpoint?: string, model?: string) => invoke(IPC_CHANNELS.OLLAMA_UNLOAD, endpoint, model),
+  cancelOllamaInference: () => invoke(IPC_CHANNELS.SPEC_CANCEL),
+  listActivity: () => invoke(IPC_CHANNELS.ACTIVITY_LIST),
+  clearActivity: () => invoke(IPC_CHANNELS.ACTIVITY_CLEAR),
+  exportActivity: () => invoke(IPC_CHANNELS.ACTIVITY_EXPORT),
+  openActivityWindow: () => invoke(IPC_CHANNELS.ACTIVITY_OPEN_WINDOW),
   listAdapters: () => invoke(IPC_CHANNELS.ADAPTERS_LIST),
   lookupCompatibility: (input: CompatibilityLookupInput) => invoke(IPC_CHANNELS.COMPATIBILITY_LOOKUP, input),
   listCompatibility: (platform: PlatformId) => invoke(IPC_CHANNELS.COMPATIBILITY_LIST, platform),
@@ -85,6 +93,11 @@ const api: CraftStudioAPI = {
     const listener = (_event: unknown, payload: BuildLogEvent): void => handler(payload)
     ipcRenderer.on(IPC_EVENTS.BUILD_LOG, listener)
     return () => ipcRenderer.removeListener(IPC_EVENTS.BUILD_LOG, listener)
+  },
+  onActivity: (handler: (event: ActivityEvent) => void) => {
+    const listener = (_event: unknown, payload: ActivityEvent): void => handler(payload)
+    ipcRenderer.on(IPC_EVENTS.ACTIVITY, listener)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.ACTIVITY, listener)
   }
 }
 

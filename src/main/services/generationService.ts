@@ -1,5 +1,13 @@
+import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
+import { previewText } from '../../shared/activity'
 import { AppError } from '../../shared/errors'
+import {
+  compactTemplateHint,
+  isResourceExhaustionMessage,
+  OLLAMA_PROMPT_USER_CAP,
+  OLLAMA_REPAIR_ASSISTANT_CAP
+} from '../../shared/ollamaLimits'
 import {
   extractJsonObject,
   OLLAMA_SPEC_JSON_SCHEMA,
@@ -14,6 +22,7 @@ import { isBuildScriptPath } from '../codegen/allowlist'
 import { attachGeneratedTextures } from '../codegen/pack/planner'
 import { assertCanGenerate, planAdapterFiles } from '../codegen/plan'
 import { diffPlannedFiles, writePlannedFiles, type FileChange } from './filePlan'
+import type { ActivityService } from './activityService'
 import { OllamaService } from './ollamaService'
 import { resolveProjectFile } from './pathSafety'
 import type { ProjectService } from './projectService'
@@ -35,6 +44,7 @@ export interface GenerationResult {
   remainingProblems: string[]
   ollamaNote: string | null
   success: true
+  requestId: string
 }
 
 export interface ApplyPreview {
@@ -65,11 +75,23 @@ Rules:
 - mainClass PascalCase`
 
 export class GenerationService {
+  private activeRequestId: string | null = null
+
   constructor(
     private readonly projects: ProjectService,
     private readonly settings: SettingsService,
-    private readonly ollama: OllamaService
+    private readonly ollama: OllamaService,
+    private readonly activity?: ActivityService
   ) {}
+
+  cancelGeneration(): void {
+    this.activeRequestId = null
+    this.ollama.cancelInference()
+  }
+
+  private isCurrent(requestId: string): boolean {
+    return this.activeRequestId === requestId
+  }
 
   async getSpec(projectId: string): Promise<ProjectSpec | null> {
     const record = await this.projects.get(projectId)
@@ -97,32 +119,77 @@ export class GenerationService {
       onProgress?: (event: GenerationProgress) => void
     } = {}
   ): Promise<GenerationResult> {
-    const record = await this.projects.get(projectId)
-    assertCanGenerate(record.manifest.platform, record.manifest.minecraftVersion)
+    if (this.activeRequestId) {
+      throw new AppError({
+        code: 'INFERENCE_BUSY',
+        message: 'A specification generation is already running.',
+        action: 'Cancel it or wait. CraftStudio does not overlap inference.'
+      })
+    }
+    const requestId = randomUUID()
+    this.activeRequestId = requestId
+    try {
+      const record = await this.projects.get(projectId)
+      assertCanGenerate(record.manifest.platform, record.manifest.minecraftVersion)
 
-    const settings = await this.settings.get()
-    const text = prompt.trim() || record.manifest.description || record.manifest.name
-    options.onProgress?.({ stage: 'infer', message: 'Building a trusted template spec…' })
-    const templateSpec = inferSpecFromPrompt(record.manifest, text)
+      const settings = await this.settings.get()
+      const text = prompt.trim() || record.manifest.description || record.manifest.name
+      const human = `Requesting the ${record.manifest.name} specification.`
+      options.onProgress?.({ stage: 'infer', message: human })
+      this.activity?.record({
+        channel: 'ai',
+        requestId,
+        title: human,
+        status: 'running',
+        detail: `mode=${mode}`
+      })
+      const templateSpec = inferSpecFromPrompt(record.manifest, text)
 
-    const wantsModel = mode === 'ollama' || (mode === 'auto' && promptLooksComplex(text))
-    if (!wantsModel) {
-      options.onProgress?.({ stage: 'validate', message: 'Validating template spec…' })
-      const spec = parseProjectSpec(templateSpec)
-      options.onProgress?.({ stage: 'done', message: 'Template specification is valid.' })
-      return {
-        spec,
-        usedOllama: false,
-        repairAttempts: 0,
-        remainingProblems: spec.unsupportedRequests.map((item) => `${item.feature}: ${item.reason}`),
-        ollamaNote: wantsModel
-          ? 'Template-only mode was selected. Ollama was not called.'
-          : 'Simple request covered by trusted templates. Ollama was not required.',
-        success: true
+      const wantsModel = mode === 'ollama' || (mode === 'auto' && promptLooksComplex(text))
+      if (!wantsModel) {
+        options.onProgress?.({ stage: 'validate', message: 'Validating the trusted template specification.' })
+        const spec = parseProjectSpec(templateSpec)
+        if (!this.isCurrent(requestId)) {
+          throw new AppError({
+            code: 'GENERATION_CANCELLED',
+            message: 'Generation was cancelled.',
+            action: 'Generate again if you still want a spec.'
+          })
+        }
+        options.onProgress?.({ stage: 'done', message: 'Template specification is valid.' })
+        this.activity?.record({
+          channel: 'results',
+          requestId,
+          title: 'Validated the trusted template specification.',
+          status: 'success'
+        })
+        return {
+          spec,
+          usedOllama: false,
+          repairAttempts: 0,
+          remainingProblems: spec.unsupportedRequests.map((item) => `${item.feature}: ${item.reason}`),
+          ollamaNote: wantsModel
+            ? 'Template-only mode was selected. Ollama was not called.'
+            : 'Simple request covered by trusted templates. Ollama was not required.',
+          success: true,
+          requestId
+        }
+      }
+
+      return await this.generateWithOllama(
+        record,
+        text,
+        templateSpec,
+        settings,
+        options.model,
+        options.onProgress,
+        requestId
+      )
+    } finally {
+      if (this.activeRequestId === requestId) {
+        this.activeRequestId = null
       }
     }
-
-    return await this.generateWithOllama(record, text, templateSpec, settings, options.model, options.onProgress)
   }
 
   async previewApply(projectId: string, specInput: unknown): Promise<ApplyPreview> {
@@ -185,6 +252,18 @@ export class GenerationService {
     })
     await removeOldestSnapshots(root, record.directoryName)
     await writePlannedFiles(root, record.directoryName, [specFile, ...files])
+    for (const change of preview.changes.filter((item) => item.action !== 'unchanged')) {
+      this.activity?.record({
+        channel: 'files',
+        title:
+          change.action === 'create'
+            ? `Writing ${change.relativePath}.`
+            : `Updating ${change.relativePath}.`,
+        path: change.relativePath,
+        detail: change.summary,
+        status: 'success'
+      })
+    }
     await this.projects.update(projectId, {
       features: {
         customItems: preview.spec.items.length > 0,
@@ -203,7 +282,8 @@ export class GenerationService {
     fallback: ProjectSpec,
     settings: AppSettings,
     modelOverride: string | undefined,
-    onProgress?: (event: GenerationProgress) => void
+    onProgress: ((event: GenerationProgress) => void) | undefined,
+    requestId: string
   ): Promise<GenerationResult> {
     const model = modelOverride ?? settings.ollamaModel
     if (!model) {
@@ -220,36 +300,105 @@ export class GenerationService {
         ],
         ollamaNote:
           'Ollama was skipped because no model is selected. There is no cloud fallback. The template spec is still valid.',
-        success: true
+        success: true,
+        requestId
       }
     }
 
-    onProgress?.({ stage: 'ollama', message: `Asking local model ${model} for a JSON spec…` })
+    const userPrompt = prompt.slice(0, OLLAMA_PROMPT_USER_CAP)
+    const hint = compactTemplateHint(fallback)
+    const settingsSnap = {
+      model,
+      numPredict: settings.ollamaNumPredict,
+      numCtx: settings.ollamaNumCtx,
+      temperature: 0.1,
+      timeoutMs: settings.ollamaGenerateTimeoutMs,
+      format: 'json-schema'
+    }
+    const persist = settings.persistFullAiLogs
+    onProgress?.({
+      stage: 'ollama',
+      message: `Asking ${model} (num_ctx=${settings.ollamaNumCtx}, num_predict=${settings.ollamaNumPredict}).`
+    })
+    this.activity?.record({
+      channel: 'ai',
+      requestId,
+      title: `Requesting the ${record.manifest.name} specification.`,
+      status: 'running',
+      model,
+      settings: settingsSnap,
+      messages: [
+        { role: 'system', ...previewText(SYSTEM_PROMPT, 500, persist) },
+        {
+          role: 'user',
+          ...previewText(
+            `Minecraft ${record.manifest.minecraftVersion} ${record.manifest.platform} "${record.manifest.name}". ${userPrompt} ${hint}`,
+            500,
+            persist
+          )
+        }
+      ]
+    })
+    let streamed = ''
+    let lastStreamRecord = 0
     let raw: string
     try {
       raw = await this.ollama.chatJson({
         endpoint: settings.ollamaEndpoint,
         model,
+        requestId,
+        operation: 'generate-spec',
         timeoutMs: settings.ollamaGenerateTimeoutMs,
         numPredict: settings.ollamaNumPredict,
         numCtx: settings.ollamaNumCtx,
         format: OLLAMA_SPEC_JSON_SCHEMA,
-        onChunk: () => onProgress?.({ stage: 'ollama', message: 'Streaming model tokens…' }),
+        onChunk: (piece) => {
+          streamed = `${streamed}${piece}`.slice(-4000)
+          onProgress?.({ stage: 'ollama', message: `Streaming from ${model}…` })
+          const now = Date.now()
+          if (now - lastStreamRecord >= 400) {
+            lastStreamRecord = now
+            const preview = previewText(streamed, 400, persist)
+            this.activity?.record({
+              channel: 'ai',
+              requestId,
+              title: `Streaming the ${record.manifest.name} specification.`,
+              status: 'streaming',
+              model,
+              output: preview.content,
+              outputTruncated: preview.truncated
+            })
+          }
+        },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           {
             role: 'user',
-            content: `Minecraft ${record.manifest.minecraftVersion} Fabric project "${record.manifest.name}".\nUser request:\n${prompt}\n\nTemplate hint (you may refine, do not add file paths):\n${JSON.stringify(fallback)}`
+            content: `Minecraft ${record.manifest.minecraftVersion} ${record.manifest.platform} project "${record.manifest.name}".\nUser request:\n${userPrompt}\n\nTemplate ids only (do not add file paths): ${hint}`
           }
         ]
       })
     } catch (error) {
-      if (error instanceof AppError && error.code === 'GENERATION_CANCELLED') {
+      if (error instanceof AppError && (error.code === 'GENERATION_CANCELLED' || error.code === 'INFERENCE_BUSY')) {
         throw error
+      }
+      if (!this.isCurrent(requestId)) {
+        throw new AppError({
+          code: 'GENERATION_CANCELLED',
+          message: 'Generation was cancelled.',
+          action: 'Generate again if you still want a spec.'
+        })
       }
       onProgress?.({
         stage: 'done',
         message: 'Ollama unavailable. Keeping the trusted template spec.'
+      })
+      this.activity?.record({
+        channel: 'errors',
+        requestId,
+        title: 'Ollama did not return a specification.',
+        status: 'failure',
+        error: error instanceof Error ? error.message : String(error)
       })
       return {
         spec: fallback,
@@ -258,8 +407,17 @@ export class GenerationService {
         remainingProblems: [error instanceof Error ? error.message : String(error)],
         ollamaNote:
           'Ollama did not respond. CraftStudio used trusted templates only. No cloud fallback was attempted.',
-        success: true
+        success: true,
+        requestId
       }
+    }
+
+    if (!this.isCurrent(requestId)) {
+      throw new AppError({
+        code: 'GENERATION_CANCELLED',
+        message: 'Generation was cancelled. The late response was discarded.',
+        action: 'Generate again if you still want a spec.'
+      })
     }
 
     const attempts = settings.maxRepairAttempts
@@ -268,7 +426,14 @@ export class GenerationService {
     let lastError = ''
 
     while (repairAttempts <= attempts) {
-      onProgress?.({ stage: 'validate', message: 'Independently validating model JSON…' })
+      if (!this.isCurrent(requestId)) {
+        throw new AppError({
+          code: 'GENERATION_CANCELLED',
+          message: 'Generation was cancelled. The late response was discarded.',
+          action: 'Generate again if you still want a spec.'
+        })
+      }
+      onProgress?.({ stage: 'validate', message: 'Validating the specification JSON.' })
       try {
         const spec = parseProjectSpec({
           ...fallback,
@@ -277,17 +442,33 @@ export class GenerationService {
           prompt
         })
         onProgress?.({ stage: 'done', message: 'Validated specification from Ollama + schema checks.' })
+        this.activity?.record({
+          channel: 'results',
+          requestId,
+          title: 'Validated the specification.',
+          status: 'success',
+          output: previewText(current, 400, persist).content,
+          outputTruncated: !persist && current.length > 400
+        })
         return {
           spec,
           usedOllama: true,
           repairAttempts,
           remainingProblems: spec.unsupportedRequests.map((item) => `${item.feature}: ${item.reason}`),
           ollamaNote: 'Model output was independently validated. Success is the schema, not the model saying it worked.',
-          success: true
+          success: true,
+          requestId
         }
       } catch (error) {
         lastError = error instanceof AppError ? error.details ?? error.message : String(error)
-        if (repairAttempts >= attempts) {
+        this.activity?.record({
+          channel: 'errors',
+          requestId,
+          title: 'Specification validation failed.',
+          status: 'failure',
+          error: lastError
+        })
+        if (repairAttempts >= attempts || isResourceExhaustionMessage(lastError)) {
           break
         }
         repairAttempts += 1
@@ -295,23 +476,40 @@ export class GenerationService {
           stage: 'repair',
           message: `Repair attempt ${repairAttempts}/${attempts}…`
         })
-        current = await this.ollama.chatJson({
-          endpoint: settings.ollamaEndpoint,
-          model,
-          timeoutMs: settings.ollamaGenerateTimeoutMs,
-          numPredict: settings.ollamaNumPredict,
-          numCtx: settings.ollamaNumCtx,
-          format: 'json',
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: prompt },
-            { role: 'assistant', content: current },
-            {
-              role: 'user',
-              content: `The spec failed validation:\n${lastError}\nReturn a corrected JSON object only.`
-            }
-          ]
-        })
+        try {
+          current = await this.ollama.chatJson({
+            endpoint: settings.ollamaEndpoint,
+            model,
+            requestId: `${requestId}-repair-${repairAttempts}`,
+            operation: 'repair-spec',
+            timeoutMs: settings.ollamaGenerateTimeoutMs,
+            numPredict: settings.ollamaNumPredict,
+            numCtx: settings.ollamaNumCtx,
+            format: 'json',
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: userPrompt },
+              { role: 'assistant', content: current.slice(0, OLLAMA_REPAIR_ASSISTANT_CAP) },
+              {
+                role: 'user',
+                content: `The spec failed validation:\n${lastError.slice(0, 1500)}\nReturn a corrected JSON object only.`
+              }
+            ]
+          })
+        } catch (repairError) {
+          if (repairError instanceof AppError && repairError.code === 'GENERATION_CANCELLED') {
+            throw repairError
+          }
+          lastError = repairError instanceof Error ? repairError.message : String(repairError)
+          this.activity?.record({
+            channel: 'errors',
+            requestId,
+            title: 'Specification repair stopped.',
+            status: 'failure',
+            error: lastError
+          })
+          break
+        }
       }
     }
 
@@ -328,7 +526,8 @@ export class GenerationService {
         'Trusted template spec is shown instead. Review it before applying files.'
       ],
       ollamaNote: `Repair budget exhausted (${attempts}). Model garbage was not written to disk.`,
-      success: true
+      success: true,
+      requestId
     }
   }
 }

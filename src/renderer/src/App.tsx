@@ -29,6 +29,7 @@ export default function App() {
   const [adapters, setAdapters] = useState<PlatformAdapterInfo[]>([])
   const [bootError, setBootError] = useState<AppErrorPayload | null>(null)
   const [busy, setBusy] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
 
   const refreshProjects = useCallback(async () => {
     setProjects(await api.listProjects())
@@ -118,6 +119,11 @@ export default function App() {
         setWorkspaceTab(tab)
         setView('projects')
       }}
+      activityOpen={activityOpen}
+      onActivityOpenChange={setActivityOpen}
+      onOpenActivityWindow={() => {
+        void api.openActivityWindow()
+      }}
     >
       {bootError ? <ErrorPanel error={bootError} /> : null}
 
@@ -150,6 +156,9 @@ export default function App() {
           }}
           onCheckOllama={(endpoint) => api.checkOllama(endpoint)}
           onCancelOllama={() => api.cancelOllamaCheck()}
+          onTestOllama={(endpoint, model) => api.testOllamaModel(endpoint, model)}
+          onUnloadOllama={(endpoint, model) => api.unloadOllamaModel(endpoint, model)}
+          onCancelInference={() => api.cancelOllamaInference()}
           onBrowse={() => api.selectDirectory()}
         />
       ) : null}

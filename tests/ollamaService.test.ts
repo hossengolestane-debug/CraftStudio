@@ -53,9 +53,77 @@ describe('ollama service', () => {
     }) as typeof fetch
 
     const pending = service.check('http://localhost:11434', 30_000)
-    service.cancel()
+    service.cancelCheck()
     const status = await pending
     expect(status.connected).toBe(false)
     expect(status.message).toMatch(/cancelled/)
+  })
+
+  it('does not cancel a connection check when cancel() is used for inference', async () => {
+    const service = new OllamaService()
+    let aborted = false
+    globalThis.fetch = vi.fn((_url: URL | RequestInfo, init?: RequestInit) => {
+      return new Promise<Response>((resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          aborted = true
+          const error = new Error('aborted')
+          error.name = 'AbortError'
+          reject(error)
+        })
+        setTimeout(() => {
+          resolve(
+            new Response(JSON.stringify({ models: [{ name: 'tiny' }] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            })
+          )
+        }, 20)
+      })
+    }) as typeof fetch
+
+    const pending = service.check('http://localhost:11434', 5000)
+    service.cancel()
+    const status = await pending
+    expect(aborted).toBe(false)
+    expect(status.connected).toBe(true)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'http://localhost:11434/api/tags',
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('rejects a second overlapping inference and never silently starts another chat', async () => {
+    const service = new OllamaService()
+    globalThis.fetch = vi.fn((_url: URL | RequestInfo, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const error = new Error('aborted')
+          error.name = 'AbortError'
+          reject(error)
+        })
+      })
+    }) as typeof fetch
+
+    const first = service.chatJson({
+      endpoint: 'http://localhost:11434',
+      model: 'tiny',
+      timeoutMs: 5000,
+      numPredict: 32,
+      numCtx: 512,
+      messages: [{ role: 'user', content: 'hi' }]
+    })
+    await expect(
+      service.chatJson({
+        endpoint: 'http://localhost:11434',
+        model: 'tiny',
+        timeoutMs: 5000,
+        numPredict: 32,
+        numCtx: 512,
+        messages: [{ role: 'user', content: 'second' }]
+      })
+    ).rejects.toMatchObject({ code: 'INFERENCE_BUSY' })
+    service.cancelInference()
+    await expect(first).rejects.toMatchObject({ code: 'GENERATION_CANCELLED' })
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toContain('/api/chat')
   })
 })

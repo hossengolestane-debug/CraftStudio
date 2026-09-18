@@ -3,6 +3,7 @@ import { chmod } from 'node:fs/promises'
 import path from 'node:path'
 import { diagnoseBuildLogs, type BuildDiagnostic } from '../../shared/buildDiagnostics'
 import { AppError } from '../../shared/errors'
+import { BUILD_LOG_MEMORY_CAP } from '../../shared/ollamaLimits'
 import { assertInsideRoot } from './pathSafety'
 
 export type GradleTaskId = 'build' | 'runClient'
@@ -74,8 +75,16 @@ export class GradleService {
       }
     }
 
+    if (this.child) {
+      throw new AppError({
+        code: 'BUILD_GATED',
+        message: 'A Gradle build is already running.',
+        action: 'Cancel it or wait. CraftStudio runs one allowlisted Gradle task at a time.'
+      })
+    }
     const command = `${script} ${args.join(' ')}`
     const chunks: string[] = []
+    let logBytes = 0
 
     return await new Promise((resolve) => {
       let settled = false
@@ -120,7 +129,12 @@ export class GradleService {
 
       const push = (stream: 'stdout' | 'stderr', buf: Buffer): void => {
         const text = buf.toString('utf8')
-        chunks.push(text)
+        logBytes += text.length
+        if (logBytes <= BUILD_LOG_MEMORY_CAP) {
+          chunks.push(text)
+        } else if (chunks[chunks.length - 1] !== '\n…[log truncated]\n') {
+          chunks.push('\n…[log truncated]\n')
+        }
         options.onLog?.({ stream, text })
       }
 

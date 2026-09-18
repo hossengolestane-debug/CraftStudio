@@ -45,7 +45,7 @@ export function FirstRunChecklist({
       id: 'ollama',
       label: 'Ollama (optional)',
       ok: Boolean(ollama?.connected),
-      detail: ollama?.message ?? 'Checking Ollama… Templates work without it.'
+      detail: ollama?.message ?? 'Checking Ollama via /api/tags only. This does not load a model. Templates work without it.'
     },
     {
       id: 'projects',

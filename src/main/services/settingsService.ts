@@ -3,12 +3,14 @@ import os from 'node:os'
 import path from 'node:path'
 import { AppError, toAppError } from '../../shared/errors'
 import {
+  DEFAULT_ACTIVITY_RETENTION_HOURS,
   DEFAULT_MAX_REPAIR_ATTEMPTS,
   DEFAULT_OLLAMA_ENDPOINT,
   DEFAULT_OLLAMA_GENERATE_TIMEOUT_MS,
   DEFAULT_OLLAMA_NUM_CTX,
   DEFAULT_OLLAMA_NUM_PREDICT,
   DEFAULT_OLLAMA_TIMEOUT_MS,
+  DEFAULT_PERSIST_FULL_AI_LOGS,
   SETTINGS_SCHEMA_VERSION,
   type AppSettings,
   type SettingsPatch
@@ -98,6 +100,8 @@ function validateSettings(value: unknown, fallbackProjectsPath: string): AppSett
     ollamaGenerateTimeoutMs: clamp(value.ollamaGenerateTimeoutMs, DEFAULT_OLLAMA_GENERATE_TIMEOUT_MS, 5000, 600000),
     ollamaNumPredict: clamp(value.ollamaNumPredict, DEFAULT_OLLAMA_NUM_PREDICT, 128, 8192),
     ollamaNumCtx: clamp(value.ollamaNumCtx, DEFAULT_OLLAMA_NUM_CTX, 512, 32768),
+    persistFullAiLogs: value.persistFullAiLogs === true ? true : DEFAULT_PERSIST_FULL_AI_LOGS,
+    activityRetentionHours: clamp(value.activityRetentionHours, DEFAULT_ACTIVITY_RETENTION_HOURS, 1, 168),
     maxRepairAttempts: clamp(value.maxRepairAttempts, DEFAULT_MAX_REPAIR_ATTEMPTS, 0, 3),
     lastOpenedProjectId,
     minecraftEulaAccepted: value.minecraftEulaAccepted === true,

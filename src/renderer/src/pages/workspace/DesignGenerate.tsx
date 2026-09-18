@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSpecHistory } from '../../lib/specHistory'
 import type { AppErrorPayload } from '../../../../shared/errors'
 import type {
@@ -44,8 +44,11 @@ export function DesignGenerate({
   const [error, setError] = useState<AppErrorPayload | null>(null)
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState<GenerationProgress[]>([])
   const [generation, setGeneration] = useState<GenerationResultDto | null>(null)
+  const generateLock = useRef(false)
+  const generateToken = useRef(0)
   const [preview, setPreview] = useState<ApplyResultDto | null>(null)
   const specHistory = useSpecHistory(null)
   const spec = specHistory.current
@@ -101,9 +104,6 @@ export function DesignGenerate({
   const refreshModels = async (): Promise<OllamaStatus> => {
     const status = await api.checkOllama()
     setModels(status.models.map((item) => item.name))
-    if (!model && status.models[0]) {
-      setModel(status.models[0].name)
-    }
     return status
   }
 
@@ -119,7 +119,8 @@ export function DesignGenerate({
             repairAttempts: 0,
             remainingProblems: [],
             ollamaNote: 'Edited in the Design editors. Apply still validates with Zod.',
-            success: true
+            success: true,
+            requestId: 'editor'
           }
     )
     try {
@@ -311,11 +312,25 @@ export function DesignGenerate({
               </Field>
             </div>
             {models.length > 0 ? <p className="text-sm text-muted">Installed: {models.join(', ')}</p> : null}
+            {settings ? (
+              <p className="text-sm text-muted">
+                Actual generation settings if Ollama is called: model {model || settings.ollamaModel || '(none selected)'}{' '}
+                · num_predict={settings.ollamaNumPredict} · num_ctx={settings.ollamaNumCtx} · timeout=
+                {settings.ollamaGenerateTimeoutMs}ms · temperature=0.1. CraftStudio will not silently switch models.
+                These limits do not control other programs using Ollama.
+              </p>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <Button
-                disabled={busy}
+                disabled={generating}
                 onClick={() => {
-                  setBusy(true)
+                  if (generateLock.current) {
+                    return
+                  }
+                  generateLock.current = true
+                  const token = generateToken.current + 1
+                  generateToken.current = token
+                  setGenerating(true)
                   setError(null)
                   setProgress([])
                   setPreview(null)
@@ -324,19 +339,41 @@ export function DesignGenerate({
                       projectId: project.manifest.id,
                       prompt,
                       mode,
-                      model: model || undefined
+                      model: model.trim() || undefined
                     })
                     .then((result) => {
+                      if (token !== generateToken.current) {
+                        return
+                      }
                       setGeneration(result)
                       specHistory.replaceCurrent(result.spec)
                     })
-                    .catch((err) => setError(asAppError(err)))
-                    .finally(() => setBusy(false))
+                    .catch((err) => {
+                      if (token !== generateToken.current) {
+                        return
+                      }
+                      setError(asAppError(err))
+                    })
+                    .finally(() => {
+                      if (token === generateToken.current) {
+                        generateLock.current = false
+                        setGenerating(false)
+                      }
+                    })
                 }}
               >
-                {busy ? 'Generating…' : 'Generate specification'}
+                {generating ? 'Generating…' : 'Generate specification'}
               </Button>
-              <Button type="button" variant="ghost" onClick={() => void api.cancelGeneration()}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  generateToken.current += 1
+                  generateLock.current = false
+                  setGenerating(false)
+                  void api.cancelGeneration()
+                }}
+              >
                 Cancel
               </Button>
             </div>
@@ -444,7 +481,7 @@ export function DesignGenerate({
           <h2 className="text-lg font-semibold">Validated specification</h2>
           <p className="text-sm">
             Source: {generation.spec.source}. Ollama used: {generation.usedOllama ? 'yes' : 'no'}. Repairs:{' '}
-            {generation.repairAttempts}.
+            {generation.repairAttempts}. Request {generation.requestId}.
           </p>
           {generation.ollamaNote ? <p className="text-sm text-muted">{generation.ollamaNote}</p> : null}
           {generation.remainingProblems.length > 0 ? (

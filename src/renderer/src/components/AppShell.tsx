@@ -1,5 +1,7 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { ProjectRecord } from '../../../shared/types'
+import { Button } from './ui'
+import { LiveActivityFeed } from './LiveActivityFeed'
 
 export type PrimaryView = 'projects' | 'create' | 'assets' | 'settings'
 export type WorkspaceTab = 'design' | 'code' | 'test' | 'export'
@@ -17,6 +19,9 @@ export function AppShell({
   project,
   workspaceTab,
   onWorkspaceTabChange,
+  activityOpen,
+  onActivityOpenChange,
+  onOpenActivityWindow,
   children
 }: {
   view: PrimaryView
@@ -24,6 +29,9 @@ export function AppShell({
   project: ProjectRecord | null
   workspaceTab: WorkspaceTab
   onWorkspaceTabChange: (tab: WorkspaceTab) => void
+  activityOpen: boolean
+  onActivityOpenChange: (open: boolean) => void
+  onOpenActivityWindow: () => void
   children: ReactNode
 }) {
   const onSidebarKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -47,7 +55,7 @@ export function AppShell({
       <aside className="flex w-56 shrink-0 flex-col bg-sidebar text-sidebar-text">
         <div className="border-b border-white/15 px-4 py-5">
           <p className="text-lg font-semibold tracking-tight">CraftStudio Local</p>
-          <p className="mt-1 text-sm text-sidebar-muted">Phase 10 · pillar/slabs · springs · config</p>
+          <p className="mt-1 text-sm text-sidebar-muted">1.0.1 · Live Activity</p>
         </div>
         <nav aria-label="Primary" className="flex flex-col gap-1 p-3" onKeyDown={onSidebarKeyDown}>
           {PRIMARY_ITEMS.map((item) => {
@@ -116,6 +124,24 @@ export function AppShell({
         <main id="main" className="min-h-0 flex-1 overflow-auto p-6">
           {children}
         </main>
+        <section className="border-t border-line bg-paper-raised">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
+            <button
+              type="button"
+              className="text-sm font-medium underline"
+              aria-expanded={activityOpen}
+              onClick={() => onActivityOpenChange(!activityOpen)}
+            >
+              {activityOpen ? 'Hide Live Activity' : 'Show Live Activity'}
+            </button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="ghost" onClick={onOpenActivityWindow}>
+                Open in separate window
+              </Button>
+            </div>
+          </div>
+          {activityOpen ? <LiveActivityFeed enabled compact /> : null}
+        </section>
       </div>
     </div>
   )

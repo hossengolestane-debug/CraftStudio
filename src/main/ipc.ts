@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
 import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { previewText } from '../shared/activity'
 import { listAdapters } from '../shared/adapters/registry'
 import { listCompatibility, lookupCompatibility } from '../shared/compatibility'
 import { formatEvidenceSummary, type EvidenceDraft } from '../shared/evidence'
@@ -13,11 +15,14 @@ import {
   type RecordEvidenceInput,
   type SaveTextureInput
 } from '../shared/ipc'
+import { ACTIVITY_FLUSH_MS } from '../shared/ollamaLimits'
 import { DEFAULT_PALETTE, paletteSuggestionSchema } from '../shared/pixelSpec'
 import { extractJsonObject, parseProjectSpec, type ProjectSpec } from '../shared/spec'
 import type { CreateProjectInput, SettingsPatch, UpdateProjectInput } from '../shared/types'
 import { DEFAULT_OLLAMA_ENDPOINT } from '../shared/types'
 import { isCodegenSupported, requiredJava } from '../shared/platformPins'
+import { createTextBatcher } from './logBatcher'
+import { ActivityService } from './services/activityService'
 import { EvidenceService } from './services/evidenceService'
 import { listProjectSnapshots, restoreProjectSnapshot } from './services/snapshotService'
 import { exportBuiltJar, exportDatapackZip, exportResourcePackZip, exportSourceZip } from './services/exportService'
@@ -52,6 +57,8 @@ export function registerIpc(deps: {
   generation: GenerationService
   gradle: GradleService
   evidence: EvidenceService
+  activity: ActivityService
+  openActivityWindow: () => void
 }): void {
   ipcMain.handle(IPC_CHANNELS.PROJECTS_LIST, () => wrap(() => deps.projects.list()))
   ipcMain.handle(IPC_CHANNELS.PROJECTS_CREATE, (_event, input: CreateProjectInput) =>
@@ -73,12 +80,165 @@ export function registerIpc(deps: {
   ipcMain.handle(IPC_CHANNELS.OLLAMA_CHECK, async (_event, endpoint?: string) =>
     wrap(async () => {
       const settings = await deps.settings.get()
-      return deps.ollama.check(endpoint ?? settings.ollamaEndpoint, settings.ollamaTimeoutMs)
+      const requestId = randomUUID()
+      deps.activity.record({
+        channel: 'ai',
+        requestId,
+        title: 'Checking the Ollama connection.',
+        status: 'running',
+        detail: 'GET /api/tags only. This does not load a model or start inference.'
+      })
+      const status = await deps.ollama.check(endpoint ?? settings.ollamaEndpoint, settings.ollamaTimeoutMs)
+      deps.activity.record({
+        channel: status.connected ? 'results' : 'errors',
+        requestId,
+        title: status.connected ? 'Ollama connection check succeeded.' : 'Ollama connection check failed.',
+        status: status.connected ? 'success' : 'failure',
+        detail: status.message,
+        error: status.connected ? undefined : status.message
+      })
+      return status
     })
   )
   ipcMain.handle(IPC_CHANNELS.OLLAMA_CANCEL, () =>
     wrap(() => {
-      deps.ollama.cancel()
+      deps.ollama.cancelCheck()
+    })
+  )
+  ipcMain.handle(IPC_CHANNELS.OLLAMA_TEST, async (_event, endpoint?: string, model?: string) =>
+    wrap(async () => {
+      const settings = await deps.settings.get()
+      const tag = (model ?? settings.ollamaModel ?? '').trim()
+      if (!tag) {
+        throw new AppError({
+          code: 'VALIDATION',
+          message: 'No model is selected for the test.',
+          action: 'Choose an installed model in Settings. CraftStudio will not pick one silently.'
+        })
+      }
+      const requestId = randomUUID()
+      deps.activity.record({
+        channel: 'ai',
+        requestId,
+        title: `Testing model ${tag}.`,
+        status: 'running',
+        model: tag,
+        settings: {
+          model: tag,
+          numPredict: 8,
+          numCtx: 512,
+          temperature: 0,
+          timeoutMs: 20000
+        },
+        messages: [
+          { role: 'system', content: 'Reply with the single word pong.', truncated: false },
+          { role: 'user', content: 'ping', truncated: false }
+        ]
+      })
+      try {
+        const result = await deps.ollama.testModel(endpoint ?? settings.ollamaEndpoint, tag)
+        deps.activity.record({
+          channel: 'results',
+          requestId: result.requestId,
+          title: `Model test finished for ${tag}.`,
+          status: 'success',
+          model: tag,
+          settings: {
+            model: tag,
+            numPredict: result.settings.numPredict,
+            numCtx: result.settings.numCtx,
+            temperature: result.settings.temperature,
+            timeoutMs: result.settings.timeoutMs
+          },
+          output: result.reply,
+          outputTruncated: result.truncated
+        })
+        return result
+      } catch (error) {
+        deps.activity.record({
+          channel: 'errors',
+          requestId,
+          title: `Model test failed for ${tag}.`,
+          status: 'failure',
+          model: tag,
+          error: error instanceof Error ? error.message : String(error)
+        })
+        throw error
+      }
+    })
+  )
+  ipcMain.handle(IPC_CHANNELS.OLLAMA_UNLOAD, async (_event, endpoint?: string, model?: string) =>
+    wrap(async () => {
+      const settings = await deps.settings.get()
+      const tag = (model ?? settings.ollamaModel ?? '').trim()
+      if (!tag) {
+        throw new AppError({
+          code: 'VALIDATION',
+          message: 'No CraftStudio model is selected to unload.',
+          action: 'Unload only the model this app last used. Other loaded models are left alone.'
+        })
+      }
+      deps.activity.record({
+        channel: 'ai',
+        title: `Unloading ${tag}.`,
+        status: 'running',
+        model: tag,
+        detail: 'POST /api/generate keep_alive=0 for this model only.'
+      })
+      const result = await deps.ollama.unload(endpoint ?? settings.ollamaEndpoint, tag)
+      deps.activity.record({
+        channel: 'results',
+        title: `Asked Ollama to unload ${tag}.`,
+        status: 'success',
+        model: tag,
+        detail: result.message
+      })
+      return result
+    })
+  )
+  ipcMain.handle(IPC_CHANNELS.ACTIVITY_LIST, () =>
+    wrap(async () => {
+      const settings = await deps.settings.get()
+      return deps.activity.list(settings.activityRetentionHours)
+    })
+  )
+  ipcMain.handle(IPC_CHANNELS.ACTIVITY_CLEAR, () =>
+    wrap(() => {
+      deps.activity.clearView()
+    })
+  )
+  ipcMain.handle(IPC_CHANNELS.ACTIVITY_EXPORT, (event) =>
+    wrap(async () => {
+      const settings = await deps.settings.get()
+      const events = deps.activity.list(settings.activityRetentionHours)
+      const window = senderWindow(event)
+      const dialogOpts = {
+        title: 'Export diagnostic activity log',
+        defaultPath: 'craftstudio-activity.log',
+        filters: [{ name: 'Log', extensions: ['log', 'txt'] }]
+      }
+      const result = window
+        ? await dialog.showSaveDialog(window, dialogOpts)
+        : await dialog.showSaveDialog(dialogOpts)
+      if (result.canceled || !result.filePath) {
+        throw new AppError({
+          code: 'EXPORT_FAILED',
+          message: 'Activity export was cancelled.',
+          action: 'Choose a destination file to save the diagnostic log.'
+        })
+      }
+      await writeFile(result.filePath, deps.activity.exportText(), 'utf8')
+      return {
+        kind: 'evidence-summary' as const,
+        destPath: result.filePath,
+        fileCount: events.length,
+        message: `Wrote ${events.length} activity event${events.length === 1 ? '' : 's'} to ${result.filePath}. Secrets are redacted. Full prompts appear only when persist-full-AI-logs was on.`
+      }
+    })
+  )
+  ipcMain.handle(IPC_CHANNELS.ACTIVITY_OPEN_WINDOW, () =>
+    wrap(() => {
+      deps.openActivityWindow()
     })
   )
   ipcMain.handle(IPC_CHANNELS.ADAPTERS_LIST, () =>
@@ -135,7 +295,13 @@ export function registerIpc(deps: {
   )
   ipcMain.handle(IPC_CHANNELS.SPEC_CANCEL, () =>
     wrap(() => {
-      deps.ollama.cancel()
+      deps.generation.cancelGeneration()
+      deps.activity.record({
+        channel: 'ai',
+        title: 'Cancelled the active CraftStudio inference.',
+        status: 'cancelled',
+        detail: 'The HTTP request was aborted. Ollama may still finish server-side if it already started generating.'
+      })
     })
   )
 
@@ -200,9 +366,65 @@ export function registerIpc(deps: {
           })
         }
       }
-      return deps.gradle.run(record.directoryPath, task, {
-        onLog: (chunk) => event.sender.send(IPC_EVENTS.BUILD_LOG, chunk)
+      const buildId = randomUUID()
+      const args = task === 'runClient' ? ['runClient', '--no-daemon', '--stacktrace'] : ['build', '--no-daemon', '--stacktrace']
+      deps.activity.record({
+        channel: 'build',
+        buildId,
+        title: task === 'build' ? 'Running the Gradle build.' : 'Running Gradle runClient.',
+        status: 'running',
+        command: process.platform === 'win32' ? 'gradlew.bat' : 'gradlew',
+        args: [...args],
+        cwd: record.directoryPath,
+        detail: 'Allowlisted Gradle task only. Logging does not enable arbitrary command execution.'
       })
+      const stdout = createTextBatcher((text) => event.sender.send(IPC_EVENTS.BUILD_LOG, { stream: 'stdout', text }), ACTIVITY_FLUSH_MS)
+      const stderr = createTextBatcher((text) => event.sender.send(IPC_EVENTS.BUILD_LOG, { stream: 'stderr', text }), ACTIVITY_FLUSH_MS)
+      try {
+        const result = await deps.gradle.run(record.directoryPath, task, {
+          onLog: (chunk) => {
+            if (chunk.stream === 'stderr') {
+              stderr.push(chunk.text)
+            } else {
+              stdout.push(chunk.text)
+            }
+          }
+        })
+        stdout.dispose()
+        stderr.dispose()
+        deps.activity.record({
+          channel: result.exitCode === 0 ? 'results' : result.cancelled ? 'build' : 'errors',
+          buildId,
+          title: result.cancelled
+            ? 'Gradle task was cancelled.'
+            : result.exitCode === 0
+              ? task === 'build'
+                ? 'Gradle build finished.'
+                : 'Gradle runClient finished.'
+              : 'Gradle task failed.',
+          status: result.cancelled ? 'cancelled' : result.exitCode === 0 ? 'success' : 'failure',
+          command: result.command,
+          args: [...args],
+          cwd: record.directoryPath,
+          exitCode: result.exitCode,
+          cancelled: result.cancelled,
+          output: previewText(result.logs, 500, false).content,
+          outputTruncated: result.logs.length > 500,
+          detail: result.message
+        })
+        return result
+      } catch (error) {
+        stdout.dispose()
+        stderr.dispose()
+        deps.activity.record({
+          channel: 'errors',
+          buildId,
+          title: 'Gradle task did not start.',
+          status: 'failure',
+          error: error instanceof Error ? error.message : String(error)
+        })
+        throw error
+      }
     })
   )
 
@@ -276,7 +498,14 @@ export function registerIpc(deps: {
     wrap(async () => {
       const record = await deps.projects.get(projectId)
       const settings = await deps.settings.get()
-      return writeProjectFile(settings.projectsPath, record.directoryName, relativePath, contents)
+      const written = await writeProjectFile(settings.projectsPath, record.directoryName, relativePath, contents)
+      deps.activity.record({
+        channel: 'files',
+        title: `Updating ${relativePath}.`,
+        path: relativePath,
+        status: 'success'
+      })
+      return written
     })
   )
 
@@ -310,6 +539,12 @@ export function registerIpc(deps: {
           input.layer ?? 'layer0'
         )
       }
+      deps.activity.record({
+        channel: 'files',
+        title: 'Writing item assets.',
+        path: saved.relativePath,
+        status: 'success'
+      })
       return saved
     })
   )
@@ -462,7 +697,7 @@ export function registerIpc(deps: {
         })
       }
       const contents = formatEvidenceSummary(records, {
-        appVersion: '1.0.0',
+        appVersion: '1.0.1',
         generatedAt: new Date().toISOString()
       })
       await writeFile(result.filePath, contents, 'utf8')

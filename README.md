@@ -6,7 +6,7 @@ Desktop app that helps beginners create **Minecraft Java Edition** mods and serv
 | --- | --- |
 | Fabric, NeoForge, Forge | Paper, Spigot |
 
-**Phase 10 / 1.0.0** is implemented: Phase 9 plus pillar/axis blocks, auto slab+stairs, `minecraft:spring_feature` worldgen, goal priorities and `both` targeting, a loader-norm JSON config, and standalone datapack ZIP export. A compile-only Gradle build never flips **Tested**. See [SMOKE.md](SMOKE.md) and [PHASE10.md](PHASE10.md).
+**Phase 10 / 1.0.1** is a performance + observability hotfix on the 1.0.0 feature set: Check connection is metadata-only, Test model is explicit and bounded, one active inference, working cancel/unload, batched Live Activity, and bounded logs. See [PERF_OLLAMA_LIVE_ACTIVITY.md](PERF_OLLAMA_LIVE_ACTIVITY.md), [SMOKE.md](SMOKE.md), and [PHASE10.md](PHASE10.md).
 
 ## Quick start
 
@@ -70,7 +70,7 @@ Ollama may only propose spec JSON (or a color palette). That JSON is independent
 ## Architecture
 
 ```text
-src/main/          Electron main (projects, Ollama, generation, Gradle, export, textures, evidence, snapshots, repair)
+src/main/          Electron main (projects, Ollama, generation, Gradle, export, textures, evidence, snapshots, repair, Live Activity bus)
 src/main/codegen/  Fabric + Paper + NeoForge + Forge + Spigot templates + vendored Gradle wrapper
 src/preload/       Restricted contextBridge
 src/renderer/      React UI (item / mob / GUI editors, Monaco, texture editor)
@@ -99,5 +99,9 @@ Fabric pins come from [fabricmc.net/develop](https://fabricmc.net/develop/) / Fa
 - The texture editor does not pretend Ollama painted a PNG
 - Build repair only rewrites allowlisted Java for known template mismatches — never model shell, never silent `build.gradle` mutation
 - Installers stay unsigned without a real certificate
+- Check connection never starts inference; Test model is an explicit short ping
+- CraftStudio request limits do not control other programs using Ollama
+- Live Activity never invents progress, percentages, or chain-of-thought
+- Pause display does not cancel generation or Gradle
 
-See [SMOKE.md](SMOKE.md), [PHASE1.md](PHASE1.md)–[PHASE10.md](PHASE10.md).
+See [SMOKE.md](SMOKE.md), [PERF_OLLAMA_LIVE_ACTIVITY.md](PERF_OLLAMA_LIVE_ACTIVITY.md), [PHASE1.md](PHASE1.md)–[PHASE10.md](PHASE10.md).

@@ -1,3 +1,4 @@
+import type { ActivityEvent } from './activity'
 import type { BuildDiagnostic } from './buildDiagnostics'
 import type { RuntimeEvidenceRecord, VerifiedWhat } from './evidence'
 import type { MigrationAssessment } from './migration'
@@ -28,6 +29,12 @@ export const IPC_CHANNELS = {
   SETTINGS_UPDATE: 'settings:update',
   OLLAMA_CHECK: 'ollama:check',
   OLLAMA_CANCEL: 'ollama:cancel',
+  OLLAMA_TEST: 'ollama:test',
+  OLLAMA_UNLOAD: 'ollama:unload',
+  ACTIVITY_LIST: 'activity:list',
+  ACTIVITY_CLEAR: 'activity:clear',
+  ACTIVITY_EXPORT: 'activity:export',
+  ACTIVITY_OPEN_WINDOW: 'activity:open-window',
   ADAPTERS_LIST: 'adapters:list',
   COMPATIBILITY_LOOKUP: 'compatibility:lookup',
   COMPATIBILITY_LIST: 'compatibility:list',
@@ -62,7 +69,8 @@ export const IPC_CHANNELS = {
 
 export const IPC_EVENTS = {
   GENERATION_PROGRESS: 'generation:progress',
-  BUILD_LOG: 'build:log'
+  BUILD_LOG: 'build:log',
+  ACTIVITY: 'activity:event'
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
@@ -110,6 +118,7 @@ export interface GenerationResultDto {
   remainingProblems: string[]
   ollamaNote: string | null
   success: true
+  requestId: string
 }
 
 export interface ApplyPreviewDto {
@@ -270,6 +279,27 @@ export interface CraftStudioAPI {
   listSnapshots: (projectId: string) => Promise<SnapshotRecordDto[]>
   restoreSnapshot: (projectId: string, snapshotId: string) => Promise<SnapshotRecordDto>
   assessVersionChange: (projectId: string, toVersion: string) => Promise<MigrationAssessmentDto>
+  testOllamaModel: (endpoint?: string, model?: string) => Promise<ModelTestResultDto>
+  unloadOllamaModel: (endpoint?: string, model?: string) => Promise<OllamaUnloadResultDto>
+  cancelOllamaInference: () => Promise<void>
+  listActivity: () => Promise<ActivityEvent[]>
+  clearActivity: () => Promise<void>
+  exportActivity: () => Promise<ExportResultDto>
+  openActivityWindow: () => Promise<void>
   onGenerationProgress: (handler: (event: GenerationProgress) => void) => () => void
   onBuildLog: (handler: (event: BuildLogEvent) => void) => () => void
+  onActivity: (handler: (event: ActivityEvent) => void) => () => void
+}
+
+export interface ModelTestResultDto {
+  requestId: string
+  model: string
+  reply: string
+  settings: { numPredict: number; numCtx: number; timeoutMs: number; temperature: number }
+  truncated: boolean
+}
+
+export interface OllamaUnloadResultDto {
+  model: string
+  message: string
 }
