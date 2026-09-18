@@ -178,7 +178,7 @@ tasks.named('processResources', ProcessResources).configure {
 }
 
 jar {
-  archiveBaseName = '\${mod_id}'
+  archiveBaseName = project.mod_id
 }
 `
   })

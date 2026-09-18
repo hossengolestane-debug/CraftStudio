@@ -51,6 +51,7 @@ describe('NeoForge adapter generation', () => {
     const files = planNeoForgeFiles(manifest, spec)
     const gradle = files.find((file) => file.relativePath === 'build.gradle')?.contents.toString() ?? ''
     expect(gradle).toContain("id 'net.neoforged.moddev' version '2.0.147'")
+    expect(gradle).toContain('archiveBaseName = project.mod_id')
     expect(gradle).toContain('neoForge {')
     expect(gradle).not.toContain('net.minecraftforge')
     expect(gradle).not.toMatch(/curl |rm -rf|wget /)

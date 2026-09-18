@@ -29,9 +29,10 @@ Automated:
 
 Manual / agent:
 
-- `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`
-- Live NeoForge 1.21.1 `./gradlew build` when the environment can reach maven.neoforged.net
-- This cloud environment did **not** complete a Minecraft client or Paper server. No Tested row was written from compile-only builds
+- `npm test` (80), `npm run lint`, `npm run typecheck`, `npm run build`
+- Live NeoForge 1.21.1 apply at `/tmp/cs-phase4-projects/glow-shard-neoforge` then **`./gradlew build` → BUILD SUCCESSFUL** in 1m 33s (`compileJava` + `jar`). The built `neoforge.mods.toml` expanded to `modId="glow_shard"`. Compile-only remains `true`
+- Live resource pack ZIP at `/tmp/cs-phase4-projects/glow-shard-resource-pack.zip` contains `pack.mcmeta`, `assets/glow_shard/models/item/glow_shard.json`, and a real PNG
+- This cloud environment did **not** complete a Minecraft client or Paper server. No `craftstudio.runtime-evidence.json` was written. Compatibility stays Experimental
 
 ## Known limitations
 
