@@ -12,7 +12,7 @@ Phase 5 keeps the Phase 1–4 Electron app and adds Forge + widened NeoForge, a 
 
 ### Custom mobs (first slice)
 - Spec: id, display name, health, a few attributes, three presets (`passive_wanderer`, `hostile_melee`, `neutral_flee`), targeting, spawn stub, drops, appearance/model refs.
-- Fabric: entity registration + attributes on all pinned 1.21.x versions. Classic (1.21 / 1.21.1) also emits a vanilla-texture client renderer. 1.21.2+ writes `ENTITY_RENDERING.md` instead of guessing the render-state API.
+- Fabric: entity registration + attributes on all pinned 1.21.x versions. No client renderer is emitted — vanilla model classes are typed to vanilla entities and fail compile against a custom type. `ENTITY_RENDERING.md` documents that limit.
 - NeoForge 1.21.1 and Forge 1.21.1: real entity classes + attribute registration. Later NeoForge pins write `MOBS.md`.
 - Paper / Spigot: vanilla disguises (zombie / pig / wolf) with name, health, and PDC. UI states that plugins cannot add a new client entity type.
 
@@ -41,8 +41,8 @@ Automated:
 
 Manual / agent:
 
-- `npm test`, `npm run lint`, `npm run typecheck`, `npm run build` (recorded after this report is written)
-- Live `./gradlew build` for Forge 1.21.1 when the environment can download ForgeGradle (see “Live notes” below)
+- `npm test` (94), `npm run lint`, `npm run typecheck`, `npm run build`
+- Live `./gradlew build` for Forge 1.21.1, NeoForge 1.21.4, Spigot 1.21.1, and Fabric 1.21.1 (item + preset mob + preview screen) — see “Live notes”
 - This cloud environment still cannot finish a Minecraft client. No Tested badge was written from compile-only
 
 ## Known limitations
@@ -52,7 +52,7 @@ Manual / agent:
 - Spigot 1.21.8 is unsupported
 - Plugin mobs are disguises, not new client types
 - GUI layouts are previews; no advanced sync framework
-- Fabric 1.21.2+ entity renderers are not emitted
+- Fabric entity renderers are not emitted on any pin (vanilla model classes will not compile against a custom type)
 - Compatibility stays Experimental until a desktop Minecraft runtime is recorded as evidence
 
 ## Security
@@ -75,7 +75,16 @@ Manual / agent:
 
 ## Live notes
 
-Recorded after quality gates and any successful `./gradlew build` in this environment. Compile-only remains `true`. No `craftstudio.runtime-evidence.json` is written from this VM.
+Recorded in this cloud environment after apply + `./gradlew build --no-daemon --stacktrace`. Compile-only remains `true`. No `craftstudio.runtime-evidence.json` was written.
+
+| Project | Result |
+| --- | --- |
+| Forge 1.21.1 item at `/tmp/cs-phase5-projects/glow-shard-forge-54c5d71d` | **BUILD SUCCESSFUL** in 1m 11s. Jar `glow_shard_forge-1.0.0.jar`. Expanded `mods.toml` contains `glow_shard`. |
+| NeoForge 1.21.4 item at `/tmp/cs-phase5-projects/glow-shard-neo-214-fcf01843` | **BUILD SUCCESSFUL** in 1m 54s. Jar `glow_shard_neo_214-1.0.0.jar`. |
+| Spigot 1.21.1 item + disguise mob + inventory menu at `/tmp/cs-phase5-projects/harbor-tokens-spigot-51d08e83` | First compile failed (JetBrains `@NotNull` + `return` in a switch expression). After the template fix, **BUILD SUCCESSFUL** in 5s. Jar `harbor_tokens_spigot-1.0.0.jar`. |
+| Fabric 1.21.1 item + preset mob + preview screen at `/tmp/cs-phase5-projects/river-stones-fabric-82cd5d2f` | First compile failed (vanilla-typed `ZombieEntityModel` + `FeatureFlags.VANILLA`). After the template fix, **BUILD SUCCESSFUL** in 8s. |
+
+This environment did **not** complete a Minecraft client or a user-launched Paper/Spigot server. Compatibility stays Experimental.
 
 ## Recommended Phase 6
 

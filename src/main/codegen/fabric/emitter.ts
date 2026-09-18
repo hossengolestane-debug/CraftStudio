@@ -275,9 +275,7 @@ jar {
         environment: '*',
         entrypoints: {
           main: [`${spec.packageName}.${spec.mainClass}`],
-          ...(spec.modGuis.length > 0 || (spec.mobs.length > 0 && pins.itemRegistration === 'classic')
-            ? { client: [`${spec.packageName}.${spec.mainClass}Client`] }
-            : {})
+          ...(spec.modGuis.length > 0 ? { client: [`${spec.packageName}.${spec.mainClass}Client`] } : {})
         },
         depends: {
           fabricloader: `>=${pins.loader}`,
@@ -353,16 +351,16 @@ jar {
   files.push(...planFabricGuiFiles(spec, packagePath))
   files.push(...planFabricEntityRenderers(spec, packagePath, classic))
   files.push(...planFabricClientFiles(spec, packagePath, classic))
-  if (spec.mobs.length > 0 && !classic) {
+  if (spec.mobs.length > 0) {
     files.push({
       relativePath: 'ENTITY_RENDERING.md',
       encoding: 'utf8',
       contents: [
         '# Entity rendering note',
         '',
-        `Fabric ${pins.minecraft} uses the 1.21.2+ entity render-state API.`,
-        'CraftStudio registers the entity and attributes. A client renderer is not emitted for this pin.',
-        'That is not a Minecraft-verified custom model. Spawn is summon/command only.',
+        `Fabric ${pins.minecraft}: CraftStudio registers the entity type and attributes.`,
+        'A client renderer is not emitted. Vanilla model classes are typed to vanilla entities and will not compile against a custom type.',
+        'This is not a Minecraft-verified custom model. Spawn is summon/command only until a later phase adds a dedicated model.',
         ''
       ].join('\n')
     })

@@ -86,6 +86,8 @@ describe('Spigot adapter generation', () => {
     expect(javaAndGradle).toContain('EntityType.WOLF')
     expect(javaAndGradle).toContain('event.setCancelled(true)')
     expect(javaAndGradle).toContain('InventoryDragEvent')
+    expect(javaAndGradle).toContain('yield entity')
+    expect(javaAndGradle).not.toContain('org.jetbrains')
     const eula = files.find((file) => file.relativePath === 'run-spigot/eula.txt')?.contents.toString() ?? ''
     expect(eula).not.toContain('eula=true')
   })

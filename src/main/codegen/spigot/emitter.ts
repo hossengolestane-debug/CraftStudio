@@ -181,7 +181,6 @@ import org.bukkit.inventory.ShapelessRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.jetbrains.annotations.NotNull;
 
 public class ${spec.mainClass} extends JavaPlugin {
   public static final NamespacedKey ITEM_KEY = new NamespacedKey("craftstudio", "custom_item");
@@ -198,7 +197,7 @@ ${menuRegs}
   }
 
   @Override
-  public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+  public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
     if (!(sender instanceof Player player)) {
       sender.sendMessage("Players only.");
       return true;

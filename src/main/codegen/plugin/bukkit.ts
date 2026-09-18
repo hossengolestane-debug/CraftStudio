@@ -55,7 +55,7 @@ export function spawnMobJava(spec: ProjectSpec, style: BukkitTextStyle, maxHealt
         entity.setHealth(${mob.health}d);
         entity.getPersistentDataContainer().set(MOB_KEY, org.bukkit.persistence.PersistentDataType.STRING, "${javaEscape(mob.id)}");
         // ${mob.preset} / ${mob.targeting} — preset is documented only; plugins cannot register a new client entity type.
-        return entity;
+        yield entity;
       }`
     })
     .join('\n')
@@ -100,7 +100,6 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.jetbrains.annotations.NotNull;
 
 /**
  * Plugin inventory menu preview. Click/drag/transfer are cancelled.
@@ -134,7 +133,7 @@ ${slots}
   }
 
   @Override
-  public @NotNull Inventory getInventory() {
+  public Inventory getInventory() {
     return inventory;
   }
 

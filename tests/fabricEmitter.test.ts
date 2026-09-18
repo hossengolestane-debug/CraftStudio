@@ -104,4 +104,41 @@ describe('Fabric adapter generation', () => {
     )
     expect(() => planFabricFiles(manifestFor('1.18.2'), spec)).toThrow(/1\.21/)
   })
+
+  it('registers preset mobs and a preview screen without vanilla-typed renderers', () => {
+    const withExtras = parseProjectSpec({
+      ...spec,
+      mobs: [
+        {
+          id: 'stone_mite',
+          displayName: 'Stone Mite',
+          health: 12,
+          preset: 'hostile_melee',
+          targeting: 'players',
+          appearance: { model: 'humanoid', vanillaBase: 'minecraft:zombie' }
+        }
+      ],
+      modGuis: [
+        {
+          id: 'example_screen',
+          title: 'Preview',
+          width: 176,
+          height: 166,
+          widgets: [{ id: 'title_label', kind: 'label', x: 8, y: 6, width: 80, height: 12, text: 'Preview', action: 'none' }]
+        }
+      ]
+    })
+    const files = planFabricFiles(manifestFor('1.21.1'), withExtras)
+    const java = files.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
+    expect(java).toContain('STONE_MITE')
+    expect(java).toContain('FabricDefaultAttributeRegistry')
+    expect(java).toContain('FeatureFlags.VANILLA_FEATURES')
+    expect(files.some((file) => file.relativePath.endsWith('StoneMiteEntity.java'))).toBe(true)
+    expect(files.some((file) => file.relativePath.endsWith('ExampleScreen.java'))).toBe(true)
+    expect(files.some((file) => file.relativePath.endsWith('EntityRenderer.java'))).toBe(false)
+    expect(files.some((file) => file.relativePath === 'ENTITY_RENDERING.md')).toBe(true)
+    expect(files.some((file) => file.relativePath.endsWith('RiverStonesClient.java'))).toBe(true)
+    const modJson = files.find((file) => file.relativePath === 'src/main/resources/fabric.mod.json')?.contents.toString() ?? ''
+    expect(modJson).toContain('RiverStonesClient')
+  })
 })

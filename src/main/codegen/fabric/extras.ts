@@ -229,16 +229,14 @@ export function planFabricClientFiles(
   packagePath: string,
   classic: boolean
 ): PlannedFile[] {
-  const hasGui = spec.modGuis.length > 0
-  const hasRenderer = spec.mobs.length > 0 && classic
-  if (!hasGui && !hasRenderer) {
+  if (spec.modGuis.length === 0) {
     return []
   }
   return [
     {
       relativePath: `src/main/java/${packagePath}/${spec.mainClass}Client.java`,
       encoding: 'utf8',
-      contents: fabricClientJava(spec, hasGui, classic)
+      contents: fabricClientJava(spec, true, classic)
     }
   ]
 }
@@ -279,85 +277,26 @@ export function fabricMenuField(spec: ProjectSpec, style: FabricItemRegistration
   public static final ScreenHandlerType<ExampleScreenHandler> EXAMPLE_MENU = Registry.register(
     Registries.SCREEN_HANDLER,
     EXAMPLE_MENU_KEY,
-    new ScreenHandlerType<>(ExampleScreenHandler::new, FeatureFlags.VANILLA)
+    new ScreenHandlerType<>(ExampleScreenHandler::new, FeatureFlags.VANILLA_FEATURES)
   );`
   }
   return `  public static final ScreenHandlerType<ExampleScreenHandler> EXAMPLE_MENU = Registry.register(
     Registries.SCREEN_HANDLER,
     Identifier.of(MOD_ID, "example_menu"),
-    new ScreenHandlerType<>(ExampleScreenHandler::new, FeatureFlags.VANILLA)
+    new ScreenHandlerType<>(ExampleScreenHandler::new, FeatureFlags.VANILLA_FEATURES)
   );`
 }
 
 export function planFabricEntityRenderers(
-  spec: ProjectSpec,
-  packagePath: string,
-  classic: boolean
+  _spec: ProjectSpec,
+  _packagePath: string,
+  _classic: boolean
 ): PlannedFile[] {
-  if (spec.mobs.length === 0 || !classic) {
-    return []
-  }
-  return spec.mobs.map((mob) => {
-    const cls = entityClassName(mob.id)
-    const renderer = `${cls}Renderer`
-    const texture =
-      mob.appearance.vanillaBase === 'minecraft:pig'
-        ? 'textures/entity/pig/pig.png'
-        : mob.appearance.vanillaBase === 'minecraft:wolf'
-          ? 'textures/entity/wolf/wolf.png'
-          : 'textures/entity/zombie/zombie.png'
-    const layer =
-      mob.appearance.vanillaBase === 'minecraft:pig'
-        ? 'PIG'
-        : mob.appearance.vanillaBase === 'minecraft:wolf'
-          ? 'WOLF'
-          : 'ZOMBIE'
-    const model =
-      mob.appearance.vanillaBase === 'minecraft:pig'
-        ? 'PigEntityModel'
-        : mob.appearance.vanillaBase === 'minecraft:wolf'
-          ? 'WolfEntityModel'
-          : 'ZombieEntityModel'
-    return {
-      relativePath: `src/main/java/${packagePath}/${renderer}.java`,
-      encoding: 'utf8' as const,
-      contents: `package ${spec.packageName};
-
-import net.minecraft.client.render.entity.EntityRendererFactory;
-import net.minecraft.client.render.entity.MobEntityRenderer;
-import net.minecraft.client.render.entity.model.EntityModelLayers;
-import net.minecraft.client.render.entity.model.${model};
-import net.minecraft.util.Identifier;
-
-/**
- * Client preview renderer. This is not a Minecraft-verified custom model.
- * Texture is a vanilla reference so the entity is visible in runClient.
- */
-public class ${renderer} extends MobEntityRenderer<${cls}, ${model}<${cls}>> {
-  private static final Identifier TEXTURE = Identifier.of("minecraft", "${texture}");
-
-  public ${renderer}(EntityRendererFactory.Context context) {
-    super(context, new ${model}<>(context.getPart(EntityModelLayers.${layer})), 0.5f);
-  }
-
-  @Override
-  public Identifier getTexture(${cls} entity) {
-    return TEXTURE;
-  }
-}
-`
-    }
-  })
+  // Vanilla model classes are typed to vanilla entities (e.g. ZombieEntityModel<T extends ZombieEntity>).
+  // Emitting those for a custom type fails compile. Registration + attributes still ship.
+  return []
 }
 
-export function fabricClientRendererLines(spec: ProjectSpec, classic: boolean): string {
-  if (spec.mobs.length === 0 || !classic) {
-    return ''
-  }
-  return spec.mobs
-    .map(
-      (mob) =>
-        `    EntityRendererRegistry.register(${spec.mainClass}.${toConstName(mob.id)}, ${entityClassName(mob.id)}Renderer::new);`
-    )
-    .join('\n')
+export function fabricClientRendererLines(_spec: ProjectSpec, _classic: boolean): string {
+  return ''
 }

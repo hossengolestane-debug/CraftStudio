@@ -324,8 +324,8 @@ ${spec.mobs.length ? `  public static final DeferredRegister<EntityType<?>> ENTI
 ${itemRegs(spec)}
 ${entityRegs}
 
-  public ${spec.mainClass}() {
-    IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
+  public ${spec.mainClass}(FMLJavaModLoadingContext context) {
+    IEventBus bus = context.getModEventBus();
     ITEMS.register(bus);
     ${spec.mobs.length ? 'ENTITIES.register(bus);' : ''}
     bus.addListener(this::addCreative);
