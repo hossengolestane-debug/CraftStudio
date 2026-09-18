@@ -1,5 +1,6 @@
 export const TRUSTED_OUTPUT_PATHS = new Set([
   'craftstudio.spec.json',
+  'specification.json',
   'README.md',
   'INSTALL.md',
   '.gitignore',

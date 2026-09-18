@@ -42,6 +42,8 @@ export const IPC_CHANNELS = {
   APP_DEFAULTS: 'app:defaults',
   APP_SELECT_DIRECTORY: 'app:select-directory',
   SPEC_GET: 'spec:get',
+  SPEC_APPLIED: 'spec:applied',
+  SPEC_EXPORT: 'spec:export',
   SPEC_GENERATE: 'spec:generate',
   SPEC_PREVIEW: 'spec:preview',
   SPEC_APPLY: 'spec:apply',
@@ -210,6 +212,12 @@ export interface PaletteSuggestionDto {
   note: string
 }
 
+export interface AppliedSpecDto {
+  spec: ProjectSpec | null
+  appliedAt: string | null
+  relativePath: string
+}
+
 export interface SnapshotRecordDto {
   id: string
   reason: 'before-apply' | 'before-version-change'
@@ -257,6 +265,11 @@ export interface CraftStudioAPI {
   getAppDefaults: () => Promise<AppDefaults>
   selectDirectory: () => Promise<string | null>
   getSpec: (projectId: string) => Promise<ProjectSpec | null>
+  getAppliedSpec: (projectId: string) => Promise<AppliedSpecDto>
+  exportSpecificationJson: (
+    projectId: string,
+    spec: ProjectSpec
+  ) => Promise<{ relativePath: string; bytes: number }>
   generateSpec: (input: GenerateSpecInput) => Promise<GenerationResultDto>
   previewApply: (projectId: string, spec: ProjectSpec) => Promise<ApplyPreviewDto>
   applySpec: (projectId: string, spec: ProjectSpec, confirmOverwrites: boolean) => Promise<ApplyResultDto>

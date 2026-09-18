@@ -90,8 +90,8 @@ export function SettingsPage({
       <Card className="space-y-2" id="about-build">
         <h2 className="text-lg font-semibold">About / Build information</h2>
         <p className="text-sm text-muted">
-          Use this to confirm you launched the 1.0.4 binary, not an older copy left in another folder. Install the rebuilt
-          portable/unpacked app into <code>E:\CraftStudio Local 1.0.4\</code> and keep older version folders.
+          Use this to confirm you launched the 1.0.5 binary, not an older copy left in another folder. Install the rebuilt
+          portable/unpacked app into <code>E:\CraftStudio Local 1.0.5\</code> and keep older version folders.
         </p>
         {about ? (
           <dl className="space-y-1 text-sm">

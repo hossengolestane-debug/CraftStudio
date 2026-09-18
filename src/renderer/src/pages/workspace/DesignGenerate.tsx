@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSpecHistory } from '../../lib/specHistory'
 import type { AppErrorPayload } from '../../../../shared/errors'
 import type {
+  AppliedSpecDto,
   ApplyResultDto,
   GenerationProgress,
   GenerationResultDto,
@@ -12,6 +13,7 @@ import { isCodegenSupported } from '../../../../shared/platformPins'
 import { parseProjectSpec, type ProjectSpec } from '../../../../shared/spec'
 import type { AppSettings, OllamaStatus, PlatformAdapterInfo, ProjectRecord } from '../../../../shared/types'
 import { ErrorPanel } from '../../components/ErrorPanel'
+import { SpecInspector } from '../../components/SpecInspector'
 import { Badge, Button, Card, Field, TextArea, TextInput } from '../../components/ui'
 import { asAppError } from '../../lib/errors'
 import { BlockEditor } from './BlockEditor'
@@ -56,6 +58,7 @@ export function DesignGenerate({
   const [versionTarget, setVersionTarget] = useState(project.manifest.minecraftVersion)
   const [assessment, setAssessment] = useState<MigrationAssessmentDto | null>(null)
   const [snapshots, setSnapshots] = useState<SnapshotRecordDto[]>([])
+  const [applied, setApplied] = useState<AppliedSpecDto | null>(null)
 
   useEffect(() => {
     setName(project.manifest.name)
@@ -91,7 +94,13 @@ export function DesignGenerate({
     const off = api.onGenerationProgress((event) => {
       setProgress((list) => [...list.slice(-20), event])
     })
-    void api.getSpec(project.manifest.id).then((loaded) => replaceSpec(loaded)).catch(() => undefined)
+    void api
+      .getAppliedSpec(project.manifest.id)
+      .then((status) => {
+        setApplied(status)
+        replaceSpec(status.spec)
+      })
+      .catch(() => undefined)
     void api.listSnapshots(project.manifest.id).then(setSnapshots).catch(() => undefined)
     return off
   }, [project.manifest.id, replaceSpec])
@@ -521,6 +530,16 @@ export function DesignGenerate({
         </Card>
       ) : null}
 
+      {workingSpec ? (
+        <SpecInspector
+          projectId={project.manifest.id}
+          draftSpec={workingSpec}
+          appliedSpec={applied?.spec ?? null}
+          appliedAt={applied?.appliedAt ?? null}
+          onError={setError}
+        />
+      ) : null}
+
       {workingSpec && codegenReady ? (
         <Card className="space-y-3">
           <h2 className="text-lg font-semibold">Apply to project</h2>
@@ -550,8 +569,12 @@ export function DesignGenerate({
                   .applySpec(project.manifest.id, workingSpec, true)
                   .then((result) => {
                     setPreview(result)
-                    return api.listSnapshots(project.manifest.id).then(setSnapshots)
+                    if (result.applied) {
+                      return api.getAppliedSpec(project.manifest.id).then(setApplied)
+                    }
+                    return undefined
                   })
+                  .then(() => api.listSnapshots(project.manifest.id).then(setSnapshots))
                   .catch((err) => setError(asAppError(err)))
                   .finally(() => setBusy(false))
               }}
@@ -610,7 +633,12 @@ export function DesignGenerate({
                   setBusy(true)
                   void api
                     .restoreSnapshot(project.manifest.id, snapshot.id)
-                    .then(() => api.getSpec(project.manifest.id).then((loaded) => specHistory.replaceCurrent(loaded)))
+                    .then(() =>
+                      api.getAppliedSpec(project.manifest.id).then((status) => {
+                        setApplied(status)
+                        specHistory.replaceCurrent(status.spec)
+                      })
+                    )
                     .catch((err) => setError(asAppError(err)))
                     .finally(() => setBusy(false))
                 }}

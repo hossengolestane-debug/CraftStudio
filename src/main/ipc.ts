@@ -310,6 +310,12 @@ export function registerIpc(deps: {
   )
 
   ipcMain.handle(IPC_CHANNELS.SPEC_GET, (_event, projectId: string) => wrap(() => deps.generation.getSpec(projectId)))
+  ipcMain.handle(IPC_CHANNELS.SPEC_APPLIED, (_event, projectId: string) =>
+    wrap(() => deps.generation.getAppliedSpec(projectId))
+  )
+  ipcMain.handle(IPC_CHANNELS.SPEC_EXPORT, (_event, projectId: string, spec: ProjectSpec) =>
+    wrap(() => deps.generation.exportSpecificationJson(projectId, spec))
+  )
   ipcMain.handle(IPC_CHANNELS.SPEC_GENERATE, (event, input: GenerateSpecInput) =>
     wrap(() =>
       deps.generation.generateSpec(input.projectId, input.prompt, input.mode, {

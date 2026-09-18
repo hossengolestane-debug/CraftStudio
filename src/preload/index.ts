@@ -57,6 +57,9 @@ const api: CraftStudioAPI = {
   getAppDefaults: () => invoke<AppDefaults>(IPC_CHANNELS.APP_DEFAULTS),
   selectDirectory: () => invoke(IPC_CHANNELS.APP_SELECT_DIRECTORY),
   getSpec: (projectId: string) => invoke(IPC_CHANNELS.SPEC_GET, projectId),
+  getAppliedSpec: (projectId: string) => invoke(IPC_CHANNELS.SPEC_APPLIED, projectId),
+  exportSpecificationJson: (projectId: string, spec: ProjectSpec) =>
+    invoke(IPC_CHANNELS.SPEC_EXPORT, projectId, spec),
   generateSpec: (input: GenerateSpecInput) => invoke(IPC_CHANNELS.SPEC_GENERATE, input),
   previewApply: (projectId: string, spec: ProjectSpec) => invoke(IPC_CHANNELS.SPEC_PREVIEW, projectId, spec),
   applySpec: (projectId: string, spec: ProjectSpec, confirmOverwrites: boolean) =>

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { previewText } from '../../shared/activity'
 import { AppError } from '../../shared/errors'
 import {
@@ -17,6 +17,7 @@ import {
   type ProjectSpec
 } from '../../shared/spec'
 import { describeOllamaWireFormat } from '../../shared/ollamaSpecSchema'
+import { formatSpecJson, SPEC_EXPORT_FILENAME } from '../../shared/specInspector'
 import { SPEC_REPAIR_CONSTRAINTS, SPEC_SYSTEM_PROMPT } from '../../shared/specPrompt'
 import { collectUnsupportedFromPrompt, inferSpecFromPrompt, promptLooksComplex } from '../../shared/templateInfer'
 import type { AppSettings, ProjectRecord } from '../../shared/types'
@@ -27,6 +28,7 @@ import { diffPlannedFiles, writePlannedFiles, type FileChange } from './filePlan
 import type { ActivityService } from './activityService'
 import { OllamaService } from './ollamaService'
 import { resolveProjectFile } from './pathSafety'
+import { writeProjectFile } from './projectFiles'
 import type { ProjectService } from './projectService'
 import type { SettingsService } from './settingsService'
 import { createProjectSnapshot, removeOldestSnapshots } from './snapshotService'
@@ -89,20 +91,58 @@ export class GenerationService {
   }
 
   async getSpec(projectId: string): Promise<ProjectSpec | null> {
+    return (await this.getAppliedSpec(projectId)).spec
+  }
+
+  async getAppliedSpec(projectId: string): Promise<{
+    spec: ProjectSpec | null
+    appliedAt: string | null
+    relativePath: string
+  }> {
     const record = await this.projects.get(projectId)
     const root = (await this.settings.get()).projectsPath
+    const relativePath = SPEC_FILENAME
     try {
-      const raw = await readFile(resolveProjectFile(root, record.directoryName, SPEC_FILENAME), 'utf8')
-      return parseSpecJson(raw)
+      const full = resolveProjectFile(root, record.directoryName, relativePath)
+      const raw = await readFile(full, 'utf8')
+      const info = await stat(full)
+      return {
+        spec: parseSpecJson(raw),
+        appliedAt: info.mtime.toISOString(),
+        relativePath
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return null
+        return { spec: null, appliedAt: null, relativePath }
       }
       if (error instanceof AppError) {
         throw error
       }
-      return null
+      return { spec: null, appliedAt: null, relativePath }
     }
+  }
+
+  async exportSpecificationJson(
+    projectId: string,
+    specInput: unknown
+  ): Promise<{ relativePath: string; bytes: number }> {
+    const record = await this.projects.get(projectId)
+    const spec = parseProjectSpec(specInput)
+    const root = (await this.settings.get()).projectsPath
+    const written = await writeProjectFile(
+      root,
+      record.directoryName,
+      SPEC_EXPORT_FILENAME,
+      formatSpecJson(spec)
+    )
+    this.activity?.record({
+      channel: 'files',
+      title: `Exporting ${SPEC_EXPORT_FILENAME}.`,
+      path: written.relativePath,
+      detail: `${written.bytes} bytes. This is a path-confined copy of the current draft, not Live Activity preview text.`,
+      status: 'success'
+    })
+    return written
   }
 
   async generateSpec(
