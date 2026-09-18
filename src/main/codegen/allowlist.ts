@@ -17,7 +17,8 @@ export const TRUSTED_OUTPUT_PATHS = new Set([
   'pack.mcmeta',
   'pack.png',
   'ENTITY_RENDERING.md',
-  'MOBS.md'
+  'MOBS.md',
+  'SPAWNS.md'
 ])
 
 export const BUILD_SCRIPT_PATHS = new Set([

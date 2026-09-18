@@ -28,6 +28,8 @@ describe('generated path safety', () => {
     expect(isTrustedOutputPath('src/main/java/local/craftstudio/x/X.java')).toBe(true)
     expect(isTrustedOutputPath('craftstudio/textures/demo.png')).toBe(true)
     expect(isTrustedOutputPath('src/main/resources/META-INF/neoforge.mods.toml')).toBe(true)
+    expect(isTrustedOutputPath('SPAWNS.md')).toBe(true)
+    expect(isTrustedOutputPath('ENTITY_RENDERING.md')).toBe(true)
     expect(isTrustedOutputPath('../craftstudio.project.json')).toBe(false)
     expect(isTrustedOutputPath('evil.sh')).toBe(false)
   })
