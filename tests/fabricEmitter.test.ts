@@ -170,7 +170,7 @@ describe('Fabric adapter generation', () => {
     expect(files.some((file) => file.relativePath.endsWith('CraftStudioMobModel.java'))).toBe(true)
     const model = files.find((file) => file.relativePath.endsWith('CraftStudioMobModel.java'))?.contents.toString() ?? ''
     expect(model).toContain('EntityModel<LivingEntityRenderState>')
-    expect(model).not.toContain('super(root)')
+    expect(model).toContain('super(root)')
     const client = files.find((file) => file.relativePath.endsWith('RiverStonesClient.java'))?.contents.toString() ?? ''
     expect(client).not.toContain('invisible')
     expect(client).toContain('EntityModelLayerRegistry')

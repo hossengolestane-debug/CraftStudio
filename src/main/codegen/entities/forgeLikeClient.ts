@@ -9,10 +9,7 @@ export function forgeLikeClientStyle(flavor: 'forge' | 'neoforge', minecraftVers
   if (flavor === 'forge' || minecraftVersion === '1.21.1') {
     return 'classic'
   }
-  if (minecraftVersion === '1.21.8') {
-    return 'render_state_rooted'
-  }
-  return 'render_state'
+  return 'render_state_rooted'
 }
 
 function classicModelJava(spec: ProjectSpec): string {

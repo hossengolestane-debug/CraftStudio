@@ -265,7 +265,7 @@ export function forgeLikeCommandMethod(spec: ProjectSpec): string {
     .map((gui) => {
       const menu = forgeMenuClass(gui.id)
       return `        case "${javaEscape(gui.id)}" -> player.openMenu(new net.minecraft.world.SimpleMenuProvider(
-          (id, inv, p) -> new ${menu}(id, inv),
+          (windowId, inv, p) -> new ${menu}(windowId, inv),
           net.minecraft.network.chat.Component.literal("${javaEscape(gui.title)}")
         ));`
     })
@@ -274,7 +274,7 @@ export function forgeLikeCommandMethod(spec: ProjectSpec): string {
     spec.modGuis.length > 0
       ? `        net.minecraft.server.level.ServerPlayer player = ctx.getSource().getPlayerOrException();
         player.openMenu(new net.minecraft.world.SimpleMenuProvider(
-          (id, inv, p) -> new ${forgeMenuClass(spec.modGuis[0]!.id)}(id, inv),
+          (windowId, inv, p) -> new ${forgeMenuClass(spec.modGuis[0]!.id)}(windowId, inv),
           net.minecraft.network.chat.Component.literal("${javaEscape(spec.modGuis[0]!.title)}")
         ));
         return 1;`

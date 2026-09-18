@@ -13,13 +13,10 @@ export { entityClassName }
 export type FabricRendererStyle = 'classic_living' | 'render_state' | 'render_state_rooted'
 
 export function fabricRendererStyle(minecraftVersion: string): FabricRendererStyle {
-  if (minecraftVersion === '1.21.8') {
-    return 'render_state_rooted'
-  }
   if (minecraftVersion === '1.21' || minecraftVersion === '1.21.1') {
     return 'classic_living'
   }
-  return 'render_state'
+  return 'render_state_rooted'
 }
 
 export function placeholderEntityPng(): Buffer {
@@ -612,7 +609,7 @@ export function fabricCommandBlocks(spec: ProjectSpec): string {
           return builder.buildFuture();
         })
         .executes(context -> {
-          ServerPlayerEntity player = context.getSource().getPlayerOrException();
+          ServerPlayerEntity player = context.getSource().getPlayerOrThrow();
           String id = StringArgumentType.getString(context, "id");
           switch (id) {
 ${menuCases}
@@ -621,7 +618,7 @@ ${menuCases}
           return 1;
         }))
       .executes(context -> {
-        ServerPlayerEntity player = context.getSource().getPlayerOrException();
+        ServerPlayerEntity player = context.getSource().getPlayerOrThrow();
         player.openHandledScreen(new SimpleNamedScreenHandlerFactory((syncId, inv, p) -> new ${fabricHandlerClass(spec.modGuis[0]!.id)}(syncId, inv), Text.literal("${javaEscape(spec.modGuis[0]!.title)}")));
         return 1;
       }));`
