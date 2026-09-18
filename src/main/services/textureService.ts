@@ -7,13 +7,16 @@ import { isTrustedOutputPath } from '../codegen/allowlist'
 import { resolveProjectFile } from './pathSafety'
 
 export const TEXTURE_DIR = 'craftstudio/textures'
+export type TextureLayer = 'layer0' | 'layer1'
 
-export function texturePngPath(itemId: string): string {
-  return `${TEXTURE_DIR}/${itemId}.png`
+export function texturePngPath(itemId: string, layer: TextureLayer = 'layer0'): string {
+  return layer === 'layer1' ? `${TEXTURE_DIR}/${itemId}_layer1.png` : `${TEXTURE_DIR}/${itemId}.png`
 }
 
-export function texturePixelSpecPath(itemId: string): string {
-  return `${TEXTURE_DIR}/${itemId}.pixels.json`
+export function texturePixelSpecPath(itemId: string, layer: TextureLayer = 'layer0'): string {
+  return layer === 'layer1'
+    ? `${TEXTURE_DIR}/${itemId}_layer1.pixels.json`
+    : `${TEXTURE_DIR}/${itemId}.pixels.json`
 }
 
 function assertItemId(itemId: string): void {
@@ -28,6 +31,7 @@ function assertItemId(itemId: string): void {
 
 export interface TextureRecord {
   itemId: string
+  layer: TextureLayer
   relativePath: string
   width: number
   height: number
@@ -40,7 +44,8 @@ export async function saveItemTexture(
   itemId: string,
   width: number,
   height: number,
-  pixels: Uint8Array
+  pixels: Uint8Array,
+  layer: TextureLayer = 'layer0'
 ): Promise<TextureRecord> {
   assertItemId(itemId)
   if ((width !== 16 && width !== 32) || width !== height) {
@@ -50,7 +55,7 @@ export async function saveItemTexture(
       action: 'Use a size preset in the texture editor.'
     })
   }
-  const relativePath = texturePngPath(itemId)
+  const relativePath = texturePngPath(itemId, layer)
   if (!isTrustedOutputPath(relativePath)) {
     throw new AppError({
       code: 'PATH_ESCAPE',
@@ -62,18 +67,19 @@ export async function saveItemTexture(
   const target = resolveProjectFile(projectsRoot, projectDirName, relativePath)
   await mkdir(path.dirname(target), { recursive: true })
   await writeFile(target, png)
-  return { itemId, relativePath, width, height, pixels: Array.from(pixels) }
+  return { itemId, layer, relativePath, width, height, pixels: Array.from(pixels) }
 }
 
 export async function savePixelSpec(
   projectsRoot: string,
   projectDirName: string,
   itemId: string,
-  spec: unknown
+  spec: unknown,
+  layer: TextureLayer = 'layer0'
 ): Promise<PixelSpec> {
   assertItemId(itemId)
   const parsed = parsePixelSpec(spec)
-  const relativePath = texturePixelSpecPath(itemId)
+  const relativePath = texturePixelSpecPath(itemId, layer)
   if (!isTrustedOutputPath(relativePath)) {
     throw new AppError({
       code: 'PATH_ESCAPE',
@@ -90,16 +96,18 @@ export async function savePixelSpec(
 export async function loadItemTexture(
   projectsRoot: string,
   projectDirName: string,
-  itemId: string
+  itemId: string,
+  layer: TextureLayer = 'layer0'
 ): Promise<TextureRecord | null> {
   assertItemId(itemId)
-  const relativePath = texturePngPath(itemId)
+  const relativePath = texturePngPath(itemId, layer)
   const target = resolveProjectFile(projectsRoot, projectDirName, relativePath)
   try {
     const png = await readFile(target)
     const decoded = decodePng(png)
     return {
       itemId,
+      layer,
       relativePath,
       width: decoded.width,
       height: decoded.height,
@@ -121,15 +129,18 @@ export async function loadProjectTextures(
   const textures: Record<string, Buffer> = {}
   for (const itemId of itemIds) {
     assertItemId(itemId)
-    const relativePath = texturePngPath(itemId)
-    if (!isTrustedOutputPath(relativePath)) {
-      continue
-    }
-    try {
-      textures[itemId] = await readFile(resolveProjectFile(projectsRoot, projectDirName, relativePath))
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error
+    for (const layer of ['layer0', 'layer1'] as const) {
+      const relativePath = texturePngPath(itemId, layer)
+      if (!isTrustedOutputPath(relativePath)) {
+        continue
+      }
+      try {
+        const key = layer === 'layer1' ? `${itemId}_layer1` : itemId
+        textures[key] = await readFile(resolveProjectFile(projectsRoot, projectDirName, relativePath))
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error
+        }
       }
     }
   }

@@ -91,8 +91,8 @@ export function ExportView({ project }: { project: ProjectRecord }) {
         ) : packSupported ? (
           <p className="text-sm">
             Exports <code>pack.mcmeta</code>, <code>pack.png</code>, and item textures/models (generated or handheld,
-            optional layer1) under <code>assets/&lt;modid&gt;/</code>. Re-apply the spec after painting so the mod jar
-            also embeds the same PNGs.
+            optional layer1 painted in Assets) under <code>assets/&lt;modid&gt;/</code>. Re-apply the spec after painting
+            so the mod jar also embeds the same PNGs.
           </p>
         ) : (
           <p className="text-sm">Resource-pack export is not implemented for this adapter.</p>

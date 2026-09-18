@@ -47,7 +47,7 @@ export function AppShell({
       <aside className="flex w-56 shrink-0 flex-col bg-sidebar text-sidebar-text">
         <div className="border-b border-white/15 px-4 py-5">
           <p className="text-lg font-semibold tracking-tight">CraftStudio Local</p>
-          <p className="mt-1 text-sm text-sidebar-muted">Phase 5 · Forge · mobs · GUIs</p>
+          <p className="mt-1 text-sm text-sidebar-muted">Phase 6 · menus · layer1 · diagnostics</p>
         </div>
         <nav aria-label="Primary" className="flex flex-col gap-1 p-3" onKeyDown={onSidebarKeyDown}>
           {PRIMARY_ITEMS.map((item) => {

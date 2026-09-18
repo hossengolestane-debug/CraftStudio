@@ -9,7 +9,7 @@ export function defaultMob(id = 'custom_mob'): SpecMob {
     attackDamage: 3,
     preset: 'passive_wanderer',
     targeting: 'none',
-    spawnStub: 'No custom biome spawn table in Phase 5 — summon/command only.',
+    spawnStub: 'No custom biome spawn table in Phase 6 — summon/command only.',
     drops: [],
     appearance: { model: 'humanoid', vanillaBase: 'minecraft:zombie' }
   }

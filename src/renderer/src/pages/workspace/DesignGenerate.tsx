@@ -227,7 +227,7 @@ export function DesignGenerate({
         <h2 className="text-lg font-semibold">Generate specification</h2>
         {!codegenReady ? (
           <p>
-            Phase 5 codegen is Fabric 1.21.x, Paper 1.21.x, NeoForge 1.21.1/1.21.4/1.21.8, Forge 1.21.1, and Spigot
+            Phase 6 codegen is Fabric 1.21.x, Paper 1.21.x, NeoForge 1.21.1/1.21.4/1.21.8, Forge 1.21.1, and Spigot
             1.21/1.21.1/1.21.4. This {project.manifest.platform} {project.manifest.minecraftVersion} project cannot emit
             Gradle files. The adapter will not pretend otherwise.
             {project.manifest.platform === 'spigot' ? ' Spigot is not inferred from Paper success.' : ''}
@@ -337,7 +337,11 @@ export function DesignGenerate({
           {project.manifest.type === 'mod' ? (
             <ModGuiEditor
               spec={workingSpec}
-              fabricEmission={project.manifest.platform === 'fabric'}
+              menuEmission={
+                project.manifest.platform === 'fabric' ||
+                project.manifest.platform === 'forge' ||
+                project.manifest.platform === 'neoforge'
+              }
               onChange={applyWorking}
             />
           ) : (

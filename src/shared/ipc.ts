@@ -1,3 +1,4 @@
+import type { BuildDiagnostic } from './buildDiagnostics'
 import type { RuntimeEvidenceRecord, VerifiedWhat } from './evidence'
 import type { MigrationAssessment } from './migration'
 import type { AppErrorPayload } from './errors'
@@ -42,6 +43,7 @@ export const IPC_CHANNELS = {
   JAVA_CHECK: 'java:check',
   BUILD_RUN: 'build:run',
   BUILD_CANCEL: 'build:cancel',
+  BUILD_REPAIR: 'build:repair',
   EXPORT_SOURCE: 'export:source',
   EXPORT_JAR: 'export:jar',
   EXPORT_PACK: 'export:pack',
@@ -151,6 +153,15 @@ export interface BuildResultDto {
   logs: string
   message: string
   compileOnly?: boolean
+  diagnostics?: BuildDiagnostic[]
+}
+
+export interface RepairResultDto {
+  attempted: boolean
+  applied: string[]
+  remaining: string[]
+  filesChanged: string[]
+  message: string
 }
 
 export interface ExportResultDto {
@@ -160,8 +171,11 @@ export interface ExportResultDto {
   message: string
 }
 
+export type TextureLayer = 'layer0' | 'layer1'
+
 export interface TextureDto {
   itemId: string
+  layer?: TextureLayer
   relativePath: string
   width: number
   height: number
@@ -175,6 +189,7 @@ export interface SaveTextureInput {
   height: number
   pixels: number[]
   pixelSpec?: PixelSpec
+  layer?: TextureLayer
 }
 
 export interface PaletteSuggestionDto {
@@ -239,10 +254,11 @@ export interface CraftStudioAPI {
   checkJava: (projectId: string) => Promise<JavaStatusDto>
   runBuild: (projectId: string, task?: 'build' | 'runClient') => Promise<BuildResultDto>
   cancelBuild: () => Promise<void>
+  repairBuild: (projectId: string) => Promise<RepairResultDto>
   exportSourceZip: (projectId: string) => Promise<ExportResultDto>
   exportBuiltJar: (projectId: string) => Promise<ExportResultDto>
   exportResourcePack: (projectId: string) => Promise<ExportResultDto>
-  getTexture: (projectId: string, itemId: string) => Promise<TextureDto | null>
+  getTexture: (projectId: string, itemId: string, layer?: TextureLayer) => Promise<TextureDto | null>
   saveTexture: (input: SaveTextureInput) => Promise<TextureDto>
   suggestTexturePalette: (projectId: string, prompt?: string) => Promise<PaletteSuggestionDto>
   listEvidence: () => Promise<RuntimeEvidenceRecord[]>

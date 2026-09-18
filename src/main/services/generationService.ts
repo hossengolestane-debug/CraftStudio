@@ -54,7 +54,7 @@ Rules:
 - items: 1-8 simple custom items (id lowercase [a-z0-9_])
 - recipes: shapeless only; vanilla ingredients must be minecraft: ids from a small allowlist (stick, cobblestone, stone, dirt, iron_ingot, ...)
 - commands: names only; they will not be implemented
-- mobs: optional; only presets passive_wanderer | hostile_melee | neutral_flee
+- mobs: optional; only presets passive_wanderer | hostile_melee | neutral_flee | avoid_players | stationary_lookout
 - modGuis / pluginGuis: optional simple layouts (labels, buttons, slots)
 - Put blocks, worldgen, full behavior trees in unsupportedRequests
 - Never include file paths, shell commands, Gradle, or Java source

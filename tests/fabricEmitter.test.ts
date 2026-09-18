@@ -135,10 +135,39 @@ describe('Fabric adapter generation', () => {
     expect(java).toContain('FeatureFlags.VANILLA_FEATURES')
     expect(files.some((file) => file.relativePath.endsWith('StoneMiteEntity.java'))).toBe(true)
     expect(files.some((file) => file.relativePath.endsWith('ExampleScreen.java'))).toBe(true)
-    expect(files.some((file) => file.relativePath.endsWith('EntityRenderer.java'))).toBe(false)
+    expect(files.some((file) => file.relativePath.endsWith('StoneMiteEntityRenderer.java'))).toBe(true)
+    expect(files.some((file) => file.relativePath.endsWith('CraftStudioMobModel.java'))).toBe(true)
     expect(files.some((file) => file.relativePath === 'ENTITY_RENDERING.md')).toBe(true)
+    const renderer = files.find((file) => file.relativePath.endsWith('StoneMiteEntityRenderer.java'))?.contents.toString() ?? ''
+    expect(renderer).toContain('CraftStudioMobModel')
+    expect(renderer).not.toContain('ZombieEntityModel')
     expect(files.some((file) => file.relativePath.endsWith('RiverStonesClient.java'))).toBe(true)
     const modJson = files.find((file) => file.relativePath === 'src/main/resources/fabric.mod.json')?.contents.toString() ?? ''
     expect(modJson).toContain('RiverStonesClient')
+  })
+
+  it('emits a render-state stub and client warning on 1.21.4', () => {
+    const withMob = parseProjectSpec({
+      ...spec,
+      mobs: [
+        {
+          id: 'stone_mite',
+          displayName: 'Stone Mite',
+          health: 12,
+          preset: 'avoid_players',
+          targeting: 'none',
+          appearance: { model: 'humanoid', vanillaBase: 'minecraft:zombie' }
+        }
+      ]
+    })
+    const files = planFabricFiles(manifestFor('1.21.4'), withMob)
+    const renderer = files.find((file) => file.relativePath.endsWith('StoneMiteEntityRenderer.java'))?.contents.toString() ?? ''
+    expect(renderer).toContain('EntityRenderState')
+    expect(renderer).toContain('createRenderState')
+    expect(files.some((file) => file.relativePath.endsWith('CraftStudioMobModel.java'))).toBe(false)
+    const client = files.find((file) => file.relativePath.endsWith('RiverStonesClient.java'))?.contents.toString() ?? ''
+    expect(client).toContain('invisible')
+    const entity = files.find((file) => file.relativePath.endsWith('StoneMiteEntity.java'))?.contents.toString() ?? ''
+    expect(entity).toContain('FleeEntityGoal')
   })
 })

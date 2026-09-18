@@ -23,6 +23,8 @@ export interface PaperVersionPins {
   itemModel: 'predicate' | 'range_dispatch'
 }
 
+export type NeoForgeEntityTypeBuild = 'legacy_string' | 'resource_key'
+
 export interface NeoForgeVersionPins {
   minecraft: string
   neoVersion: string
@@ -32,6 +34,7 @@ export interface NeoForgeVersionPins {
   gradle: string
   java: number
   entityRegistration: boolean
+  entityTypeBuild: NeoForgeEntityTypeBuild
 }
 
 export interface ForgeVersionPins {
@@ -160,7 +163,8 @@ export const NEOFORGE_PINS: Record<string, NeoForgeVersionPins> = {
     moddev: '2.0.147',
     gradle: '8.11.1',
     java: 21,
-    entityRegistration: true
+    entityRegistration: true,
+    entityTypeBuild: 'legacy_string'
   },
   '1.21.4': {
     minecraft: '1.21.4',
@@ -170,7 +174,8 @@ export const NEOFORGE_PINS: Record<string, NeoForgeVersionPins> = {
     moddev: '2.0.147',
     gradle: '8.11.1',
     java: 21,
-    entityRegistration: false
+    entityRegistration: true,
+    entityTypeBuild: 'resource_key'
   },
   '1.21.8': {
     minecraft: '1.21.8',
@@ -180,7 +185,8 @@ export const NEOFORGE_PINS: Record<string, NeoForgeVersionPins> = {
     moddev: '2.0.147',
     gradle: '8.11.1',
     java: 21,
-    entityRegistration: false
+    entityRegistration: true,
+    entityTypeBuild: 'resource_key'
   }
 }
 

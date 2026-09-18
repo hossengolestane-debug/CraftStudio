@@ -1,6 +1,8 @@
 import type { FabricItemRegistration } from '../../../shared/platformPins'
-import type { ProjectSpec, SpecMob } from '../../../shared/spec'
+import { encodePngRgba } from '../../../shared/png'
+import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
+import { isHostilePreset, yarnGoalBlock, yarnParent } from '../mobs/presets'
 import type { PlannedFile } from '../types'
 import { javaEscape } from '../wrapper'
 
@@ -11,14 +13,19 @@ export function entityClassName(id: string): string {
     .join('') + 'Entity'
 }
 
-function parentFor(mob: SpecMob): { extend: string; importName: string } {
-  if (mob.preset === 'hostile_melee') {
-    return { extend: 'HostileEntity', importName: 'net.minecraft.entity.mob.HostileEntity' }
+export function placeholderEntityPng(): Buffer {
+  const width = 64
+  const height = 32
+  const pixels = new Uint8Array(width * height * 4)
+  for (let i = 0; i < width * height; i++) {
+    const x = i % width
+    const y = Math.floor(i / width)
+    pixels[i * 4] = 70 + (x % 8)
+    pixels[i * 4 + 1] = 90 + (y % 6)
+    pixels[i * 4 + 2] = 60
+    pixels[i * 4 + 3] = 255
   }
-  if (mob.preset === 'neutral_flee') {
-    return { extend: 'PathAwareEntity', importName: 'net.minecraft.entity.mob.PathAwareEntity' }
-  }
-  return { extend: 'PassiveEntity', importName: 'net.minecraft.entity.passive.PassiveEntity' }
+  return encodePngRgba(width, height, pixels)
 }
 
 export function planFabricMobFiles(
@@ -28,7 +35,7 @@ export function planFabricMobFiles(
 ): PlannedFile[] {
   return spec.mobs.map((mob) => {
     const cls = entityClassName(mob.id)
-    const parent = parentFor(mob)
+    const parent = yarnParent(mob)
     return {
       relativePath: `src/main/java/${packagePath}/${cls}.java`,
       encoding: 'utf8' as const,
@@ -36,6 +43,8 @@ export function planFabricMobFiles(
 
 import ${parent.importName};
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.ai.goal.ActiveTargetGoal;
+import net.minecraft.entity.ai.goal.FleeEntityGoal;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.entity.ai.goal.RevengeGoal;
@@ -43,6 +52,7 @@ import net.minecraft.entity.ai.goal.SwimGoal;
 import net.minecraft.entity.ai.goal.WanderAroundFarGoal;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -63,14 +73,7 @@ public class ${cls} extends ${parent.extend} {
   @Override
   protected void initGoals() {
     this.goalSelector.add(0, new SwimGoal(this));
-    ${
-      mob.preset === 'hostile_melee'
-        ? `this.goalSelector.add(1, new MeleeAttackGoal(this, 1.1, true));
-    this.targetSelector.add(1, new RevengeGoal(this));
-    this.targetSelector.add(2, new net.minecraft.entity.ai.goal.ActiveTargetGoal<>(this, PlayerEntity.class, true));`
-        : 'this.goalSelector.add(1, new WanderAroundFarGoal(this, 1.0));'
-    }
-    this.goalSelector.add(2, new LookAtEntityGoal(this, PlayerEntity.class, 8.0f));
+${yarnGoalBlock(mob)}    this.goalSelector.add(3, new LookAtEntityGoal(this, PlayerEntity.class, 8.0f));
   }
 
   ${
@@ -92,7 +95,7 @@ export function fabricEntityFields(spec: ProjectSpec, style: FabricItemRegistrat
     .map((mob) => {
       const cls = entityClassName(mob.id)
       const constant = toConstName(mob.id)
-      const group = mob.preset === 'hostile_melee' ? 'SpawnGroup.MONSTER' : 'SpawnGroup.CREATURE'
+      const group = isHostilePreset(mob.preset) ? 'SpawnGroup.MONSTER' : 'SpawnGroup.CREATURE'
       const size = mob.appearance.model === 'quadruped' ? '0.9f, 0.9f' : '0.6f, 1.95f'
       if (style === 'registry_key') {
         return `  public static final RegistryKey<EntityType<?>> ${constant}_KEY = RegistryKey.of(
@@ -229,14 +232,14 @@ export function planFabricClientFiles(
   packagePath: string,
   classic: boolean
 ): PlannedFile[] {
-  if (spec.modGuis.length === 0) {
+  if (spec.modGuis.length === 0 && spec.mobs.length === 0) {
     return []
   }
   return [
     {
       relativePath: `src/main/java/${packagePath}/${spec.mainClass}Client.java`,
       encoding: 'utf8',
-      contents: fabricClientJava(spec, true, classic)
+      contents: fabricClientJava(spec, spec.modGuis.length > 0, classic)
     }
   ]
 }
@@ -247,9 +250,25 @@ function fabricClientJava(spec: ProjectSpec, registerScreen: boolean, classic: b
   if (registerScreen) {
     imports.push('import net.minecraft.client.gui.screen.ingame.HandledScreens;')
   }
-  if (rendererLines) {
+  if (spec.mobs.length > 0) {
     imports.push('import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;')
+    if (classic) {
+      imports.push('import net.fabricmc.fabric.api.client.rendering.v1.EntityModelLayerRegistry;')
+    } else {
+      imports.push('import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;')
+      imports.push('import net.minecraft.text.Text;')
+    }
   }
+  const layerLine = classic && spec.mobs.length > 0
+    ? `    EntityModelLayerRegistry.registerModelLayer(CraftStudioMobModel.LAYER, CraftStudioMobModel::getTexturedModelData);`
+    : ''
+  const warning = !classic && spec.mobs.length > 0
+    ? `    ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> client.execute(() -> {
+      if (client.player != null) {
+        client.player.sendMessage(Text.literal("[CraftStudio] Custom entities are registered but invisible on this Fabric pin until a render-state model exists."), false);
+      }
+    }));`
+    : ''
   return `package ${spec.packageName};
 
 ${imports.join('\n')}
@@ -258,7 +277,9 @@ public class ${spec.mainClass}Client implements ClientModInitializer {
   @Override
   public void onInitializeClient() {
     ${registerScreen ? `HandledScreens.register(${spec.mainClass}.EXAMPLE_MENU, ExampleScreen::new);` : ''}
+${layerLine}
 ${rendererLines}
+${warning}
   }
 }
 `
@@ -288,15 +309,129 @@ export function fabricMenuField(spec: ProjectSpec, style: FabricItemRegistration
 }
 
 export function planFabricEntityRenderers(
-  _spec: ProjectSpec,
-  _packagePath: string,
-  _classic: boolean
+  spec: ProjectSpec,
+  packagePath: string,
+  classic: boolean
 ): PlannedFile[] {
-  // Vanilla model classes are typed to vanilla entities (e.g. ZombieEntityModel<T extends ZombieEntity>).
-  // Emitting those for a custom type fails compile. Registration + attributes still ship.
-  return []
+  if (spec.mobs.length === 0) {
+    return []
+  }
+  const files: PlannedFile[] = []
+  if (classic) {
+    files.push({
+      relativePath: `src/main/java/${packagePath}/CraftStudioMobModel.java`,
+      encoding: 'utf8',
+      contents: `package ${spec.packageName};
+
+import net.minecraft.client.model.ModelData;
+import net.minecraft.client.model.ModelPart;
+import net.minecraft.client.model.ModelPartBuilder;
+import net.minecraft.client.model.ModelTransform;
+import net.minecraft.client.model.TexturedModelData;
+import net.minecraft.client.render.VertexConsumer;
+import net.minecraft.client.render.entity.model.EntityModel;
+import net.minecraft.client.render.entity.model.EntityModelLayer;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.Identifier;
+
+/**
+ * Dedicated cube model. Vanilla model classes are typed to vanilla entities and will not compile here.
+ * This is not a Minecraft-verified custom model.
+ */
+public class CraftStudioMobModel<T extends LivingEntity> extends EntityModel<T> {
+  public static final EntityModelLayer LAYER = new EntityModelLayer(Identifier.of(${spec.mainClass}.MOD_ID, "preset_mob"), "main");
+  private final ModelPart root;
+
+  public CraftStudioMobModel(ModelPart root) {
+    this.root = root;
+  }
+
+  public static TexturedModelData getTexturedModelData() {
+    ModelData data = new ModelData();
+    var root = data.getRoot();
+    root.addChild("body", ModelPartBuilder.create().uv(0, 0).cuboid(-3.0F, 10.0F, -2.0F, 6.0F, 8.0F, 4.0F), ModelTransform.NONE);
+    root.addChild("head", ModelPartBuilder.create().uv(16, 0).cuboid(-3.0F, 4.0F, -3.0F, 6.0F, 6.0F, 6.0F), ModelTransform.NONE);
+    return TexturedModelData.of(data, 64, 32);
+  }
+
+  @Override
+  public void setAngles(T entity, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
+  }
+
+  @Override
+  public void render(MatrixStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
+    this.root.render(matrices, vertices, light, overlay, color);
+  }
+}
+`
+    })
+  }
+  for (const mob of spec.mobs) {
+    const cls = entityClassName(mob.id)
+    const renderer = `${cls}Renderer`
+    if (classic) {
+      files.push({
+        relativePath: `src/main/java/${packagePath}/${renderer}.java`,
+        encoding: 'utf8',
+        contents: `package ${spec.packageName};
+
+import net.minecraft.client.render.entity.EntityRendererFactory;
+import net.minecraft.client.render.entity.MobEntityRenderer;
+import net.minecraft.util.Identifier;
+
+public class ${renderer} extends MobEntityRenderer<${cls}, CraftStudioMobModel<${cls}>> {
+  private static final Identifier TEXTURE = Identifier.of(${spec.mainClass}.MOD_ID, "textures/entity/preset_mob.png");
+
+  public ${renderer}(EntityRendererFactory.Context context) {
+    super(context, new CraftStudioMobModel<>(context.getPart(CraftStudioMobModel.LAYER)), 0.5f);
+  }
+
+  @Override
+  public Identifier getTexture(${cls} entity) {
+    return TEXTURE;
+  }
+}
+`
+      })
+    } else {
+      files.push({
+        relativePath: `src/main/java/${packagePath}/${renderer}.java`,
+        encoding: 'utf8',
+        contents: `package ${spec.packageName};
+
+import net.minecraft.client.render.entity.EntityRenderer;
+import net.minecraft.client.render.entity.EntityRendererFactory;
+import net.minecraft.client.render.entity.state.EntityRenderState;
+
+/**
+ * Compiling 1.21.2+ render-state stub. No model is drawn — entities stay invisible until a later model exists.
+ */
+public class ${renderer} extends EntityRenderer<${cls}, EntityRenderState> {
+  public ${renderer}(EntityRendererFactory.Context context) {
+    super(context);
+  }
+
+  @Override
+  public EntityRenderState createRenderState() {
+    return new EntityRenderState();
+  }
+}
+`
+      })
+    }
+  }
+  return files
 }
 
-export function fabricClientRendererLines(_spec: ProjectSpec, _classic: boolean): string {
-  return ''
+export function fabricClientRendererLines(spec: ProjectSpec, _classic: boolean): string {
+  if (spec.mobs.length === 0) {
+    return ''
+  }
+  return spec.mobs
+    .map(
+      (mob) =>
+        `    EntityRendererRegistry.register(${spec.mainClass}.${toConstName(mob.id)}, ${entityClassName(mob.id)}Renderer::new);`
+    )
+    .join('\n')
 }

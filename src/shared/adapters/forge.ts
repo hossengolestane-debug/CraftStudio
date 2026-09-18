@@ -20,14 +20,14 @@ export const ForgeAdapter: PlatformAdapter = {
   javaRequirements: {
     minVersion: 17,
     recommendedVersion: 21,
-    notes: 'Java 17 for 1.18–1.20.4; Java 21 for 1.21+. Phase 5 emits ForgeGradle only for 1.21.1. NeoForge is a separate adapter.'
+    notes: 'Java 17 for 1.18–1.20.4; Java 21 for 1.21+. Phase 6 emits ForgeGradle only for 1.21.1 (items, preset mobs, container menu). NeoForge is a separate adapter.'
   },
   templates: [
     {
       id: 'forge-item-gradle',
       displayName: 'Forge Gradle + custom item',
       description:
-        'Trusted ForgeGradle 6 templates for Minecraft 1.21.1 (Forge 52.1.16, official mappings). Not inferred from NeoForge. Entity registration is included when the spec has preset mobs.',
+        'Trusted ForgeGradle 6 templates for Minecraft 1.21.1 (Forge 52.1.16, official mappings). Not inferred from NeoForge. Preset entities and a container/menu pair are included when the spec has those fields.',
       status: 'available'
     }
   ],

@@ -87,7 +87,11 @@ describe('resource pack path safety', () => {
         }
       ]
     })
-    const files = planStandaloneResourcePack(manifest('forge', '1.21.1'), styled, { harbor_token: texturePng() })
+    const overlay = texturePng()
+    const files = planStandaloneResourcePack(manifest('forge', '1.21.1'), styled, {
+      harbor_token: texturePng(),
+      harbor_token_layer1: overlay
+    })
     const model = JSON.parse(
       files.find((file) => file.relativePath.endsWith('harbor_token.json'))!.contents.toString()
     )

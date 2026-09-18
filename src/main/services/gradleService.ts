@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { chmod } from 'node:fs/promises'
 import path from 'node:path'
+import { diagnoseBuildLogs, type BuildDiagnostic } from '../../shared/buildDiagnostics'
 import { AppError } from '../../shared/errors'
 import { assertInsideRoot } from './pathSafety'
 
@@ -21,6 +22,7 @@ export interface BuildResult {
   logs: string
   message: string
   compileOnly: boolean
+  diagnostics: BuildDiagnostic[]
 }
 
 const TRUSTED_TASKS: Record<GradleTaskId, readonly string[]> = {
@@ -111,6 +113,7 @@ export class GradleService {
           task,
           logs: chunks.join(''),
           compileOnly: task === 'build',
+          diagnostics: diagnoseBuildLogs(chunks.join(''), true),
           message: `Gradle ${task} timed out after ${timeoutMs}ms. This is not treated as success.`
         })
       }, timeoutMs)
@@ -134,6 +137,7 @@ export class GradleService {
           task,
           logs: chunks.join(''),
           compileOnly: task === 'build',
+          diagnostics: diagnoseBuildLogs(`${chunks.join('')}\n${error.message}`, false),
           message: `Could not start Gradle: ${error.message}`
         })
       })
@@ -149,6 +153,7 @@ export class GradleService {
             task,
             logs: chunks.join(''),
             compileOnly: task === 'build',
+            diagnostics: diagnoseBuildLogs(chunks.join(''), true),
             message: `Gradle ${task} was cancelled.`
           })
           return
@@ -163,6 +168,7 @@ export class GradleService {
           task,
           logs: chunks.join(''),
           compileOnly: task === 'build',
+          diagnostics: diagnoseBuildLogs(chunks.join(''), true),
           message: ok
             ? task === 'build'
               ? 'Gradle build succeeded (compile). Compatibility is still Experimental until a real Minecraft runtime is verified.'

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { RuntimeEvidenceRecord } from '../../../../shared/evidence'
 import type { AppErrorPayload } from '../../../../shared/errors'
-import type { BuildResultDto, JavaStatusDto } from '../../../../shared/ipc'
+import type { BuildResultDto, JavaStatusDto, RepairResultDto } from '../../../../shared/ipc'
 import { isCodegenSupported } from '../../../../shared/platformPins'
 import type { AppSettings, PlatformAdapterInfo, ProjectRecord } from '../../../../shared/types'
 import { ErrorPanel } from '../../components/ErrorPanel'
@@ -34,6 +34,8 @@ export function TestBuildView({
   const [logs, setLogs] = useState('')
   const [error, setError] = useState<AppErrorPayload | null>(null)
   const [busy, setBusy] = useState(false)
+  const [repair, setRepair] = useState<RepairResultDto | null>(null)
+  const [openDiagnostic, setOpenDiagnostic] = useState<string | null>(null)
   const [evidence, setEvidence] = useState<RuntimeEvidenceRecord[]>([])
   const [notes, setNotes] = useState('')
   const [attested, setAttested] = useState(false)
@@ -137,6 +139,47 @@ export function TestBuildView({
             {compile.exitCode !== null ? ` (exit ${compile.exitCode})` : null}
             {compile.compileOnly ? ' · compile-only' : ''}
           </p>
+        ) : null}
+        {(compile?.diagnostics ?? []).length > 0 ? (
+          <div className="space-y-2">
+            <p className="font-medium">Build diagnostics</p>
+            {(compile?.diagnostics ?? []).map((item) => (
+              <div key={item.id} className="border border-line p-2">
+                <p className="text-sm font-medium">{item.title}</p>
+                <p className="text-sm">{item.action}</p>
+                <button
+                  type="button"
+                  className="mt-1 text-sm underline"
+                  onClick={() => setOpenDiagnostic((current) => (current === item.id ? null : item.id))}
+                >
+                  {openDiagnostic === item.id ? 'Hide technical details' : 'Show technical details'}
+                </button>
+                {openDiagnostic === item.id ? <pre className="mt-1 whitespace-pre-wrap text-xs">{item.details}</pre> : null}
+              </div>
+            ))}
+            {(compile?.diagnostics ?? []).some((item) => item.repairId) ? (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true)
+                  void api
+                    .repairBuild(project.manifest.id)
+                    .then(setRepair)
+                    .catch((err) => setError(asAppError(err)))
+                    .finally(() => setBusy(false))
+                }}
+              >
+                Try known template repair
+              </Button>
+            ) : null}
+            {repair ? (
+              <p className="text-sm">
+                {repair.message}
+                {repair.remaining.length > 0 ? ` Remaining: ${repair.remaining.join('; ')}.` : ''}
+              </p>
+            ) : null}
+          </div>
         ) : null}
         <pre className="max-h-80 overflow-auto bg-[#111] p-3 text-xs text-[#f5f5f2]">{logs || compile?.logs || runtime?.logs}</pre>
       </Card>

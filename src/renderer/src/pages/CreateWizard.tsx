@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { AppErrorPayload } from '../../../shared/errors'
+import type { BuildResultDto, ExportResultDto, JavaStatusDto } from '../../../shared/ipc'
+import { isCodegenSupported } from '../../../shared/platformPins'
 import type {
   CompatibilityEntry,
   CompatibilityStatus,
@@ -56,6 +58,9 @@ export function CreateWizard({
   const [created, setCreated] = useState<ProjectRecord | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<AppErrorPayload | null>(null)
+  const [java, setJava] = useState<JavaStatusDto | null>(null)
+  const [build, setBuild] = useState<BuildResultDto | null>(null)
+  const [exported, setExported] = useState<ExportResultDto | null>(null)
 
   const kindAdapters = useMemo(
     () => adapters.filter((adapter) => (kind ? adapter.kind === kind : false)),
@@ -264,27 +269,78 @@ export function CreateWizard({
           ) : (
             <p>Create the project on the previous step first.</p>
           )}
+          <p className="text-sm text-muted">
+            These buttons call the same Java / Gradle / export services as the Test and Export tabs. A brand-new project
+            has no Gradle wrapper until you apply a spec on Design — that failure is real, not mocked.
+          </p>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="border border-line p-4">
               <h3 className="font-semibold">Build & Test</h3>
               <p className="mt-2 text-sm text-muted">
-                After you generate files in Design, the Test tab can run a real `./gradlew build` for supported
-                Fabric, Paper, NeoForge, Forge, and Spigot pins. This wizard step does not start a build and will not
-                fake success.
+                {created && isCodegenSupported(created.manifest.platform, created.manifest.minecraftVersion)
+                  ? `Real ./gradlew build for ${created.manifest.platform} ${created.manifest.minecraftVersion}. Compile success is not Tested.`
+                  : 'This platform/version has no Gradle emitter. The button stays honest and will not fake success.'}
               </p>
-              <Button className="mt-3" disabled>
-                Build from wizard (use Test tab)
-              </Button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={!created || busy}
+                  onClick={() => {
+                    if (!created) return
+                    setBusy(true)
+                    void window.craftstudio
+                      .checkJava(created.manifest.id)
+                      .then(setJava)
+                      .catch((err) => setError(asAppError(err)))
+                      .finally(() => setBusy(false))
+                  }}
+                >
+                  Check Java
+                </Button>
+                <Button
+                  disabled={
+                    !created ||
+                    busy ||
+                    !isCodegenSupported(created.manifest.platform, created.manifest.minecraftVersion)
+                  }
+                  onClick={() => {
+                    if (!created) return
+                    setBusy(true)
+                    void window.craftstudio
+                      .runBuild(created.manifest.id, 'build')
+                      .then(setBuild)
+                      .catch((err) => setError(asAppError(err)))
+                      .finally(() => setBusy(false))
+                  }}
+                >
+                  Run Gradle build
+                </Button>
+              </div>
+              {java ? <p className="mt-2 text-sm">{java.message}</p> : null}
+              {build ? <p className="mt-2 text-sm">{build.message}</p> : null}
             </div>
             <div className="border border-line p-4">
               <h3 className="font-semibold">Export</h3>
               <p className="mt-2 text-sm text-muted">
-                Use the Export tab after generate/apply: source ZIP anytime, JAR after a successful Gradle build, and a
-                resource pack after you paint textures.
+                Source ZIP works as soon as the project folder exists. JAR export needs a real successful Gradle build.
+                Resource packs need painted textures.
               </p>
-              <Button className="mt-3" disabled>
-                Export from wizard (use Export tab)
+              <Button
+                className="mt-3"
+                disabled={!created || busy}
+                onClick={() => {
+                  if (!created) return
+                  setBusy(true)
+                  void window.craftstudio
+                    .exportSourceZip(created.manifest.id)
+                    .then(setExported)
+                    .catch((err) => setError(asAppError(err)))
+                    .finally(() => setBusy(false))
+                }}
+              >
+                Export source ZIP
               </Button>
+              {exported ? <p className="mt-2 text-sm">{exported.message}</p> : null}
             </div>
           </div>
         </Card>

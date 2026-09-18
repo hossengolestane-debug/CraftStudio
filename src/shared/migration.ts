@@ -31,13 +31,15 @@ export function assessVersionChange(
   const fromOk = isCodegenSupported(platform, fromVersion)
   const toOk = isCodegenSupported(platform, toVersion)
   if (!toOk) {
-    incompatible.push(`${platform} has no Phase 5 emitter for Minecraft ${toVersion}.`)
+    incompatible.push(`${platform} has no CraftStudio emitter for Minecraft ${toVersion}.`)
   }
   if (fromOk && !toOk) {
     notes.push('Applying this change would leave the project without a trusted Gradle emitter.')
   }
-  if (platform === 'neoforge' && toVersion !== '1.21.1' && features.customMobs) {
-    notes.push('NeoForge entity registration is emitted for 1.21.1 only. Other 1.21.x mappings keep items/GUIs.')
+  if (platform === 'neoforge' && features.customMobs) {
+    notes.push(
+      'NeoForge emits preset entity registration for 1.21.1, 1.21.4, and 1.21.8. That is not a Forge compatibility claim.'
+    )
   }
   if (platform === 'spigot' && toVersion === '1.21.8') {
     incompatible.push('Spigot 1.21.8 is unsupported in the registry. Paper 1.21.8 is not Spigot.')

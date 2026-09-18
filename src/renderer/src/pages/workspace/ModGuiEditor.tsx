@@ -5,11 +5,11 @@ import { Button, Card, Field, TextInput } from '../../components/ui'
 export function ModGuiEditor({
   spec,
   onChange,
-  fabricEmission
+  menuEmission
 }: {
   spec: ProjectSpec
   onChange: (spec: ProjectSpec) => void
-  fabricEmission: boolean
+  menuEmission: boolean
 }) {
   const update = (index: number, patch: Partial<SpecModGui>): void => {
     const modGuis = spec.modGuis.map((gui, guiIndex) => (guiIndex === index ? { ...gui, ...patch } : gui))
@@ -24,10 +24,13 @@ export function ModGuiEditor({
           Layout preview only — not a Minecraft-verified screen. Generated comments require server-side slot validation
           and do not trust client clicks.
         </p>
-        {fabricEmission ? (
-          <p className="text-sm">Fabric emits a HandledScreen / ScreenHandler pair for the first screen.</p>
+        {menuEmission ? (
+          <p className="text-sm">
+            Fabric, Forge 1.21.1, and NeoForge emit a Screen + Menu/ScreenHandler pair for the first screen. Client
+            clicks are untrusted; the server menu validates slots. This preview is not Minecraft-verified.
+          </p>
         ) : (
-          <p className="text-sm">This adapter stubs GUI Java with a clear message. Fabric is the Phase 5 GUI emitter.</p>
+          <p className="text-sm">This adapter does not emit a container menu. Layouts stay labeled preview.</p>
         )}
       </div>
 

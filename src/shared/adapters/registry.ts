@@ -51,7 +51,7 @@ export function describeCapabilityGap(adapter: PlatformAdapter, feature: keyof P
       return 'Paper emits a real Gradle plugin for 1.21 / 1.21.1 / 1.21.4 / 1.21.8. Spigot is not inferred from that.'
     }
     if (adapter.id === 'neoforge' && feature === 'gradleProject') {
-      return 'NeoForge emits a real ModDevGradle project for 1.21.1 / 1.21.4 / 1.21.8. That is not a Forge compatibility claim. Entity registration is 1.21.1 only.'
+      return 'NeoForge emits a real ModDevGradle project for 1.21.1 / 1.21.4 / 1.21.8, including preset entities and a container menu. That is not a Forge compatibility claim.'
     }
     if (adapter.id === 'forge' && feature === 'gradleProject') {
       return 'Forge emits a real ForgeGradle project for 1.21.1 only. That is not a NeoForge compatibility claim.'

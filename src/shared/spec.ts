@@ -41,7 +41,13 @@ const ident = z
   .trim()
   .regex(/^[a-z][a-z0-9_]{1,30}$/, 'Must be lowercase [a-z0-9_], start with a letter, 2–31 chars')
 
-export const MOB_PRESETS = ['passive_wanderer', 'hostile_melee', 'neutral_flee'] as const
+export const MOB_PRESETS = [
+  'passive_wanderer',
+  'hostile_melee',
+  'neutral_flee',
+  'avoid_players',
+  'stationary_lookout'
+] as const
 export const MOB_MODELS = ['humanoid', 'quadruped', 'vanilla_disguise'] as const
 export const VANILLA_MOB_BASES = ['minecraft:zombie', 'minecraft:pig', 'minecraft:wolf'] as const
 export const ITEM_MODEL_STYLES = ['generated', 'handheld'] as const
@@ -71,7 +77,7 @@ const mobSchema = z.object({
   attackDamage: z.number().min(0).max(40).default(3),
   preset: z.enum(MOB_PRESETS).default('passive_wanderer'),
   targeting: z.enum(['none', 'players', 'hostiles']).default('none'),
-  spawnStub: z.string().trim().max(200).default('No custom biome spawn table in Phase 5 — summon/command only.'),
+  spawnStub: z.string().trim().max(200).default('No custom biome spawn table in Phase 6 — summon/command only.'),
   drops: z.array(mobDropSchema).max(4).default([]),
   appearance: z
     .object({

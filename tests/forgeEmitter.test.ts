@@ -81,6 +81,44 @@ describe('Forge adapter generation', () => {
     expect(model).toContain('minecraft:item/handheld')
   })
 
+  it('emits a container menu pair and extra presets from the designer', () => {
+    const withGui = parseProjectSpec({
+      ...spec,
+      mobs: [
+        {
+          ...spec.mobs[0]!,
+          preset: 'stationary_lookout',
+          targeting: 'players'
+        }
+      ],
+      modGuis: [
+        {
+          id: 'example_screen',
+          title: 'Preview',
+          width: 176,
+          height: 166,
+          widgets: [
+            { id: 'title_label', kind: 'label', x: 8, y: 6, width: 80, height: 12, text: 'Preview', action: 'none' },
+            { id: 'slot_0', kind: 'slot', x: 80, y: 60, width: 18, height: 18, text: '', action: 'none' }
+          ]
+        }
+      ]
+    })
+    const files = planForgeFiles(manifest, withGui)
+    const menu = files.find((file) => file.relativePath.endsWith('ExampleMenu.java'))?.contents.toString() ?? ''
+    expect(menu).toContain('extends AbstractContainerMenu')
+    expect(menu).toContain('mayPlace')
+    expect(menu).toContain('quickMoveStack')
+    expect(menu).toContain('ItemStack.EMPTY')
+    expect(files.some((file) => file.relativePath.endsWith('ExampleScreen.java'))).toBe(true)
+    expect(files.some((file) => file.relativePath.endsWith('ModScreens.java'))).toBe(false)
+    const main = files.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
+    expect(main).toContain('opencustommenu')
+    const entity = files.find((file) => file.relativePath.endsWith('StoneMiteEntity.java'))?.contents.toString() ?? ''
+    expect(entity).toContain('LookAtPlayerGoal')
+    expect(entity).toContain('NearestAttackableTargetGoal')
+  })
+
   it('rejects NeoForge inference and unsupported versions', () => {
     expect(() => planForgeFiles({ ...manifest, platform: 'neoforge' }, spec)).toThrow(/Forge/)
     expect(() => planForgeFiles({ ...manifest, minecraftVersion: '1.21.4' }, spec)).toThrow(/1\.21\.1/)

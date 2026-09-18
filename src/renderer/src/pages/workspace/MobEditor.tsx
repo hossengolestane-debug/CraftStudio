@@ -21,7 +21,8 @@ export function MobEditor({
       <div>
         <h2 className="text-lg font-semibold">Custom mobs</h2>
         <p className="mt-1 text-sm text-muted">
-          Phase 5 emits three movement presets only. Spawn tables stay a stub. Java stays template-authored.
+          Phase 6 emits five movement presets (not a behavior tree). Spawn tables stay a stub. Java stays
+          template-authored.
         </p>
         {pluginLimits ? (
           <p className="mt-2 text-sm">
@@ -31,8 +32,9 @@ export function MobEditor({
           </p>
         ) : (
           <p className="mt-2 text-sm">
-            Mods register a real entity type. Client rendering uses a vanilla texture reference as a preview — not a
-            Minecraft-verified custom model.
+            Mods register a real entity type. Fabric 1.21/1.21.1 emits a custom cube renderer; 1.21.2+ entities stay
+            invisible with a client warning until a render-state model exists. This is not a Minecraft-verified custom
+            model.
           </p>
         )}
       </div>

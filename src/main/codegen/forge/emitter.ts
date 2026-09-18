@@ -4,6 +4,8 @@ import { forgePinsFor } from '../../../shared/platformPins'
 import type { ProjectSpec } from '../../../shared/spec'
 import { toConstName } from '../../../shared/spec'
 import type { ProjectManifest } from '../../../shared/types'
+import { isHostilePreset, mojangGoalBlock, mojangParent } from '../mobs/presets'
+import { forgeLikeCommandMethod, forgeLikeMenuFields, planForgeLikeMenuFiles } from '../modgui/forgeLike'
 import type { PlannedFile } from '../types'
 import { gradleWrapperFiles, javaEscape } from '../wrapper'
 
@@ -31,25 +33,19 @@ function planEntityFiles(spec: ProjectSpec, packagePath: string): PlannedFile[] 
   const files: PlannedFile[] = []
   for (const mob of spec.mobs) {
     const cls = entityClassName(mob.id)
-    const parent =
-      mob.preset === 'hostile_melee' ? 'Monster' : mob.preset === 'neutral_flee' ? 'PathfinderMob' : 'Animal'
-    const parentImport =
-      parent === 'Monster'
-        ? 'net.minecraft.world.entity.monster.Monster'
-        : parent === 'Animal'
-          ? 'net.minecraft.world.entity.animal.Animal'
-          : 'net.minecraft.world.entity.PathfinderMob'
+    const parent = mojangParent(mob)
     files.push({
       relativePath: `src/main/java/${packagePath}/${cls}.java`,
       encoding: 'utf8',
       contents: `package ${spec.packageName};
 
-import ${parentImport};
+import ${parent.importName};
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.AvoidEntityGoal;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
@@ -57,18 +53,19 @@ import net.minecraft.world.entity.ai.goal.PanicGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
-public class ${cls} extends ${parent} {
+public class ${cls} extends ${parent.extend} {
   public ${cls}(EntityType<? extends ${cls}> type, Level level) {
     super(type, level);
   }
 
   public static AttributeSupplier.Builder createAttributes() {
-    return ${parent}.createMobAttributes()
+    return ${parent.extend}.createMobAttributes()
       .add(Attributes.MAX_HEALTH, ${mob.health}d)
       .add(Attributes.MOVEMENT_SPEED, ${mob.movementSpeed}d)
       .add(Attributes.ATTACK_DAMAGE, ${mob.attackDamage}d);
@@ -77,19 +74,12 @@ public class ${cls} extends ${parent} {
   @Override
   protected void registerGoals() {
     this.goalSelector.addGoal(0, new FloatGoal(this));
-    ${
-      mob.preset === 'hostile_melee'
-        ? 'this.goalSelector.addGoal(1, new MeleeAttackGoal(this, 1.1d, true));\n    this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, Player.class, true));'
-        : mob.preset === 'neutral_flee'
-          ? 'this.goalSelector.addGoal(1, new PanicGoal(this, 1.4d));'
-          : 'this.goalSelector.addGoal(1, new WaterAvoidingRandomStrollGoal(this, 1.0d));'
-    }
-    this.goalSelector.addGoal(2, new LookAtPlayerGoal(this, Player.class, 8.0f));
-    this.goalSelector.addGoal(3, new RandomLookAroundGoal(this));
+${mojangGoalBlock(mob)}    this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0f));
+    this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
   }
 
   ${
-    parent === 'Animal'
+    parent.extend === 'Animal'
       ? `@Nullable
   @Override
   public AgeableMob getBreedOffspring(ServerLevel level, AgeableMob other) {
@@ -285,7 +275,7 @@ jar {
     .map((mob) => {
       const cls = entityClassName(mob.id)
       const size = mob.appearance.model === 'quadruped' ? '0.9f, 0.9f' : '0.6f, 1.95f'
-      const category = mob.preset === 'hostile_melee' ? 'MobCategory.MONSTER' : 'MobCategory.CREATURE'
+      const category = isHostilePreset(mob.preset) ? 'MobCategory.MONSTER' : 'MobCategory.CREATURE'
       return `  public static final RegistryObject<EntityType<${cls}>> ${toConstName(mob.id)} = ENTITIES.register("${mob.id}",
     () -> EntityType.Builder.of(${cls}::new, ${category}).sized(${size}).build("${mob.id}"));`
     })
@@ -305,6 +295,10 @@ jar {
 ${spec.mobs.length ? `import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraftforge.event.entity.EntityAttributeCreationEvent;` : ''}
+${spec.modGuis.length ? `import net.minecraft.world.flag.FeatureFlags;
+import net.minecraft.world.inventory.MenuType;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.RegisterCommandsEvent;` : ''}
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
@@ -320,6 +314,7 @@ public class ${spec.mainClass} {
   public static final String MOD_ID = "${javaEscape(spec.modId)}";
   public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MOD_ID);
 ${spec.mobs.length ? `  public static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, MOD_ID);` : ''}
+${spec.modGuis.length ? forgeLikeMenuFields(spec, 'forge') : ''}
 
 ${itemRegs(spec)}
 ${entityRegs}
@@ -328,8 +323,10 @@ ${entityRegs}
     IEventBus bus = context.getModEventBus();
     ITEMS.register(bus);
     ${spec.mobs.length ? 'ENTITIES.register(bus);' : ''}
+    ${spec.modGuis.length ? 'MENUS.register(bus);' : ''}
     bus.addListener(this::addCreative);
     ${spec.mobs.length ? 'bus.addListener(this::registerAttributes);' : ''}
+    ${spec.modGuis.length ? 'MinecraftForge.EVENT_BUS.addListener(this::registerCommands);' : ''}
   }
 
   private void addCreative(BuildCreativeModeTabContentsEvent event) {
@@ -345,6 +342,8 @@ ${attrRegs}
   }`
       : ''
   }
+
+${forgeLikeCommandMethod(spec)}
 }
 `
   })
@@ -357,6 +356,9 @@ ${attrRegs}
   }
   for (const mob of spec.mobs) {
     lang[`entity.${spec.modId}.${mob.id}`] = mob.displayName
+  }
+  for (const gui of spec.modGuis) {
+    lang[`container.${spec.modId}.${gui.id}`] = gui.title
   }
   files.push({
     relativePath: `src/main/resources/assets/${spec.modId}/lang/en_us.json`,
@@ -374,23 +376,7 @@ ${attrRegs}
     })
   }
 
-  if (spec.modGuis.length > 0) {
-    files.push({
-      relativePath: `src/main/java/${packagePath}/ModScreens.java`,
-      encoding: 'utf8',
-      contents: `package ${spec.packageName};
-
-/**
- * Forge GUI preview stub.
- * Client/server container sync and server-side slot validation are not generated in Phase 5.
- * This file exists so the spec field is visible in the tree. Layouts stay preview-only until a client run is evidenced.
- */
-public final class ModScreens {
-  private ModScreens() {}
-}
-`
-    })
-  }
+  files.push(...planForgeLikeMenuFiles(spec, packagePath, 'forge'))
 
   files.push({
     relativePath: 'INSTALL.md',
@@ -404,7 +390,13 @@ public final class ModScreens {
       '',
       '1. Install Minecraft ' + pins.minecraft + ' and the official Forge installer.',
       '2. Build with `./gradlew build`, then copy `build/libs/' + spec.modId + '-1.0.0.jar` into `.minecraft/mods`.',
-      '3. Accept the Minecraft EULA yourself. CraftStudio never distributes game files.',
+      '3. Optional: export a resource pack (pack.png + layer1 when painted) from the app.',
+      spec.modGuis.length > 0
+        ? '4. In-game, run `/opencustommenu` to open the preview container. Client clicks are untrusted; ExampleMenu validates slots.'
+        : '4. Accept the Minecraft EULA yourself. CraftStudio never distributes game files.',
+      spec.modGuis.length > 0
+        ? '5. Accept the Minecraft EULA yourself. CraftStudio never distributes game files.'
+        : '',
       '',
       'Compile success is not a Tested compatibility row.',
       ''

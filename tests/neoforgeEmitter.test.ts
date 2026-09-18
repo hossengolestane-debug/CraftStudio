@@ -97,7 +97,7 @@ describe('NeoForge adapter generation', () => {
     )
   })
 
-  it('emits entities on 1.21.1 only and writes MOBS.md on later pins', () => {
+  it('emits entities on 1.21.1 / 1.21.4 / 1.21.8 with version-specific EntityType.build', () => {
     const withMob = parseProjectSpec({
       ...spec,
       mobs: [
@@ -105,16 +105,34 @@ describe('NeoForge adapter generation', () => {
           id: 'stone_mite',
           displayName: 'Stone Mite',
           health: 10,
-          preset: 'passive_wanderer',
+          preset: 'avoid_players',
           targeting: 'none',
           appearance: { model: 'humanoid', vanillaBase: 'minecraft:zombie' }
+        }
+      ],
+      modGuis: [
+        {
+          id: 'example_screen',
+          title: 'Preview',
+          width: 176,
+          height: 166,
+          widgets: [{ id: 'title_label', kind: 'label', x: 8, y: 6, width: 80, height: 12, text: 'Preview', action: 'none' }]
         }
       ]
     })
     const v211 = planNeoForgeFiles(manifest, withMob)
     expect(v211.some((file) => file.relativePath.endsWith('StoneMiteEntity.java'))).toBe(true)
+    expect(v211.some((file) => file.relativePath.endsWith('ExampleMenu.java'))).toBe(true)
+    expect(v211.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString()).toContain(
+      'build("stone_mite")'
+    )
     const v214 = planNeoForgeFiles({ ...manifest, minecraftVersion: '1.21.4' }, withMob)
-    expect(v214.some((file) => file.relativePath.endsWith('StoneMiteEntity.java'))).toBe(false)
-    expect(v214.some((file) => file.relativePath === 'MOBS.md')).toBe(true)
+    expect(v214.some((file) => file.relativePath.endsWith('StoneMiteEntity.java'))).toBe(true)
+    expect(v214.some((file) => file.relativePath === 'MOBS.md')).toBe(false)
+    const java214 = v214.find((file) => file.relativePath.endsWith('RiverStones.java'))?.contents.toString() ?? ''
+    expect(java214).toContain('ResourceKey.create')
+    expect(v214.some((file) => file.relativePath.endsWith('ExampleMenu.java'))).toBe(true)
+    const v218 = planNeoForgeFiles({ ...manifest, minecraftVersion: '1.21.8' }, withMob)
+    expect(v218.some((file) => file.relativePath.endsWith('StoneMiteEntity.java'))).toBe(true)
   })
 })

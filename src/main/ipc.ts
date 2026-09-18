@@ -27,6 +27,7 @@ import { OllamaService } from './services/ollamaService'
 import { listProjectTree, readProjectFile, writeProjectFile } from './services/projectFiles'
 import { ProjectService } from './services/projectService'
 import { SettingsService } from './services/settingsService'
+import { applyKnownTemplateRepairs } from './services/repairService'
 import { loadItemTexture, loadProjectTextures, saveItemTexture, savePixelSpec } from './services/textureService'
 
 function wrap<T>(run: () => Promise<T> | T): Promise<IpcResult<T>> {
@@ -254,6 +255,19 @@ export function registerIpc(deps: {
       deps.gradle.cancel()
     })
   )
+  ipcMain.handle(IPC_CHANNELS.BUILD_REPAIR, (_event, projectId: string) =>
+    wrap(async () => {
+      const record = await deps.projects.get(projectId)
+      const settings = await deps.settings.get()
+      const last = deps.gradle.lastResult(record.directoryPath)
+      return applyKnownTemplateRepairs(
+        settings.projectsPath,
+        record.directoryName,
+        last?.logs ?? '',
+        last?.started ?? false
+      )
+    })
+  )
 
   ipcMain.handle(IPC_CHANNELS.FILES_WRITE, async (_event, projectId: string, relativePath: string, contents: string) =>
     wrap(async () => {
@@ -263,11 +277,11 @@ export function registerIpc(deps: {
     })
   )
 
-  ipcMain.handle(IPC_CHANNELS.TEXTURE_GET, async (_event, projectId: string, itemId: string) =>
+  ipcMain.handle(IPC_CHANNELS.TEXTURE_GET, async (_event, projectId: string, itemId: string, layer?: 'layer0' | 'layer1') =>
     wrap(async () => {
       const record = await deps.projects.get(projectId)
       const settings = await deps.settings.get()
-      return loadItemTexture(settings.projectsPath, record.directoryName, itemId)
+      return loadItemTexture(settings.projectsPath, record.directoryName, itemId, layer ?? 'layer0')
     })
   )
 
@@ -281,10 +295,17 @@ export function registerIpc(deps: {
         input.itemId,
         input.width,
         input.height,
-        Uint8Array.from(input.pixels)
+        Uint8Array.from(input.pixels),
+        input.layer ?? 'layer0'
       )
       if (input.pixelSpec) {
-        await savePixelSpec(settings.projectsPath, record.directoryName, input.itemId, input.pixelSpec)
+        await savePixelSpec(
+          settings.projectsPath,
+          record.directoryName,
+          input.itemId,
+          input.pixelSpec,
+          input.layer ?? 'layer0'
+        )
       }
       return saved
     })

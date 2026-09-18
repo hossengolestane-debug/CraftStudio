@@ -89,6 +89,6 @@ describe('Phase 5 spec + migration + models', () => {
 
     const neo = assessVersionChange('neoforge', '1.21.1', '1.21.4', { ...EMPTY_FEATURES, customMobs: true })
     expect(neo.canApply).toBe(true)
-    expect(neo.notes.join(' ')).toMatch(/1\.21\.1 only/)
+    expect(neo.notes.join(' ')).toMatch(/1\.21\.4/)
   })
 })

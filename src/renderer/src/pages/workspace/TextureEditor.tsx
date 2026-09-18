@@ -10,6 +10,7 @@ import {
   PixelHistory,
   type TextureTool
 } from '../../../../shared/textureCanvas'
+import type { TextureLayer } from '../../../../shared/ipc'
 import type { ProjectSpec } from '../../../../shared/spec'
 import type { ProjectRecord } from '../../../../shared/types'
 import { ErrorPanel } from '../../components/ErrorPanel'
@@ -21,6 +22,7 @@ const api = window.craftstudio
 export function TextureEditor({ project, spec }: { project: ProjectRecord; spec: ProjectSpec | null }) {
   const items = useMemo(() => spec?.items ?? [], [spec])
   const [itemId, setItemId] = useState(items[0]?.id ?? '')
+  const [layer, setLayer] = useState<TextureLayer>('layer0')
   const [size, setSize] = useState<16 | 32>(16)
   const [pixels, setPixels] = useState(() => blankTexture(16, 16))
   const [tool, setTool] = useState<TextureTool>('pencil')
@@ -101,7 +103,7 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
       return
     }
     void api
-      .getTexture(project.manifest.id, itemId)
+      .getTexture(project.manifest.id, itemId, layer)
       .then((texture) => {
         history.current = new PixelHistory()
         if (!texture) {
@@ -119,7 +121,7 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
         )
       })
       .catch((err) => setError(asAppError(err)))
-  }, [itemId, project.manifest.id])
+  }, [itemId, layer, project.manifest.id])
 
   const paintAt = (event: MouseEvent<HTMLCanvasElement>): void => {
     const canvas = canvasRef.current
@@ -158,8 +160,9 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
         <div>
           <h2 className="text-lg font-semibold">Pixel texture editor</h2>
           <p className="mt-1 text-sm text-muted">
-            Pencil, eraser, fill, palette, grid, zoom, undo/redo, and PNG import/export. Ollama may suggest colors or
-            pixel-spec JSON only — it does not draw this image.
+            Pencil, eraser, fill, palette, grid, zoom, undo/redo, and PNG import/export. Paint layer0 or a dedicated
+            layer1 overlay. Bind handheld + layer1 on Design so pack export includes both. Ollama may suggest colors
+            only — it does not draw this image.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -175,6 +178,17 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
                   {item.displayName} ({item.id})
                 </option>
               ))}
+            </select>
+          </Field>
+          <Field label="Layer" htmlFor="tex-layer">
+            <select
+              id="tex-layer"
+              className="border border-line bg-white px-3 py-2"
+              value={layer}
+              onChange={(event) => setLayer(event.target.value === 'layer1' ? 'layer1' : 'layer0')}
+            >
+              <option value="layer0">layer0 (base)</option>
+              <option value="layer1">layer1 (overlay)</option>
             </select>
           </Field>
           <Field label="Size" htmlFor="tex-size">
@@ -299,12 +313,17 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
                 .saveTexture({
                   projectId: project.manifest.id,
                   itemId,
+                  layer,
                   width: size,
                   height: size,
                   pixels: Array.from(pixels),
                   pixelSpec
                 })
-                .then(() => setNote(`Saved ${itemId}.png under craftstudio/textures/. Re-apply the spec to copy it into generated assets.`))
+                .then(() =>
+                  setNote(
+                    `Saved ${layer === 'layer1' ? `${itemId}_layer1.png` : `${itemId}.png`} under craftstudio/textures/. Enable layer1 on the item in Design, then re-apply so the pack and jar include it.`
+                  )
+                )
                 .catch((err) => setError(asAppError(err)))
                 .finally(() => setBusy(false))
             }}
@@ -386,7 +405,7 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
                 const url = URL.createObjectURL(blob)
                 const link = document.createElement('a')
                 link.href = url
-                link.download = `${itemId || 'texture'}.png`
+                link.download = `${itemId || 'texture'}${layer === 'layer1' ? '_layer1' : ''}.png`
                 link.click()
                 URL.revokeObjectURL(url)
               })
@@ -398,6 +417,12 @@ export function TextureEditor({ project, spec }: { project: ProjectRecord; spec:
         {note ? (
           <p role="status" className="text-sm">
             {note}
+          </p>
+        ) : null}
+        {layer === 'layer1' && items.find((item) => item.id === itemId)?.layer1 !== true ? (
+          <p className="text-sm">
+            This item does not have <code>layer1</code> enabled in Design yet. The PNG still saves; pack export only
+            ships it after you toggle layer1 on the item and re-apply.
           </p>
         ) : null}
         <Badge>Transparency: eraser and the last palette swatch are alpha 0</Badge>

@@ -13,7 +13,8 @@ import {
   planFabricClientFiles,
   planFabricEntityRenderers,
   planFabricGuiFiles,
-  planFabricMobFiles
+  planFabricMobFiles,
+  placeholderEntityPng
 } from './extras'
 
 function itemJavaClassic(spec: ProjectSpec): string {
@@ -275,7 +276,9 @@ jar {
         environment: '*',
         entrypoints: {
           main: [`${spec.packageName}.${spec.mainClass}`],
-          ...(spec.modGuis.length > 0 ? { client: [`${spec.packageName}.${spec.mainClass}Client`] } : {})
+          ...(spec.modGuis.length > 0 || spec.mobs.length > 0
+            ? { client: [`${spec.packageName}.${spec.mainClass}Client`] }
+            : {})
         },
         depends: {
           fabricloader: `>=${pins.loader}`,
@@ -353,14 +356,20 @@ jar {
   files.push(...planFabricClientFiles(spec, packagePath, classic))
   if (spec.mobs.length > 0) {
     files.push({
+      relativePath: `src/main/resources/assets/${spec.modId}/textures/entity/preset_mob.png`,
+      encoding: 'binary',
+      contents: placeholderEntityPng()
+    })
+    files.push({
       relativePath: 'ENTITY_RENDERING.md',
       encoding: 'utf8',
       contents: [
         '# Entity rendering note',
         '',
-        `Fabric ${pins.minecraft}: CraftStudio registers the entity type and attributes.`,
-        'A client renderer is not emitted. Vanilla model classes are typed to vanilla entities and will not compile against a custom type.',
-        'This is not a Minecraft-verified custom model. Spawn is summon/command only until a later phase adds a dedicated model.',
+        classic
+          ? `Fabric ${pins.minecraft}: a compiling custom cube model is registered. Vanilla model classes are typed to vanilla entities and are not used.`
+          : `Fabric ${pins.minecraft}: a compiling render-state EntityRenderer is registered but draws nothing. Entities are invisible in-game. A client join warning is shown.`,
+        'This is not a Minecraft-verified custom model. Spawn is summon/command only.',
         ''
       ].join('\n')
     })
@@ -379,7 +388,15 @@ jar {
       '3. Build with `./gradlew build`, then copy `build/libs/' +
         spec.modId +
         '-1.0.0.jar` (not `-sources`) into `.minecraft/mods`.',
-      '4. Accept the Minecraft EULA yourself. CraftStudio never distributes game files or bypasses auth.',
+      '4. Optional: export a resource pack from the app (includes pack.png and layer1 when painted) if you want textures without rebuilding the jar.',
+      '5. Accept the Minecraft EULA yourself. CraftStudio never distributes game files or bypasses auth.',
+      '',
+      spec.modGuis.length > 0
+        ? 'Open the preview screen from in-game after you wire a use/command in a later edit, or use the Test tab runClient. Client clicks are untrusted; the server menu validates slots.'
+        : '',
+      spec.mobs.length > 0
+        ? 'Summon preset mobs with `/summon ' + spec.modId + ':' + spec.mobs[0]!.id + '`. See ENTITY_RENDERING.md.'
+        : '',
       '',
       '`./gradlew runClient` is optional developer wiring. A successful compile is **not** a Tested compatibility row.',
       ''

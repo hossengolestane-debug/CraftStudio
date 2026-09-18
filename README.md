@@ -6,7 +6,7 @@ Desktop app that helps beginners create **Minecraft Java Edition** mods and serv
 | --- | --- |
 | Fabric, NeoForge, Forge | Paper, Spigot |
 
-**Phase 5** is implemented: widened NeoForge 1.21.x pins, a real **Forge 1.21.1** Gradle slice, a careful **Spigot** emitter (not copied from Paper), preset custom mobs, first-slice GUI designers, richer item models + `pack.png`, and recoverable snapshots before apply / version change. A compile-only Gradle build never flips **Tested**.
+**Phase 6** is implemented: NeoForge entities on 1.21.4 / 1.21.8, five mob presets, compiling Fabric renderers (or an honest invisible + warning path), real Forge/NeoForge container menus, dedicated layer1 painting, build diagnostics with bounded template repair, and wizard Build/Export wired to the real services. A compile-only Gradle build never flips **Tested**.
 
 ## Requirements
 
@@ -38,28 +38,28 @@ On some Linux containers:
 CRAFTSTUDIO_NO_SANDBOX=1 npm run dev
 ```
 
-## Vertical slice (Phase 5)
+## Vertical slice (Phase 6)
 
 1. Create **Fabric** 1.21.x, **Paper** 1.21.x, **NeoForge** 1.21.1 / 1.21.4 / 1.21.8, **Forge 1.21.1**, or **Spigot** 1.21 / 1.21.1 / 1.21.4.
-2. Open **Design**. Edit items, a preset mob, and a simple GUI. Generate a spec (templates first).
+2. Open **Design**. Edit items, a preset mob (`passive_wanderer`, `hostile_melee`, `neutral_flee`, `avoid_players`, `stationary_lookout`), and a simple GUI. Generate a spec (templates first).
 3. **Review file changes**, then **Apply files**. A snapshot is written first.
 4. Change Minecraft version only after **Assess change** lists incompatible features. A snapshot is written first.
-5. Open **Assets**. Paint or import a 16×16 / 32×32 PNG. Models may be `generated` or `handheld`, with optional `layer1`.
-6. Open **Export** for a source ZIP, a built JAR after `./gradlew build`, or a resource pack that includes `pack.png`.
-7. Open **Test** for a real Gradle compile. Runtime verification (and Tested) is a separate, evidence-gated step.
+5. Open **Assets**. Paint layer0 and a dedicated **layer1** overlay. Bind handheld + layer1 on the item.
+6. Open **Export** for a source ZIP, a built JAR after `./gradlew build`, or a resource pack that includes `pack.png` and layer1 when present.
+7. Open **Test** for a real Gradle compile. Failed builds show actionable diagnostics; known template mismatches can be repaired without touching `build.gradle`. Runtime verification (and Tested) is a separate, evidence-gated step.
 
-Fabric 1.21 / 1.21.1 uses classic `Registry.register`. Fabric 1.21.2+ uses `Items.register` + `RegistryKey`. NeoForge uses `DeferredRegister.Items` and is **not** Forge. Forge 1.21.1 uses ForgeGradle 6 + `mods.toml` `mandatory=true`. Paper items are vanilla `Material.PAPER` + PDC + CustomModelData. Spigot uses `org.spigotmc:spigot-api` and legacy `setDisplayName` — **Paper APIs are not copied**. Plugin mobs are **vanilla disguises**, not new client entity types.
+Fabric 1.21 / 1.21.1 uses classic `Registry.register` and a custom cube entity renderer. Fabric 1.21.2+ uses `Items.register` + `RegistryKey` and a compiling render-state stub (entities are invisible; a client warning is shown). NeoForge uses `DeferredRegister.Items` and is **not** Forge. Forge 1.21.1 uses ForgeGradle 6 + `mods.toml` `mandatory=true`. Both Forge and NeoForge emit a real `ExampleMenu` / `ExampleScreen` pair. Paper items are vanilla `Material.PAPER` + PDC + CustomModelData. Spigot uses `org.spigotmc:spigot-api` and legacy `setDisplayName` — **Paper APIs are not copied**. Plugin mobs are **vanilla disguises**, not new client entity types.
 
 Ollama may only propose spec JSON (or a color palette). That JSON is independently validated. **Nothing is written from unvalidated model text.** Java and Gradle stay template-authored.
 
 ## Architecture
 
 ```text
-src/main/          Electron main (projects, Ollama, generation, Gradle, export, textures, evidence, snapshots)
+src/main/          Electron main (projects, Ollama, generation, Gradle, export, textures, evidence, snapshots, repair)
 src/main/codegen/  Fabric + Paper + NeoForge + Forge + Spigot templates + vendored Gradle wrapper
 src/preload/       Restricted contextBridge
 src/renderer/      React UI (item / mob / GUI editors, Monaco, texture editor)
-src/shared/        Manifest, Zod spec, adapters, compatibility, pins, PNG, evidence, migration
+src/shared/        Manifest, Zod spec, adapters, compatibility, pins, PNG, evidence, migration, diagnostics
 ```
 
 Pinned app stack: Electron 39, electron-vite 5, Vite 7, React 19, TypeScript 5.9, Tailwind 4, Zod 3, Vitest 3, Monaco 0.52.
@@ -76,5 +76,6 @@ Fabric pins come from [fabricmc.net/develop](https://fabricmc.net/develop/) / Fa
 - `runClient` requires an explicit Minecraft EULA checkbox; CraftStudio never silent-accepts and never distributes game files
 - Model output cannot write outside the project or run a shell
 - The texture editor does not pretend Ollama painted a PNG
+- Build repair only rewrites allowlisted Java for known template mismatches — never model shell, never silent `build.gradle` mutation
 
-See [PHASE1.md](PHASE1.md), [PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md), and [PHASE5.md](PHASE5.md).
+See [PHASE1.md](PHASE1.md), [PHASE2.md](PHASE2.md), [PHASE3.md](PHASE3.md), [PHASE4.md](PHASE4.md), [PHASE5.md](PHASE5.md), and [PHASE6.md](PHASE6.md).

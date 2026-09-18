@@ -12,17 +12,17 @@ const UNSUPPORTED_PATTERNS: { pattern: RegExp; feature: string; reason: string }
   {
     pattern: /\b(boss|golem|behavior tree|pathfinding tree)\b/i,
     feature: 'advanced entities',
-    reason: 'Phase 5 only emits 2–3 movement presets. Full behavior trees are out of scope.'
+    reason: 'Phase 6 emits five movement presets only. Full behavior trees are out of scope.'
   },
   {
     pattern: /\b(dimension|biome|worldgen|ore gen|structure)\b/i,
     feature: 'worldgen',
-    reason: 'World generation is not emitted in Phase 5.'
+    reason: 'World generation is not emitted in Phase 6.'
   },
   {
     pattern: /\b(custom block|new block|ore block)\b/i,
     feature: 'custom blocks',
-    reason: 'Block registration is not part of the Phase 5 slice.'
+    reason: 'Block registration is not part of the Phase 6 slice.'
   }
 ]
 
@@ -96,7 +96,8 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
       ? [
           {
             ...defaultMob(`${itemId.slice(0, 20)}_mob`),
-            displayName: `${titleCase(itemName)} Mob`
+            displayName: `${titleCase(itemName)} Mob`,
+            preset: inferMobPreset(text)
           }
         ]
       : [],
@@ -106,6 +107,22 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
     source: 'template',
     prompt: text
   })
+}
+
+function inferMobPreset(text: string): ReturnType<typeof defaultMob>['preset'] {
+  if (/\b(lookout|sentry|stationary|guard)\b/i.test(text)) {
+    return 'stationary_lookout'
+  }
+  if (/\b(avoid players|skittish|shy)\b/i.test(text)) {
+    return 'avoid_players'
+  }
+  if (/\b(hostile|zombie|attack|melee)\b/i.test(text)) {
+    return 'hostile_melee'
+  }
+  if (/\b(flee|neutral)\b/i.test(text)) {
+    return 'neutral_flee'
+  }
+  return 'passive_wanderer'
 }
 
 export function promptLooksComplex(prompt: string): boolean {
