@@ -1,3 +1,6 @@
+import type { ActivityWireFormat } from './activity'
+import { OLLAMA_SCHEMA_ID, OLLAMA_SCHEMA_MAX_LENGTH_AVOID } from './ollamaLimits'
+
 /** Cross-field Zod rules JSON Schema cannot express. Enforced in parseProjectSpec + prompt + repair. */
 export const JSON_SCHEMA_CROSS_FIELD_RULES = [
   {
@@ -74,4 +77,69 @@ export function summarizeJsonSchema(schema: Record<string, unknown>): {
     commandsRequired: commands?.required,
     unsupportedRequired: unsupported?.required
   }
+}
+
+export function collectJsonSchemaMaxLengths(root: unknown, path = ''): { path: string; maxLength: number }[] {
+  if (!root || typeof root !== 'object') {
+    return []
+  }
+  if (Array.isArray(root)) {
+    return root.flatMap((item, index) => collectJsonSchemaMaxLengths(item, `${path}[${index}]`))
+  }
+  const record = root as Record<string, unknown>
+  const here =
+    typeof record.maxLength === 'number' ? [{ path: path || 'schema', maxLength: record.maxLength }] : []
+  return [
+    ...here,
+    ...Object.entries(record).flatMap(([key, value]) =>
+      collectJsonSchemaMaxLengths(value, path ? `${path}.${key}` : key)
+    )
+  ]
+}
+
+export function findBareObjectSchemas(root: unknown, path = ''): string[] {
+  if (!root || typeof root !== 'object') {
+    return []
+  }
+  if (Array.isArray(root)) {
+    return root.flatMap((item, index) => findBareObjectSchemas(item, `${path}[${index}]`))
+  }
+  const record = root as Record<string, unknown>
+  const bare =
+    record.type === 'object' && record.properties === undefined && record.additionalProperties === undefined
+      ? [path || 'schema']
+      : []
+  return [
+    ...bare,
+    ...Object.entries(record).flatMap(([key, value]) => findBareObjectSchemas(value, path ? `${path}.${key}` : key))
+  ]
+}
+
+export function describeOllamaWireFormat(format: Record<string, unknown> | 'json' | undefined): ActivityWireFormat {
+  if (format === undefined) {
+    return { kind: 'none' }
+  }
+  if (format === 'json') {
+    return { kind: 'json' }
+  }
+  const encoded = JSON.stringify(format)
+  return {
+    kind: 'json_schema',
+    schemaId: OLLAMA_SCHEMA_ID,
+    schemaBytes: new TextEncoder().encode(encoded).length
+  }
+}
+
+export function formatWireFormatForDisplay(format: ActivityWireFormat | undefined): string {
+  if (!format) {
+    return ''
+  }
+  if (format.kind === 'json_schema') {
+    return `{kind:json_schema, schemaId:${format.schemaId ?? OLLAMA_SCHEMA_ID}, schemaBytes:${format.schemaBytes ?? 0}}`
+  }
+  return `{kind:${format.kind}}`
+}
+
+export function hasForbiddenOllamaMaxLength(schema: unknown): boolean {
+  return collectJsonSchemaMaxLengths(schema).some((entry) => entry.maxLength === OLLAMA_SCHEMA_MAX_LENGTH_AVOID)
 }

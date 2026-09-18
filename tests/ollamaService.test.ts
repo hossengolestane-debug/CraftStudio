@@ -174,4 +174,33 @@ describe('ollama service', () => {
     service.cancelInference()
     await expect(pending).rejects.toMatchObject({ code: 'GENERATION_CANCELLED' })
   })
+
+  it('maps HTTP 400 grammar failures to OLLAMA_REQUEST_REJECTED, not unavailable', async () => {
+    const service = new OllamaService()
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          error: 'Failed to initialize samplers: failed to parse grammar',
+          type: 'invalid_request_error'
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }) as typeof fetch
+
+    await expect(
+      service.chatJson({
+        endpoint: 'http://localhost:11434',
+        model: 'qwen2.5-coder:7b',
+        timeoutMs: 2000,
+        numPredict: 32,
+        numCtx: 512,
+        format: { type: 'object' },
+        messages: [{ role: 'user', content: 'spec' }]
+      })
+    ).rejects.toMatchObject({
+      code: 'OLLAMA_REQUEST_REJECTED',
+      httpStatus: 400,
+      details: expect.stringMatching(/failed to parse grammar/i)
+    })
+  })
 })

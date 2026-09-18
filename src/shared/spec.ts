@@ -299,6 +299,25 @@ function jsonIdent(): Record<string, unknown> {
   return { type: 'string', pattern: '^[a-z][a-z0-9_]{1,30}$', minLength: 2, maxLength: 31 }
 }
 
+/** Ollama grammar fails on maxLength === 2000. Zod still allows 2000. */
+function ollamaMaxLength(maxLength: number): number {
+  return maxLength === 2000 ? 1999 : maxLength
+}
+
+function jsonString(options: { minLength?: number; maxLength?: number; pattern?: string } = {}): Record<string, unknown> {
+  const out: Record<string, unknown> = { type: 'string' }
+  if (options.minLength !== undefined) {
+    out.minLength = options.minLength
+  }
+  if (options.maxLength !== undefined) {
+    out.maxLength = ollamaMaxLength(options.maxLength)
+  }
+  if (options.pattern) {
+    out.pattern = options.pattern
+  }
+  return out
+}
+
 function buildOllamaSpecJsonSchema(): Record<string, unknown> {
   const attributeItem = {
     type: 'object',
@@ -316,7 +335,7 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
     required: ['kind', 'id'],
     properties: {
       kind: jsonEnum(['vanilla', 'mod']),
-      id: { type: 'string', minLength: 3, maxLength: 64 }
+      id: jsonString({ minLength: 3, maxLength: 64 })
     }
   }
   const recipeKey = {
@@ -326,7 +345,7 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
     properties: {
       symbol: { type: 'string', pattern: '^[A-Z]$' },
       kind: jsonEnum(['vanilla', 'mod']),
-      id: { type: 'string', minLength: 3, maxLength: 64 }
+      id: jsonString({ minLength: 3, maxLength: 64 })
     }
   }
   return {
@@ -336,8 +355,8 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
     properties: {
       schemaVersion: { type: 'integer', const: SPEC_SCHEMA_VERSION },
       modId: jsonIdent(),
-      displayName: { type: 'string', minLength: 1, maxLength: 80 },
-      description: { type: 'string', maxLength: 2000 },
+      displayName: jsonString({ minLength: 1, maxLength: 80 }),
+      description: jsonString({ maxLength: 2000 }),
       packageName: { type: 'string' },
       mainClass: { type: 'string' },
       items: {
@@ -350,8 +369,8 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
           required: ['id', 'displayName'],
           properties: {
             id: jsonIdent(),
-            displayName: { type: 'string', minLength: 1, maxLength: 80 },
-            description: { type: 'string', maxLength: 400 },
+            displayName: jsonString({ minLength: 1, maxLength: 80 }),
+            description: jsonString({ maxLength: 400 }),
             maxCount: { type: 'integer', minimum: 1, maximum: 64 },
             rarity: jsonEnum(['common', 'uncommon', 'rare', 'epic']),
             modelStyle: jsonEnum(ITEM_MODEL_STYLES),
@@ -370,7 +389,7 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
           required: ['id', 'displayName'],
           properties: {
             id: jsonIdent(),
-            displayName: { type: 'string', minLength: 1, maxLength: 80 },
+            displayName: jsonString({ minLength: 1, maxLength: 80 }),
             material: jsonEnum(BLOCK_MATERIALS),
             hardness: { type: 'number' },
             resistance: { type: 'number' },
@@ -412,8 +431,8 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
           required: ['name'],
           properties: {
             name: jsonIdent(),
-            description: { type: 'string', maxLength: 200 },
-            permission: { type: 'string', maxLength: 80 }
+            description: jsonString({ maxLength: 200 }),
+            permission: jsonString({ maxLength: 80 })
           }
         }
       },
@@ -449,8 +468,78 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
           }
         }
       },
-      modGuis: { type: 'array', maxItems: 4, items: { type: 'object' } },
-      pluginGuis: { type: 'array', maxItems: 4, items: { type: 'object' } },
+      modGuis: {
+        type: 'array',
+        maxItems: 4,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'title', 'widgets'],
+          properties: {
+            id: jsonIdent(),
+            title: jsonString({ minLength: 1, maxLength: 80 }),
+            width: { type: 'integer' },
+            height: { type: 'integer' },
+            widgets: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['id', 'kind'],
+                properties: {
+                  id: jsonIdent(),
+                  kind: jsonEnum(['label', 'button', 'slot']),
+                  text: jsonString({ maxLength: 80 }),
+                  action: jsonEnum(['none', 'close', 'message'])
+                }
+              }
+            },
+            dataSlots: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['id'],
+                properties: {
+                  id: jsonIdent(),
+                  initial: { type: 'integer' },
+                  ghostItemId: jsonString({ maxLength: 64 })
+                }
+              }
+            }
+          }
+        }
+      },
+      pluginGuis: {
+        type: 'array',
+        maxItems: 4,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'title', 'slots'],
+          properties: {
+            id: jsonIdent(),
+            title: jsonString({ minLength: 1, maxLength: 32 }),
+            rows: { type: 'integer' },
+            pagination: { type: 'boolean' },
+            slots: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['index', 'label'],
+                properties: {
+                  index: { type: 'integer' },
+                  iconKind: jsonEnum(['vanilla', 'mod']),
+                  iconId: jsonString({ minLength: 3, maxLength: 64 }),
+                  label: jsonString({ minLength: 1, maxLength: 40 }),
+                  action: jsonEnum(['none', 'close', 'message', 'give'])
+                }
+              }
+            }
+          }
+        }
+      },
       worldgen: {
         type: 'array',
         maxItems: WORLDGEN_ENTRY_CAP,
@@ -464,7 +553,15 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
           }
         }
       },
-      config: { type: 'object' },
+      config: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          enableWorldgen: { type: 'boolean' },
+          enableChestLoot: { type: 'boolean' },
+          spawnWeightScale: { type: 'number' }
+        }
+      },
       unsupportedRequests: {
         type: 'array',
         maxItems: 16,
@@ -473,13 +570,13 @@ function buildOllamaSpecJsonSchema(): Record<string, unknown> {
           additionalProperties: false,
           required: ['feature', 'reason'],
           properties: {
-            feature: { type: 'string', minLength: 1, maxLength: 80 },
-            reason: { type: 'string', minLength: 1, maxLength: 400 }
+            feature: jsonString({ minLength: 1, maxLength: 80 }),
+            reason: jsonString({ minLength: 1, maxLength: 400 })
           }
         }
       },
       source: jsonEnum(['template', 'ollama', 'merged', 'editor']),
-      prompt: { type: 'string', maxLength: 4000 }
+      prompt: jsonString({ maxLength: 4000 })
     }
   }
 }

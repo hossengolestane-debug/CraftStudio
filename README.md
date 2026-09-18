@@ -6,7 +6,7 @@ Desktop app that helps beginners create **Minecraft Java Edition** mods and serv
 | --- | --- |
 | Fabric, NeoForge, Forge | Paper, Spigot |
 
-**Phase 10 / 1.0.3** keeps Phases 1–10 and the 1.0.1/1.0.2 Live Activity hotfix, and aligns Ollama JSON Schema with the Zod spec validator. Confirm Settings → About shows **1.0.3**. Install rebuilt Windows binaries into `E:\CraftStudio Local 1.0.3\` (keep older version folders). See [SPEC_OLLAMA_SCHEMA_FIX.md](SPEC_OLLAMA_SCHEMA_FIX.md), [PERF_OLLAMA_LIVE_ACTIVITY.md](PERF_OLLAMA_LIVE_ACTIVITY.md), [SMOKE.md](SMOKE.md), and [PHASE10.md](PHASE10.md).
+**Phase 10 / 1.0.4** keeps Phases 1–10 and the 1.0.1–1.0.3 hotfixes, and makes the Ollama spec JSON Schema grammar-safe (`maxLength` 2000 avoided). Confirm Settings → About shows **1.0.4**. Install rebuilt Windows binaries into `E:\CraftStudio Local 1.0.4\` (keep older version folders). See [OLLAMA_HTTP400_SCHEMA_FIX.md](OLLAMA_HTTP400_SCHEMA_FIX.md), [SPEC_OLLAMA_SCHEMA_FIX.md](SPEC_OLLAMA_SCHEMA_FIX.md), [PERF_OLLAMA_LIVE_ACTIVITY.md](PERF_OLLAMA_LIVE_ACTIVITY.md), [SMOKE.md](SMOKE.md), and [PHASE10.md](PHASE10.md).
 
 ## Quick start
 

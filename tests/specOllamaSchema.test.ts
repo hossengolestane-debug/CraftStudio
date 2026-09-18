@@ -1,9 +1,22 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { planForgeFiles } from '../src/main/codegen/forge/emitter'
+import { GenerationService } from '../src/main/services/generationService'
 import { OllamaService } from '../src/main/services/ollamaService'
+import { ProjectService } from '../src/main/services/projectService'
+import { SettingsService } from '../src/main/services/settingsService'
 import { AppError } from '../src/shared/errors'
 import { ITEM_ATTRIBUTES } from '../src/shared/itemStats'
-import { JSON_SCHEMA_CROSS_FIELD_RULES, summarizeJsonSchema } from '../src/shared/ollamaSpecSchema'
+import {
+  collectJsonSchemaMaxLengths,
+  describeOllamaWireFormat,
+  findBareObjectSchemas,
+  hasForbiddenOllamaMaxLength,
+  JSON_SCHEMA_CROSS_FIELD_RULES,
+  summarizeJsonSchema
+} from '../src/shared/ollamaSpecSchema'
 import { OLLAMA_SPEC_JSON_SCHEMA, parseProjectSpec, projectSpecSchema } from '../src/shared/spec'
 import { normalizeSpecDraft } from '../src/shared/specNormalize'
 import { MINIMAL_VALID_SPEC_EXAMPLE, SPEC_SYSTEM_PROMPT } from '../src/shared/specPrompt'
@@ -150,6 +163,19 @@ describe('Ollama JSON Schema mirrors Zod failure modes', () => {
     expect(summary.unsupportedRequired).toEqual(['feature', 'reason'])
     expect(JSON_SCHEMA_CROSS_FIELD_RULES.length).toBeGreaterThan(0)
     expect(JSON_SCHEMA_CROSS_FIELD_RULES.every((rule) => rule.enforcement.includes('parseProjectSpec'))).toBe(true)
+    expect(hasForbiddenOllamaMaxLength(OLLAMA_SPEC_JSON_SCHEMA)).toBe(false)
+    expect(collectJsonSchemaMaxLengths(OLLAMA_SPEC_JSON_SCHEMA).some((entry) => entry.maxLength === 2000)).toBe(false)
+    expect(
+      collectJsonSchemaMaxLengths(OLLAMA_SPEC_JSON_SCHEMA).some(
+        (entry) => entry.path.includes('description') && entry.maxLength === 1999
+      )
+    ).toBe(true)
+    expect(findBareObjectSchemas(OLLAMA_SPEC_JSON_SCHEMA)).toEqual([])
+    expect(describeOllamaWireFormat(OLLAMA_SPEC_JSON_SCHEMA)).toMatchObject({
+      kind: 'json_schema',
+      schemaId: 'craftstudio-spec-v1'
+    })
+    expect(describeOllamaWireFormat(OLLAMA_SPEC_JSON_SCHEMA).schemaBytes).toBeGreaterThan(100)
   })
 
   it('keeps the system prompt aligned with CraftStudio attribute enums and command objects', () => {
@@ -261,6 +287,10 @@ describe('outgoing /api/chat format payload', () => {
     expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toContain('/api/chat')
     expect(body.format).not.toBe('json')
     expect(body.format).not.toBe('json-schema')
+    expect(body.format).not.toBe('craftstudio-spec-json-schema')
+    expect(typeof body.format).toBe('object')
+    expect(hasForbiddenOllamaMaxLength(body.format)).toBe(false)
+    expect(body.options).toMatchObject({ num_predict: 32, num_ctx: 512 })
     const format = body.format as Record<string, unknown>
     const redacted = summarizeJsonSchema(format)
     expect(redacted.propertyKeys).toEqual(
@@ -281,5 +311,56 @@ describe('outgoing /api/chat format payload', () => {
     expect((attributesItems.attributes as { items?: unknown }).items).toEqual(
       expect.objectContaining({ required: ['id', 'amount'] })
     )
+  })
+})
+
+describe('HTTP 400 is not a template success', () => {
+  const temps: string[] = []
+  afterEach(async () => {
+    await Promise.all(temps.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  })
+
+  it('throws OLLAMA_REQUEST_REJECTED and does not return a trusted template as the AI result', async () => {
+    const userData = await mkdtemp(path.join(os.tmpdir(), 'cs-http400-settings-'))
+    const projectsRoot = await mkdtemp(path.join(os.tmpdir(), 'cs-http400-projects-'))
+    temps.push(userData, projectsRoot)
+    const settings = new SettingsService({ userDataPath: userData })
+    await settings.update({ projectsPath: projectsRoot, ollamaModel: 'qwen2.5-coder:7b' })
+    const projects = new ProjectService(settings, () => new Date('2026-09-18T16:00:00.000Z'))
+    const ollama = new OllamaService()
+    vi.spyOn(ollama, 'chatJson').mockRejectedValue(
+      new AppError({
+        code: 'OLLAMA_REQUEST_REJECTED',
+        message: 'Ollama rejected the generate-spec request (HTTP 400).',
+        action: 'Ollama could not compile the JSON Schema grammar.',
+        details: 'Failed to initialize samplers: failed to parse grammar',
+        httpStatus: 400
+      })
+    )
+    const generation = new GenerationService(projects, settings, ollama)
+    const created = await projects.create({
+      name: 'Legendary Mace',
+      description: 'A heavy legendary mace',
+      type: 'mod',
+      platform: 'forge',
+      minecraftVersion: '1.21.1'
+    })
+    await expect(
+      generation.generateSpec(created.manifest.id, 'legendary mace with life steal', 'ollama')
+    ).rejects.toMatchObject({ code: 'OLLAMA_REQUEST_REJECTED', httpStatus: 400 })
+  })
+
+  it('keeps Zod description max 2000 while the Ollama schema uses 1999', () => {
+    const spec = parseProjectSpec({
+      ...MINIMAL_VALID_SPEC_EXAMPLE,
+      description: 'd'.repeat(2000)
+    })
+    expect(spec.description.length).toBe(2000)
+    expect(() =>
+      parseProjectSpec({
+        ...MINIMAL_VALID_SPEC_EXAMPLE,
+        description: 'd'.repeat(2001)
+      })
+    ).toThrow(AppError)
   })
 })

@@ -16,6 +16,7 @@ import {
   SPEC_FILENAME,
   type ProjectSpec
 } from '../../shared/spec'
+import { describeOllamaWireFormat } from '../../shared/ollamaSpecSchema'
 import { SPEC_REPAIR_CONSTRAINTS, SPEC_SYSTEM_PROMPT } from '../../shared/specPrompt'
 import { collectUnsupportedFromPrompt, inferSpecFromPrompt, promptLooksComplex } from '../../shared/templateInfer'
 import type { AppSettings, ProjectRecord } from '../../shared/types'
@@ -307,7 +308,7 @@ export class GenerationService {
       numCtx: settings.ollamaNumCtx,
       temperature: 0.1,
       timeoutMs: settings.ollamaGenerateTimeoutMs,
-      format: 'craftstudio-spec-json-schema'
+      format: describeOllamaWireFormat(OLLAMA_SPEC_JSON_SCHEMA)
     }
     const persist = settings.persistFullAiLogs
     onProgress?.({
@@ -385,7 +386,43 @@ export class GenerationService {
         })
         throw error
       }
-      if (error instanceof AppError && (error.code === 'GENERATION_CANCELLED' || error.code === 'INFERENCE_BUSY')) {
+      if (
+        error instanceof AppError &&
+        (error.code === 'GENERATION_CANCELLED' ||
+          error.code === 'INFERENCE_BUSY' ||
+          error.code === 'OLLAMA_REQUEST_REJECTED' ||
+          error.code === 'OLLAMA_UNAVAILABLE')
+      ) {
+        this.activity?.record({
+          channel: 'errors',
+          requestId,
+          title:
+            error.code === 'OLLAMA_REQUEST_REJECTED'
+              ? `Ollama rejected the request${error.httpStatus ? ` (HTTP ${error.httpStatus})` : ''}.`
+              : error.code === 'OLLAMA_UNAVAILABLE'
+                ? 'Ollama is not reachable.'
+                : error.message,
+          status: 'failure',
+          model,
+          endpoint: settings.ollamaEndpoint,
+          httpStatus: error.httpStatus,
+          error: error.message,
+          detail: [
+            `endpoint=${settings.ollamaEndpoint}`,
+            `requestId=${requestId}`,
+            error.httpStatus ? `HTTP ${error.httpStatus}` : null,
+            error.details
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        })
+        onProgress?.({
+          stage: 'done',
+          message:
+            error.code === 'OLLAMA_REQUEST_REJECTED'
+              ? `Ollama rejected the request${error.httpStatus ? ` (HTTP ${error.httpStatus})` : ''}. The trusted template was not used as an AI result.`
+              : 'Ollama is not reachable. Use template-only generation if you want the trusted spec.'
+        })
         throw error
       }
       if (!this.isCurrent(requestId)) {
@@ -395,31 +432,26 @@ export class GenerationService {
           action: 'Generate again if you still want a spec.'
         })
       }
-      onProgress?.({
-        stage: 'done',
-        message: 'Ollama unavailable. Keeping the trusted template spec.'
-      })
       this.activity?.record({
         channel: 'errors',
         requestId,
         title: 'Ollama did not return a specification.',
         status: 'failure',
+        model,
+        endpoint: settings.ollamaEndpoint,
         error: error instanceof Error ? error.message : String(error)
       })
-      return {
-        spec: fallback,
-        usedOllama: false,
-        repairAttempts: 0,
-        remainingProblems: [
-          error instanceof Error ? error.message : String(error),
-          ...collectUnsupportedFromPrompt(prompt).map((item) => `${item.feature}: ${item.reason}`),
-          'Ollama output was not applied. The trusted template is a fallback, not a completed implementation of the request.'
-        ],
-        ollamaNote:
-          'Ollama did not respond. CraftStudio used trusted templates only. That is not success for unsupported features such as mace smash or life steal. No cloud fallback was attempted.',
-        success: true,
-        requestId
-      }
+      onProgress?.({
+        stage: 'done',
+        message: 'Ollama request failed. The trusted template was not used as an AI result.'
+      })
+      throw error instanceof AppError
+        ? error
+        : new AppError({
+            code: 'GENERATION_FAILED',
+            message: error instanceof Error ? error.message : String(error),
+            action: 'Use template-only generation if you want the trusted spec. This is not an AI success.'
+          })
     }
 
     if (!this.isCurrent(requestId)) {
@@ -513,7 +545,9 @@ export class GenerationService {
         } catch (repairError) {
           if (
             repairError instanceof AppError &&
-            (repairError.code === 'GENERATION_CANCELLED' || repairError.code === 'GENERATION_TIMEOUT')
+            (repairError.code === 'GENERATION_CANCELLED' ||
+              repairError.code === 'GENERATION_TIMEOUT' ||
+              repairError.code === 'OLLAMA_REQUEST_REJECTED')
           ) {
             if (repairError.code === 'GENERATION_TIMEOUT') {
               this.activity?.record({
@@ -524,6 +558,19 @@ export class GenerationService {
                 model,
                 error: repairError.message,
                 detail: 'Bounded wait expired during repair. This is not a manual cancel.'
+              })
+            }
+            if (repairError.code === 'OLLAMA_REQUEST_REJECTED') {
+              this.activity?.record({
+                channel: 'errors',
+                requestId,
+                title: `Ollama rejected the repair request${repairError.httpStatus ? ` (HTTP ${repairError.httpStatus})` : ''}.`,
+                status: 'failure',
+                model,
+                endpoint: settings.ollamaEndpoint,
+                httpStatus: repairError.httpStatus,
+                error: repairError.message,
+                detail: repairError.details
               })
             }
             throw repairError

@@ -8,6 +8,10 @@ export const PREFERRED_LIVE_OLLAMA_MODEL = 'qwen2.5-coder:7b'
 export const OLLAMA_PROGRESS_BATCH_MS = 80
 export const OLLAMA_PROMPT_USER_CAP = 1200
 export const OLLAMA_REPAIR_ASSISTANT_CAP = 8000
+export const OLLAMA_ERROR_BODY_CAP = 1500
+/** Ollama grammar fails on JSON Schema maxLength === 2000. Zod may keep 2000. */
+export const OLLAMA_SCHEMA_MAX_LENGTH_AVOID = 2000
+export const OLLAMA_SCHEMA_ID = 'craftstudio-spec-v1'
 export const ACTIVITY_MEMORY_CAP = 400
 export const BUILD_LOG_MEMORY_CAP = 200_000
 export const DISPLAY_LOG_CAP = 80_000

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ActivityEvent } from '../../../shared/activity'
+import { formatWireFormatForDisplay } from '../../../shared/ollamaSpecSchema'
 import { Button } from './ui'
 import { useActivityFeed, type ActivityFilter } from '../lib/useActivityFeed'
 
@@ -187,7 +188,9 @@ export function LiveActivityFeed({
                         <p>
                           Settings: num_predict={event.settings.numPredict} num_ctx={event.settings.numCtx} temp=
                           {event.settings.temperature} timeout={event.settings.timeoutMs}ms
-                          {event.settings.format ? ` format=${event.settings.format}` : ''}
+                          {event.settings.format
+                            ? ` format=${formatWireFormatForDisplay(event.settings.format)}`
+                            : ''}
                         </p>
                       ) : null}
                       {event.messages?.map((message, index) => (
@@ -212,6 +215,8 @@ export function LiveActivityFeed({
                           {event.cancelled ? ' · cancelled' : ''}
                         </p>
                       ) : null}
+                      {event.endpoint ? <p>Endpoint: {event.endpoint}</p> : null}
+                      {event.httpStatus ? <p>HTTP {event.httpStatus}</p> : null}
                       {event.detail ? <p>{event.detail}</p> : null}
                       {event.error ? <p className="text-[#8a1f1f]">{event.error}</p> : null}
                     </div>

@@ -13,13 +13,19 @@ export const ACTIVITY_STATUSES = [
 ] as const
 export type ActivityStatus = (typeof ACTIVITY_STATUSES)[number]
 
+export interface ActivityWireFormat {
+  kind: 'json_schema' | 'json' | 'none'
+  schemaId?: string
+  schemaBytes?: number
+}
+
 export interface ActivityGenerationSettings {
   model: string
   numPredict: number
   numCtx: number
   temperature: number
   timeoutMs: number
-  format?: string
+  format?: ActivityWireFormat
   keepAlive?: string | number
 }
 
@@ -52,6 +58,8 @@ export interface ActivityEvent {
   exitCode?: number | null
   cancelled?: boolean
   error?: string
+  httpStatus?: number
+  endpoint?: string
 }
 
 export function activityStatusForError(code: string | undefined): ActivityStatus {

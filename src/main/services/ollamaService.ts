@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto'
+import { redactSecrets } from '../../shared/activity'
 import { AppError } from '../../shared/errors'
 import {
   OLLAMA_CHECK_TIMEOUT_CAP_MS,
+  OLLAMA_ERROR_BODY_CAP,
   OLLAMA_PROGRESS_BATCH_MS,
   OLLAMA_STREAM_CONTENT_CAP,
   OLLAMA_TEST_NUM_CTX,
@@ -10,6 +12,52 @@ import {
   isResourceExhaustionMessage
 } from '../../shared/ollamaLimits'
 import { DEFAULT_OLLAMA_ENDPOINT, type OllamaModel, type OllamaStatus } from '../../shared/types'
+
+export async function readBoundedOllamaErrorBody(response: Response): Promise<string> {
+  const text = await response.text().catch(() => '')
+  return redactSecrets(text).slice(0, OLLAMA_ERROR_BODY_CAP)
+}
+
+export function isOllamaGrammarRejection(status: number, body: string): boolean {
+  return (
+    status === 400 ||
+    /failed to parse grammar|failed to initialize samplers|invalid_request_error|invalid format|expected "json" or a valid JSON Schema/i.test(
+      body
+    )
+  )
+}
+
+export function ollamaHttpError(status: number, body: string, operation: string): AppError {
+  const redacted = redactSecrets(body).slice(0, OLLAMA_ERROR_BODY_CAP)
+  if (isResourceExhaustionMessage(`${status} ${redacted}`)) {
+    return new AppError({
+      code: 'OLLAMA_UNAVAILABLE',
+      message: 'Ollama reported resource exhaustion. CraftStudio will not auto-retry.',
+      action:
+        'Close other Ollama clients, unload the model, or pick a smaller model. Request limits here do not control other programs.',
+      details: redacted,
+      httpStatus: status
+    })
+  }
+  if ((status >= 400 && status < 500) || isOllamaGrammarRejection(status, redacted)) {
+    return new AppError({
+      code: 'OLLAMA_REQUEST_REJECTED',
+      message: `Ollama rejected the ${operation} request (HTTP ${status}).`,
+      action: isOllamaGrammarRejection(status, redacted)
+        ? 'Ollama could not compile the JSON Schema grammar. This is request rejection, not an unreachable server. Do not treat a template as the AI result. Check Live Activity for the server text.'
+        : 'Ollama rejected the request body. This is not a connection failure. Use template-only generation if you want the trusted spec.',
+      details: redacted,
+      httpStatus: status
+    })
+  }
+  return new AppError({
+    code: 'OLLAMA_UNAVAILABLE',
+    message: `Ollama ${operation} returned HTTP ${status}.`,
+    action: 'Confirm the local model name and that Ollama is running. There is no cloud fallback.',
+    details: redacted,
+    httpStatus: status
+  })
+}
 
 export function normalizeOllamaEndpoint(endpoint: string): string {
   const trimmed = endpoint.trim().replace(/\/+$/, '')
@@ -444,21 +492,8 @@ export class OllamaService {
       })
 
       if (!response.ok) {
-        const details = await response.text().catch(() => '')
-        if (isResourceExhaustionMessage(`${response.status} ${details}`)) {
-          throw new AppError({
-            code: 'OLLAMA_UNAVAILABLE',
-            message: 'Ollama reported resource exhaustion. CraftStudio will not auto-retry.',
-            action: 'Close other Ollama clients, unload the model, or pick a smaller model. Request limits here do not control other programs.',
-            details
-          })
-        }
-        throw new AppError({
-          code: 'OLLAMA_UNAVAILABLE',
-          message: `Ollama chat returned HTTP ${response.status}.`,
-          action: 'Confirm the local model name and that Ollama is running. There is no cloud fallback.',
-          details
-        })
+        const details = await readBoundedOllamaErrorBody(response)
+        throw ollamaHttpError(response.status, details, options.operation ?? 'chat')
       }
 
       const { text } = await readOllamaStream(response, options.onChunk, controller.signal)

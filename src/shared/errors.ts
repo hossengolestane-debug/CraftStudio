@@ -6,6 +6,7 @@ export type AppErrorCode =
   | 'SETTINGS_INVALID'
   | 'UNSUPPORTED_COMBINATION'
   | 'OLLAMA_UNAVAILABLE'
+  | 'OLLAMA_REQUEST_REJECTED'
   | 'OLLAMA_CANCELLED'
   | 'INFERENCE_BUSY'
   | 'VALIDATION'
@@ -28,12 +29,14 @@ export interface AppErrorPayload {
   message: string
   action: string
   details?: string
+  httpStatus?: number
 }
 
 export class AppError extends Error {
   readonly code: AppErrorCode
   readonly action: string
   readonly details?: string
+  readonly httpStatus?: number
 
   constructor(payload: AppErrorPayload) {
     super(payload.message)
@@ -41,6 +44,7 @@ export class AppError extends Error {
     this.code = payload.code
     this.action = payload.action
     this.details = payload.details
+    this.httpStatus = payload.httpStatus
   }
 
   toPayload(): AppErrorPayload {
@@ -48,7 +52,8 @@ export class AppError extends Error {
       code: this.code,
       message: this.message,
       action: this.action,
-      details: this.details
+      details: this.details,
+      httpStatus: this.httpStatus
     }
   }
 }
