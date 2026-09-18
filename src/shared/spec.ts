@@ -8,7 +8,6 @@ import { SPEC_FILENAME } from './types'
 import {
   isSurfacePatchPlant,
   isVanillaOre,
-  SURFACE_PATCH_BLOCKS,
   WORLDGEN_ENTRY_CAP,
   WORLDGEN_KINDS
 } from './worldgen'

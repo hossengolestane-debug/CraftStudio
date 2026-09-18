@@ -112,7 +112,16 @@ describe('Phase 9 spec + emitters', () => {
         ...phase9Spec,
         mobs: [{ ...phase9Spec.mobs[0], goals: ['wander', 'look_player', 'melee', 'flee', 'leap', 'follow_look'] }]
       })
-    ).toThrow(/at most|Too big|goals/i)
+    ).toThrow(/not valid/)
+    try {
+      parseProjectSpec({
+        ...phase9Spec,
+        mobs: [{ ...phase9Spec.mobs[0], goals: ['wander', 'look_player', 'melee', 'flee', 'leap', 'follow_look'] }]
+      })
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError)
+      expect((error as AppError).details ?? '').toMatch(/at most|Too big|goals/i)
+    }
     expect(() =>
       parseProjectSpec({
         ...phase9Spec,
@@ -238,7 +247,9 @@ describe('Phase 9 spec + emitters', () => {
 
   it('rejects plugin custom blocks at plan time and writes honest docs when asked', () => {
     expect(() => planAdapterFiles(manifestFor('paper', '1.21.1', 'plugin'), phase9Spec)).toThrow(AppError)
-    expect(() => planAdapterFiles(manifestFor('paper', '1.21.1', 'plugin'), phase9Spec)).toThrow(/cannot register custom blocks/)
+    expect(() =>
+      planAdapterFiles(manifestFor('paper', '1.21.1', 'plugin'), parseProjectSpec({ ...phase9Spec, worldgen: [] }))
+    ).toThrow(/cannot register custom blocks/)
     const paper = planPaperFiles(
       manifestFor('paper', '1.21.1', 'plugin'),
       parseProjectSpec({
