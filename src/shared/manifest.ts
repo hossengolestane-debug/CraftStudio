@@ -1,4 +1,5 @@
 import { AppError } from './errors'
+import { STORED_PROMPT_MAX } from './promptPreserve'
 import {
   EMPTY_FEATURES,
   MANIFEST_SCHEMA_VERSION,
@@ -87,8 +88,8 @@ export function validateManifest(input: unknown): ProjectManifest {
 
   const name = readString(input, 'name', 1, 80)
   const description = typeof input.description === 'string' ? input.description.trim() : ''
-  if (description.length > 2000) {
-    fail('"description" must be 2000 characters or fewer.')
+  if (description.length > STORED_PROMPT_MAX) {
+    fail(`"description" must be ${STORED_PROMPT_MAX} characters or fewer.`)
   }
 
   const type = readString(input, 'type', 3, 20)

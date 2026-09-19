@@ -7,6 +7,7 @@ import {
   isResourceExhaustionMessage,
   OLLAMA_REPAIR_ASSISTANT_CAP
 } from '../../shared/ollamaLimits'
+import { collectApplyBlockers, formatApplyBlockers } from '../../shared/applyBlockers'
 import { modelPromptExcerpt, preservePrompt } from '../../shared/promptPreserve'
 import { assembleGeneratedSpec } from '../../shared/specMerge'
 import {
@@ -58,6 +59,7 @@ export interface ApplyPreview {
   changes: FileChange[]
   overwriteCount: number
   buildScriptChanges: string[]
+  applyBlockers: string[]
 }
 
 export interface ApplyResult extends ApplyPreview {
@@ -248,18 +250,39 @@ export class GenerationService {
       encoding: 'utf8' as const
     }
     const changes = await diffPlannedFiles(root, record.directoryName, [specFile, ...files])
+    const textureByteLengths = Object.fromEntries(
+      Object.entries(textures).map(([id, buffer]) => [id, buffer.byteLength])
+    )
+    const applyBlockers = collectApplyBlockers(spec, { textureByteLengths }).map(
+      (item) => `${item.message} ${item.action}`
+    )
     return {
       spec,
       changes,
       overwriteCount: changes.filter((change) => change.action === 'overwrite').length,
       buildScriptChanges: changes
         .filter((change) => change.buildScript && change.action !== 'unchanged')
-        .map((change) => change.relativePath)
+        .map((change) => change.relativePath),
+      applyBlockers
     }
   }
 
   async applySpec(projectId: string, specInput: unknown, confirmOverwrites: boolean): Promise<ApplyResult> {
     const preview = await this.previewApply(projectId, specInput)
+    if (preview.applyBlockers.length > 0) {
+      throw new AppError({
+        code: 'APPLY_BLOCKED',
+        message: 'Apply is blocked until the draft matches the requested recipe, texture, and enchantments.',
+        action: preview.applyBlockers[0] ?? 'Fix the listed issues, generate again, then Review before Apply.',
+        details: formatApplyBlockers(
+          preview.applyBlockers.map((message, index) => ({
+            id: `blocker-${index}`,
+            message,
+            action: ''
+          }))
+        )
+      })
+    }
     const gated = preview.changes.filter((change) => change.buildScript && change.action === 'overwrite')
     if (gated.length > 0 && !confirmOverwrites) {
       return { ...preview, applied: false }

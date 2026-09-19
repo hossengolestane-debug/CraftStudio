@@ -1,7 +1,10 @@
 import { z } from 'zod'
 import {
+  HIGHEST_COMPATIBLE_MACE_ENCHANTMENTS,
+  MACE_EXCLUSIVE_GROUPS,
   TERRAIN_ALLOW_BLOCKS,
   compatibleEnchantmentsFor,
+  enchantmentMaxLevel,
   isCompatibleEnchantment,
   normalizeVanillaId
 } from './vanillaRegistry'
@@ -118,17 +121,149 @@ export function promptRequestsWorldgen(text: string): boolean {
   return /\b(ore|vein|ore gen|worldgen|surface patch|flower patch|water spring|lava spring|geyser)\b/i.test(text)
 }
 
+const ROMAN = { i: 1, ii: 2, iii: 3, iv: 4, v: 5 } as const
+
+function parseLevelToken(raw: string | undefined): number | undefined {
+  if (!raw) {
+    return undefined
+  }
+  if (/^[1-5]$/.test(raw)) {
+    return Number(raw)
+  }
+  const roman = ROMAN[raw.toLowerCase() as keyof typeof ROMAN]
+  return roman
+}
+
 function parseEnchantmentMentions(text: string, kind: 'mace' | 'generic'): SpecWeaponEnchantment[] {
   const allowed = compatibleEnchantmentsFor(kind)
   const found: SpecWeaponEnchantment[] = []
   for (const id of allowed) {
     const bare = id.replace('minecraft:', '').replace(/_/g, '[\\s_]+')
-    const match = text.match(new RegExp(`\\b${bare}\\b(?:\\s+(?:level\\s+)?([1-5]))?`, 'i'))
+    const match = text.match(
+      new RegExp(`\\b${bare}\\b(?:\\s+(?:level\\s+)?([1-5]|I{1,3}|IV|V))?`, 'i')
+    )
     if (match) {
-      found.push({ id, level: match[1] ? Number(match[1]) : 1 })
+      const parsed = parseLevelToken(match[1])
+      found.push({ id, level: parsed ?? 1 })
     }
   }
   return found.slice(0, 8)
+}
+
+export function promptRequestsCustomTexture(text: string): boolean {
+  return (
+    /\b(32\s*[×x]\s*32|custom texture|netherite handle|purple cracks|golden core|item texture|item-model|texture style)\b/i.test(
+      text
+    ) || /\b(png|hand-painted|import(?:ed)? texture)\b/i.test(text)
+  )
+}
+
+export function promptRequestsMaceEnchantments(text: string): boolean {
+  if (/\b(compatible mace enchantments|enchant the crafted item|mace enchantments)\b/i.test(text)) {
+    return true
+  }
+  return (
+    /\b(mace|smash)\b/i.test(text) &&
+    /\b(enchant(?:ments?)?|density|breach|wind[_\s-]?burst|fire[_\s-]?aspect)\b/i.test(text)
+  )
+}
+
+function dropExclusiveConflicts(
+  enchantments: SpecWeaponEnchantment[],
+  kind: 'mace' | 'generic'
+): SpecWeaponEnchantment[] {
+  const preferred = kind === 'mace' ? 'minecraft:density' : 'minecraft:sharpness'
+  const kept: SpecWeaponEnchantment[] = []
+  const usedGroups = new Set<number>()
+  const ordered = [...enchantments].sort((left, right) => {
+    if (left.id === preferred) {
+      return -1
+    }
+    if (right.id === preferred) {
+      return 1
+    }
+    return 0
+  })
+  for (const entry of ordered) {
+    const id = normalizeVanillaId(entry.id)
+    const groupIndex = MACE_EXCLUSIVE_GROUPS.findIndex((group) => group.includes(id))
+    if (kind === 'mace' && groupIndex >= 0) {
+      if (usedGroups.has(groupIndex)) {
+        continue
+      }
+      usedGroups.add(groupIndex)
+    }
+    kept.push({ id, level: Math.min(enchantmentMaxLevel(id), Math.max(1, entry.level)) })
+  }
+  return kept
+}
+
+export function fillHighestCompatibleEnchantments(
+  kind: 'mace' | 'generic',
+  mentioned: SpecWeaponEnchantment[],
+  prompt: string
+): SpecWeaponEnchantment[] {
+  const { kept } = filterCompatibleEnchantments(mentioned, kind)
+  const resolved = dropExclusiveConflicts(kept, kind)
+  if (kind !== 'mace' || !promptRequestsMaceEnchantments(prompt)) {
+    return resolved.slice(0, 8)
+  }
+  const byId = new Map(resolved.map((entry) => [entry.id, entry]))
+  for (const entry of HIGHEST_COMPATIBLE_MACE_ENCHANTMENTS) {
+    byId.set(entry.id, { id: entry.id, level: entry.level })
+  }
+  const ordered = HIGHEST_COMPATIBLE_MACE_ENCHANTMENTS.map((entry) => byId.get(entry.id)!).filter(Boolean)
+  for (const entry of byId.values()) {
+    if (!ordered.some((item) => item.id === entry.id)) {
+      ordered.push(entry)
+    }
+  }
+  return dropExclusiveConflicts(ordered, kind).slice(0, 8)
+}
+
+export function reportedMaceEnchantmentsComplete(input: {
+  items: { weapon?: { enchantments?: { id: string; level: number }[] } }[]
+}): boolean {
+  const listed = input.items.flatMap((item) => item.weapon?.enchantments ?? [])
+  return HIGHEST_COMPATIBLE_MACE_ENCHANTMENTS.every((required) =>
+    listed.some((entry) => normalizeVanillaId(entry.id) === required.id && entry.level === required.level)
+  )
+}
+
+export function mergeWeapons(
+  existing: SpecWeapon | undefined,
+  inferred: SpecWeapon | undefined,
+  prompt: string
+): SpecWeapon | undefined {
+  if (!existing && !inferred) {
+    return undefined
+  }
+  const smash = Boolean(existing?.smash || inferred?.smash)
+  const kind = smash ? 'mace' : 'generic'
+  const textureStyle =
+    existing?.textureStyle && existing.textureStyle !== 'none'
+      ? existing.textureStyle
+      : inferred?.textureStyle && inferred.textureStyle !== 'none'
+        ? inferred.textureStyle
+        : promptRequestsCustomTexture(prompt) || smash
+          ? smash || /\bnetherite\b/i.test(prompt)
+            ? 'netherite_mace'
+            : 'generic_weapon'
+          : 'none'
+  const enchantments = fillHighestCompatibleEnchantments(
+    kind,
+    [...(existing?.enchantments ?? []), ...(inferred?.enchantments ?? [])],
+    prompt
+  )
+  const weapon: SpecWeapon = {
+    smash,
+    enchantments,
+    textureStyle,
+    lifeSteal: existing?.lifeSteal?.enabled ? existing.lifeSteal : inferred?.lifeSteal,
+    shockwave: existing?.shockwave?.enabled ? existing.shockwave : inferred?.shockwave,
+    terrain: existing?.terrain?.enabled ? existing.terrain : inferred?.terrain
+  }
+  return weapon
 }
 
 function numberAfter(text: string, pattern: RegExp, fallback: number): number {
@@ -151,11 +286,13 @@ export function inferWeaponFromPrompt(text: string): SpecWeapon | undefined {
     return undefined
   }
   const kind = smash ? 'mace' : 'generic'
-  const enchantments = parseEnchantmentMentions(text, kind)
+  const enchantments = fillHighestCompatibleEnchantments(kind, parseEnchantmentMentions(text, kind), text)
+  const wantsTexture = texture || promptRequestsCustomTexture(text)
   const weapon: SpecWeapon = {
     smash,
     enchantments,
-    textureStyle: smash || /\bnetherite\b/i.test(text) ? 'netherite_mace' : texture ? 'generic_weapon' : 'none'
+    textureStyle:
+      smash || /\bnetherite\b/i.test(text) ? 'netherite_mace' : wantsTexture ? 'generic_weapon' : 'none'
   }
   if (lifeSteal) {
     weapon.lifeSteal = {

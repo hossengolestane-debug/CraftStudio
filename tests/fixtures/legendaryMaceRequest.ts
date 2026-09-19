@@ -46,8 +46,11 @@ export const LEGENDARY_MACE_FIXTURE_SPEC = {
       weapon: {
         smash: true,
         enchantments: [
-          { id: 'minecraft:density', level: 3 },
-          { id: 'minecraft:breach', level: 2 }
+          { id: 'minecraft:density', level: 5 },
+          { id: 'minecraft:wind_burst', level: 3 },
+          { id: 'minecraft:fire_aspect', level: 2 },
+          { id: 'minecraft:unbreaking', level: 3 },
+          { id: 'minecraft:mending', level: 1 }
         ],
         lifeSteal: { enabled: true, percent: 0.2, capHealth: 4, hostileOnly: true },
         shockwave: {

@@ -7,6 +7,7 @@ import {
   specsMatch
 } from '../../../shared/specInspector'
 import type { ProjectSpec } from '../../../shared/spec'
+import { HIGHEST_COMPATIBLE_MACE_ENCHANTMENTS } from '../../../shared/vanillaRegistry'
 import { asAppError } from '../lib/errors'
 import { Button, Card } from './ui'
 
@@ -90,6 +91,22 @@ export function SpecInspector({
           </ul>
         )}
         {supportNote ? <p className="mt-3 text-sm">{supportNote}</p> : null}
+        <div className="mt-3 space-y-1 text-sm">
+          <p className="font-medium">Enchantments on this draft</p>
+          {draftSpec.items.flatMap((item) => item.weapon?.enchantments ?? []).length === 0 ? (
+            <p className="text-muted">None recorded. Forge 1.21.1 highest mutually compatible mace set is {HIGHEST_COMPATIBLE_MACE_ENCHANTMENTS.map((entry) => `${entry.id.replace('minecraft:', '')} ${entry.level}`).join(', ')}.</p>
+          ) : (
+            <ul className="list-disc pl-5">
+              {draftSpec.items.flatMap((item) =>
+                (item.weapon?.enchantments ?? []).map((entry) => (
+                  <li key={`${item.id}-${entry.id}`}>
+                    {item.id}: {entry.id} level {entry.level}
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </div>
         <details className="mt-3">
           <summary className="cursor-pointer text-sm font-medium underline-offset-2 hover:underline">
             Generator support (Forge 1.21.1 weapons)

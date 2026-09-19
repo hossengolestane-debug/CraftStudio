@@ -1,13 +1,11 @@
 import { preservePrompt, shortSummary } from './promptPreserve'
 import { extractShapedRecipeFromPrompt } from './recipeExtract'
 import {
-  filterCompatibleEnchantments,
-  hasWeaponBehavior,
   inferWeaponFromPrompt,
+  mergeWeapons,
   promptRequestsChestLoot,
   promptRequestsCustomMob,
   promptRequestsWorldgen,
-  weaponKind,
   type SpecWeapon
 } from './weaponSpec'
 
@@ -115,22 +113,17 @@ function attachInferredWeapon(items: unknown[], inferred: SpecWeapon | undefined
       return item
     }
     const existing = isRecord(item.weapon) ? (item.weapon as SpecWeapon) : undefined
-    const weapon = (hasWeaponBehavior(existing) ? existing : inferred) ?? inferred
+    const weapon = mergeWeapons(existing, inferred, prompt)
     if (!weapon) {
       return item
     }
-    const kind = weaponKind(weapon)
-    const { kept } = filterCompatibleEnchantments(weapon.enchantments ?? [], kind)
     return {
       ...item,
       description:
         typeof item.description === 'string' && item.description.length <= 400
           ? item.description
           : shortSummary(typeof item.description === 'string' ? item.description : prompt, 400),
-      weapon: {
-        ...weapon,
-        enchantments: kept
-      }
+      weapon
     }
   })
 }

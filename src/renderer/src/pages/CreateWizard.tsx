@@ -12,6 +12,7 @@ import type {
 } from '../../../shared/types'
 import { ErrorPanel } from '../components/ErrorPanel'
 import { Badge, Button, Card, ChoiceButton, Field, TextArea, TextInput } from '../components/ui'
+import { FEATURE_PROMPT_MAX } from '../../../shared/promptPreserve'
 import { asAppError } from '../lib/errors'
 
 const STEPS = [
@@ -226,11 +227,15 @@ export function CreateWizard({
               autoComplete="off"
             />
           </Field>
-          <Field label="Description" htmlFor="project-description" hint="Optional. Saved in the manifest.">
+          <Field
+            label="Description"
+            htmlFor="project-description"
+            hint="Optional. Saved in the manifest. Use the full request here or on Design → Generate — it is not mid-word sliced (32 000 character archive cap)."
+          >
             <TextArea
               id="project-description"
-              rows={5}
-              maxLength={2000}
+              rows={6}
+              maxLength={FEATURE_PROMPT_MAX}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />

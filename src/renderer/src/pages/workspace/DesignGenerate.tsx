@@ -10,6 +10,8 @@ import type {
   SnapshotRecordDto
 } from '../../../../shared/ipc'
 import { isCodegenSupported } from '../../../../shared/platformPins'
+import { collectApplyBlockers } from '../../../../shared/applyBlockers'
+import { FEATURE_PROMPT_MAX } from '../../../../shared/promptPreserve'
 import { parseProjectSpec, type ProjectSpec } from '../../../../shared/spec'
 import type { AppSettings, OllamaStatus, PlatformAdapterInfo, ProjectRecord } from '../../../../shared/types'
 import { ErrorPanel } from '../../components/ErrorPanel'
@@ -99,6 +101,9 @@ export function DesignGenerate({
       .then((status) => {
         setApplied(status)
         replaceSpec(status.spec)
+        if (status.spec?.prompt) {
+          setPrompt(status.spec.prompt)
+        }
       })
       .catch(() => undefined)
     void api.listSnapshots(project.manifest.id).then(setSnapshots).catch(() => undefined)
@@ -108,6 +113,7 @@ export function DesignGenerate({
   const codegenReady = isCodegenSupported(project.manifest.platform, project.manifest.minecraftVersion)
   const pluginLimits = project.manifest.platform === 'paper' || project.manifest.platform === 'spigot'
   const workingSpec = spec ?? generation?.spec
+  const applyBlockers = workingSpec ? collectApplyBlockers(workingSpec) : []
   const versionChoices = adapter?.compatibility.map((row) => row.minecraftVersion) ?? [project.manifest.minecraftVersion]
 
   const refreshModels = async (): Promise<OllamaStatus> => {
@@ -165,7 +171,7 @@ export function DesignGenerate({
           <TextArea
             id="design-description"
             rows={3}
-            maxLength={2000}
+            maxLength={FEATURE_PROMPT_MAX}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
@@ -277,12 +283,12 @@ export function DesignGenerate({
             <Field
               label="What should this project add?"
               htmlFor="feature-prompt"
-              hint="Simple items use trusted templates. Ollama is only asked when you choose it or the request looks too complex."
+              hint="The full request is stored in spec.prompt (up to 32 000 characters). Model input may be word-boundary truncated with an explicit marker. Do not paste only into Project description if you need the complete ask."
             >
               <TextArea
                 id="feature-prompt"
-                rows={4}
-                maxLength={4000}
+                rows={8}
+                maxLength={FEATURE_PROMPT_MAX}
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
               />
@@ -356,6 +362,9 @@ export function DesignGenerate({
                       }
                       setGeneration(result)
                       specHistory.replaceCurrent(result.spec)
+                      if (result.spec.prompt) {
+                        setPrompt(result.spec.prompt)
+                      }
                     })
                     .catch((err) => {
                       if (token !== generateToken.current) {
@@ -558,8 +567,18 @@ export function DesignGenerate({
           <h2 className="text-lg font-semibold">Apply to project</h2>
           <p className="text-sm text-muted">
             Existing project files are not removed or overwritten until you review the diff. Apply stays preview-only
-            until this draft matches the last Review.
+            until this draft matches the last Review. Apply is blocked when the recipe, custom texture, or enchantment
+            selection does not match the request.
           </p>
+          {applyBlockers.length > 0 ? (
+            <ul className="list-disc space-y-2 border border-[#8a1f1f] bg-[#fbf4f4] p-3 pl-8 text-sm text-[#3d1010]">
+              {applyBlockers.map((item) => (
+                <li key={item.id}>
+                  <span className="font-medium">{item.message}</span> {item.action}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button
               variant="secondary"
@@ -576,10 +595,19 @@ export function DesignGenerate({
               Review file changes
             </Button>
             <Button
-              disabled={busy}
+              disabled={busy || applyBlockers.length > 0}
               onClick={() => {
                 const previewMatches =
                   preview && workingSpec && JSON.stringify(preview.spec) === JSON.stringify(workingSpec)
+                if (applyBlockers.length > 0) {
+                  setError({
+                    code: 'APPLY_BLOCKED',
+                    message: 'Apply is blocked until the draft matches the requested recipe, texture, and enchantments.',
+                    action: applyBlockers[0]?.action ?? 'Fix the listed issues, then Review again.',
+                    details: applyBlockers.map((item) => `${item.message} ${item.action}`).join('\n')
+                  })
+                  return
+                }
                 setBusy(true)
                 if (!previewMatches) {
                   void api
@@ -603,9 +631,11 @@ export function DesignGenerate({
                   .finally(() => setBusy(false))
               }}
             >
-              {preview && workingSpec && JSON.stringify(preview.spec) === JSON.stringify(workingSpec)
-                ? 'Apply files'
-                : 'Review diff first'}
+              {applyBlockers.length > 0
+                ? 'Apply blocked'
+                : preview && workingSpec && JSON.stringify(preview.spec) === JSON.stringify(workingSpec)
+                  ? 'Apply files'
+                  : 'Review diff first'}
             </Button>
           </div>
           {preview ? (
@@ -614,6 +644,13 @@ export function DesignGenerate({
                 {preview.applied ? 'Files written.' : 'Preview only — nothing was written yet.'} Overwrites:{' '}
                 {preview.overwriteCount}.
               </p>
+              {preview.applyBlockers.length > 0 ? (
+                <ul className="list-disc space-y-1 pl-5 text-sm text-[#3d1010]">
+                  {preview.applyBlockers.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              ) : null}
               {preview.buildScriptChanges.length > 0 ? (
                 <p>
                   Build scripts come from CraftStudio templates (never from the model):{' '}

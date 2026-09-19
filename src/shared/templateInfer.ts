@@ -1,7 +1,7 @@
 import { defaultBlock } from './blocks'
 import { defaultMob, defaultModGui, defaultPluginGui } from './defaults'
 import { shortSummary, preservePrompt } from './promptPreserve'
-import { extractShapedRecipeFromPrompt } from './recipeExtract'
+import { extractShapedRecipeFromPrompt, promptSpecifiesRecipeKeys } from './recipeExtract'
 import { assembleGeneratedSpec } from './specMerge'
 import { defaultSpring, defaultSurfacePatch, defaultWorldgen } from './worldgen'
 import type { ProjectManifest } from './types'
@@ -140,7 +140,7 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
         keys: extracted.keys
       }
     ]
-  } else if (wantsRecipe && wantsShaped) {
+  } else if (wantsRecipe && wantsShaped && !promptSpecifiesRecipeKeys(text)) {
     recipes = [
       {
         id: `${itemId.slice(0, 18)}_shaped`,
@@ -155,6 +155,12 @@ export function inferSpecFromPrompt(manifest: ProjectManifest, prompt: string): 
         ]
       }
     ]
+  } else if (wantsRecipe && wantsShaped && promptSpecifiesRecipeKeys(text)) {
+    unsupportedRequests.push({
+      feature: 'shaped recipe',
+      reason:
+        'A shaped grid was requested with ingredient keys, but the exact pattern could not be extracted. Iron/stick defaults were not substituted.'
+    })
   } else if (wantsRecipe) {
     recipes = [
       {

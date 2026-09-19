@@ -1,6 +1,10 @@
 import { defaultItem, defaultRecipe, defaultShapedRecipe, EDITOR_VANILLA_ITEMS } from '../../../../shared/editorSpec'
 import { ITEM_ATTRIBUTES, ITEM_ATTRIBUTE_SLOTS, type ProjectSpec, type SpecItem, type SpecRecipe } from '../../../../shared/spec'
-import { MACE_COMPATIBLE_ENCHANTMENTS, GENERIC_WEAPON_ENCHANTMENTS } from '../../../../shared/vanillaRegistry'
+import {
+  GENERIC_WEAPON_ENCHANTMENTS,
+  MACE_COMPATIBLE_ENCHANTMENTS,
+  enchantmentMaxLevel
+} from '../../../../shared/vanillaRegistry'
 import { defaultWeapon, hasWeaponBehavior, type SpecWeapon } from '../../../../shared/weaponSpec'
 import { Button, Card, Field, TextInput } from '../../components/ui'
 
@@ -634,7 +638,7 @@ function WeaponEditor({
                 checked={Boolean(selected)}
                 onChange={(event) => {
                   const next = event.target.checked
-                    ? [...weapon.enchantments, { id, level: 1 }]
+                    ? [...weapon.enchantments, { id, level: enchantmentMaxLevel(id) }]
                     : weapon.enchantments.filter((entry) => entry.id !== id)
                   patch({ enchantments: next })
                 }}

@@ -1,13 +1,27 @@
 /** Stored request is never mid-word sliced. Model input may be bounded for local VRAM. */
 
 export const STORED_PROMPT_MAX = 32_000
+export const FEATURE_PROMPT_MAX = STORED_PROMPT_MAX
 export const MODEL_PROMPT_SOFT_CAP = 4_000
 
 export function preservePrompt(text: string): string {
   if (text.length <= STORED_PROMPT_MAX) {
     return text
   }
-  return truncateAtWord(text, STORED_PROMPT_MAX)
+  return `${truncateAtWord(text, STORED_PROMPT_MAX)}\n\n[Stored request hit the ${STORED_PROMPT_MAX}-character archive cap at a word boundary. Paste the remainder into Design → Generate if anything is missing.]`
+}
+
+export function promptLooksTruncated(text: string): boolean {
+  if (!text) {
+    return false
+  }
+  if (/IMPLEMENTATION AND VERIFI(?!CATION)/i.test(text)) {
+    return true
+  }
+  if (/[A-Za-z]$/.test(text) && !/[.!?"')\]]\s*$/.test(text) && /\bVERIFI$/i.test(text)) {
+    return true
+  }
+  return false
 }
 
 export function truncateAtWord(text: string, max: number): string {

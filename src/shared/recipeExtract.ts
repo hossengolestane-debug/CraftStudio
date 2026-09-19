@@ -12,16 +12,17 @@ export interface ExtractedShapedRecipe {
 }
 
 const KEY_LINE =
-  /(?:^|[,\s])([A-Za-z])\s*=\s*(minecraft:[a-z0-9_]+|[a-z][a-z0-9_]{1,30})/g
+  /(?:^|[,\s])([A-Za-z])\s*[:=]\s*(minecraft:[a-z0-9_]+|[a-z][a-z0-9_]{1,30})/g
 
 function normalizeRow(row: string): string {
-  const trimmed = row.trim().replace(/[·•]/g, '.')
+  const trimmed = row.trim().replace(/[·•]/g, '.').replace(/^[-*]\s+/, '').replace(/^["']|["']$/g, '')
   if (/^(?:[A-Za-z#.]\s+){1,2}[A-Za-z#.]$/.test(trimmed)) {
     return trimmed.replace(/\s+/g, '').replace(/[a-z]/g, (ch) => ch.toUpperCase())
   }
   return trimmed
     .replace(/[^ A-Za-z#.]/g, ' ')
     .replace(/[a-z]/g, (ch) => ch.toUpperCase())
+    .replace(/\s+/g, '')
     .slice(0, 3)
 }
 
@@ -47,7 +48,49 @@ export function extractShapedRecipeFromPrompt(text: string): ExtractedShapedReci
   return { pattern, keys: filtered }
 }
 
-function extractKeys(text: string): ExtractedRecipeKey[] {
+export function promptSpecifiesRecipeKeys(text: string): boolean {
+  return extractKeys(text).length > 0
+}
+
+export function recipesMatchRequestedGrid(
+  recipes: { type?: string; resultItemId?: string; resultCount?: number; pattern?: string[]; keys?: { symbol: string; id: string }[] }[],
+  requested: ExtractedShapedRecipe,
+  resultItemId?: string
+): boolean {
+  const shaped = recipes.find((recipe) => recipe.type === 'shaped')
+  if (!shaped) {
+    return false
+  }
+  if (resultItemId && shaped.resultItemId && shaped.resultItemId !== resultItemId) {
+    return false
+  }
+  if ((shaped.resultCount ?? 1) !== 1) {
+    return false
+  }
+  if (!samePattern(shaped.pattern ?? [], requested.pattern)) {
+    return false
+  }
+  const wanted = new Map(requested.keys.map((key) => [key.symbol, key.id]))
+  const got = new Map((shaped.keys ?? []).map((key) => [key.symbol, key.id]))
+  if (wanted.size !== got.size) {
+    return false
+  }
+  for (const [symbol, id] of wanted) {
+    if (got.get(symbol) !== id) {
+      return false
+    }
+  }
+  return true
+}
+
+function samePattern(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+  return left.every((row, index) => row.replace(/ /g, '') === (right[index] ?? '').replace(/ /g, ''))
+}
+
+export function extractKeys(text: string): ExtractedRecipeKey[] {
   const keys: ExtractedRecipeKey[] = []
   const seen = new Set<string>()
   for (const match of text.matchAll(KEY_LINE)) {
@@ -68,6 +111,11 @@ function extractKeys(text: string): ExtractedRecipeKey[] {
 }
 
 function extractPattern(text: string, symbols: Set<string>): string[] {
+  const quoted = extractQuotedPattern(text, symbols)
+  if (quoted.length > 0) {
+    return quoted
+  }
+
   const slash = text.match(
     /(?:pattern|shape)\s*[:=]\s*([A-Za-z#. ]{1,3})\s*\/\s*([A-Za-z#. ]{1,3})\s*\/\s*([A-Za-z#. ]{1,3})/i
   )
@@ -99,6 +147,37 @@ function extractPattern(text: string, symbols: Set<string>): string[] {
     }
   }
   return rows.length > 0 ? padRows(rows) : []
+}
+
+function extractQuotedPattern(text: string, symbols: Set<string>): string[] {
+  const json = text.match(
+    /\[\s*"([ A-Za-z#.]{1,3})"\s*,\s*"([ A-Za-z#.]{1,3})"\s*,\s*"([ A-Za-z#.]{1,3})"\s*\]/
+  )
+  if (json) {
+    const rows = [json[1]!, json[2]!, json[3]!].map(normalizeRow)
+    if (rowsUseKnownSymbols(rows, symbols)) {
+      return padRows(rows)
+    }
+  }
+
+  const bullets = [...text.matchAll(/^\s*[-*]\s*"([ A-Za-z#.]{1,3})"/gm)].map((match) => normalizeRow(match[1]!))
+  if (bullets.length >= 2 && bullets.length <= 3 && rowsUseKnownSymbols(bullets, symbols)) {
+    return padRows(bullets)
+  }
+
+  const quotedLines = [...text.matchAll(/^\s*"([ A-Za-z#.]{1,3})"\s*,?\s*$/gm)].map((match) =>
+    normalizeRow(match[1]!)
+  )
+  if (quotedLines.length >= 2 && quotedLines.length <= 3 && rowsUseKnownSymbols(quotedLines, symbols)) {
+    return padRows(quotedLines)
+  }
+
+  return []
+}
+
+function rowsUseKnownSymbols(rows: string[], symbols: Set<string>): boolean {
+  const letters = rows.join('').replace(/[^A-Z]/g, '')
+  return letters.length > 0 && [...letters].every((ch) => symbols.has(ch))
 }
 
 function padRows(rows: string[]): string[] {

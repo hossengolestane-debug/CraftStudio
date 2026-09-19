@@ -394,6 +394,40 @@ export const GENERIC_WEAPON_ENCHANTMENTS = [
   'minecraft:vanishing_curse'
 ] as const
 
+/** Vanilla 1.21.1 max levels. Used when filling the highest mutually compatible set. */
+export const ENCHANTMENT_MAX_LEVELS_1_21_1: Record<string, number> = {
+  'minecraft:density': 5,
+  'minecraft:breach': 4,
+  'minecraft:wind_burst': 3,
+  'minecraft:fire_aspect': 2,
+  'minecraft:unbreaking': 3,
+  'minecraft:mending': 1,
+  'minecraft:vanishing_curse': 1,
+  'minecraft:smite': 5,
+  'minecraft:bane_of_arthropods': 5,
+  'minecraft:sharpness': 5
+}
+
+/**
+ * Mace 1.21.1: Density, Breach, Sharpness, Smite, and Bane of Arthropods are mutually exclusive.
+ * Highest beneficial compatible stack prefers Density (max 5) over Breach (max 4).
+ */
+export const MACE_EXCLUSIVE_GROUPS: readonly (readonly string[])[] = [
+  ['minecraft:density', 'minecraft:breach', 'minecraft:sharpness', 'minecraft:smite', 'minecraft:bane_of_arthropods']
+]
+
+export const HIGHEST_COMPATIBLE_MACE_ENCHANTMENTS = [
+  { id: 'minecraft:density', level: 5 },
+  { id: 'minecraft:wind_burst', level: 3 },
+  { id: 'minecraft:fire_aspect', level: 2 },
+  { id: 'minecraft:unbreaking', level: 3 },
+  { id: 'minecraft:mending', level: 1 }
+] as const
+
+export function enchantmentMaxLevel(id: string): number {
+  return ENCHANTMENT_MAX_LEVELS_1_21_1[normalizeVanillaId(id)] ?? 1
+}
+
 export function normalizeVanillaId(id: string): string {
   const trimmed = id.trim()
   if (!trimmed) {

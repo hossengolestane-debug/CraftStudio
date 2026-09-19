@@ -129,6 +129,7 @@ export interface ApplyPreviewDto {
   changes: FileChangeDto[]
   overwriteCount: number
   buildScriptChanges: string[]
+  applyBlockers: string[]
 }
 
 export interface ApplyResultDto extends ApplyPreviewDto {

@@ -56,6 +56,8 @@ Rules:
 - "Affects hostile mobs" is a combat filter. Do NOT create a custom mob, entity, or *_mob entry unless the user explicitly asked to add/create a mob.
 - Chest loot, worldgen, and other optional systems stay off (enableChestLoot=false, enableWorldgen=false) unless the user explicitly asked for them.
 - items[].weapon is the reusable combat object: smash, enchantments[{id,level}], lifeSteal{enabled,percent,capHealth,hostileOnly}, shockwave{enabled,minFallBlocks,cooldownSeconds,radius,damage,upwardImpulse}, terrain{enabled,radius,maxBlocks}, textureStyle.
+- When the user asks for a custom item texture, textureStyle must be netherite_mace or generic_weapon — never "none".
+- For a 1.21.1 mace, record the highest mutually compatible enchantments (Density 5, Wind Burst 3, Fire Aspect 2, Unbreaking 3, Mending 1). Density and Breach cannot coexist; prefer Density. Do not emit only Fire Aspect II.
 - For Forge 1.21.1, those weapon fields are generated as executable Java. Put only truly unimplemented asks (dimensions, behavior trees, DALL-E textures) in unsupportedRequests.
 - commands: objects { name, description? }, not bare strings. Names are stubbed (registered as a literal on Fabric/Forge/NeoForge/Paper when possible). They are not a command engine.
 - unsupportedRequests: objects { feature, reason }, not bare strings.

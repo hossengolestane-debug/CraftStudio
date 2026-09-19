@@ -1,5 +1,6 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { ProjectRecord } from '../../../shared/types'
+import { APP_VERSION } from '../../../shared/buildInfo'
 import { Button } from './ui'
 import { LiveActivityFeed } from './LiveActivityFeed'
 
@@ -56,7 +57,7 @@ export function AppShell({
       <aside className="flex w-56 shrink-0 flex-col bg-sidebar text-sidebar-text">
         <div className="border-b border-white/15 px-4 py-5">
           <p className="text-lg font-semibold tracking-tight">CraftStudio Local</p>
-          <p className="mt-1 text-sm text-sidebar-muted">1.0.6</p>
+          <p className="mt-1 text-sm text-sidebar-muted">{APP_VERSION}</p>
         </div>
         <nav aria-label="Primary" className="flex flex-col gap-1 p-3" onKeyDown={onSidebarKeyDown}>
           {PRIMARY_ITEMS.map((item) => {

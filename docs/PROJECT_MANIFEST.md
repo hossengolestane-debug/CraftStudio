@@ -39,7 +39,7 @@ The app never writes outside the projects root. Path segments that traverse (`..
 | --- | --- |
 | `id` | UUID |
 | `name` | 1–80 characters |
-| `description` | 0–2000 characters |
+| `description` | 0–32000 characters (same archive cap as `spec.prompt`; not mid-word sliced) |
 | `type` | `mod` or `plugin` |
 | `platform` | `fabric` \| `neoforge` \| `forge` for mods; `paper` \| `spigot` for plugins |
 | `minecraftVersion` | Must exist in the compatibility registry and not be `unsupported` |

@@ -147,7 +147,7 @@ describe('Forge generator stays generic when weapon fields are absent', () => {
 })
 
 describe('app version', () => {
-  it('is 1.0.6', () => {
-    expect(APP_VERSION).toBe('1.0.6')
+  it('is 1.0.7', () => {
+    expect(APP_VERSION).toBe('1.0.7')
   })
 })

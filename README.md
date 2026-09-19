@@ -6,7 +6,7 @@ Desktop app that helps beginners create **Minecraft Java Edition** mods and serv
 | --- | --- |
 | Fabric, NeoForge, Forge | Paper, Spigot |
 
-**Phase 10 / 1.0.6** keeps Phases 1–10 and the 1.0.1–1.0.5 hotfixes, and adds a reusable Forge 1.21.1 weapon-generation workflow. Confirm Settings → About shows **1.0.6**. Install rebuilt Windows binaries into `E:\CraftStudio Local 1.0.6\` (keep older version folders). See [FORGE_WEAPON_WORKFLOW.md](FORGE_WEAPON_WORKFLOW.md), [SPEC_INSPECTOR.md](SPEC_INSPECTOR.md), [OLLAMA_HTTP400_SCHEMA_FIX.md](OLLAMA_HTTP400_SCHEMA_FIX.md), [SPEC_OLLAMA_SCHEMA_FIX.md](SPEC_OLLAMA_SCHEMA_FIX.md), [PERF_OLLAMA_LIVE_ACTIVITY.md](PERF_OLLAMA_LIVE_ACTIVITY.md), [SMOKE.md](SMOKE.md), and [PHASE10.md](PHASE10.md).
+**Phase 10 / 1.0.7** keeps Phases 1–10 and the 1.0.1–1.0.6 hotfixes, and continues the reusable Forge 1.21.1 weapon-generation workflow. Confirm Settings → About shows **1.0.7**. Install rebuilt Windows binaries into `E:\CraftStudio Local 1.0.7\` (keep older version folders). Legendary Mace is **not** complete and must not be Applied from this change set — review the corrected fixture first. See [FORGE_WEAPON_WORKFLOW.md](FORGE_WEAPON_WORKFLOW.md), [LEGENDARY_MACE_SPEC.json](LEGENDARY_MACE_SPEC.json), [SPEC_INSPECTOR.md](SPEC_INSPECTOR.md), [OLLAMA_HTTP400_SCHEMA_FIX.md](OLLAMA_HTTP400_SCHEMA_FIX.md), [SPEC_OLLAMA_SCHEMA_FIX.md](SPEC_OLLAMA_SCHEMA_FIX.md), [PERF_OLLAMA_LIVE_ACTIVITY.md](PERF_OLLAMA_LIVE_ACTIVITY.md), [SMOKE.md](SMOKE.md), and [PHASE10.md](PHASE10.md).
 
 ## Quick start
 
