@@ -1,0 +1,117 @@
+{
+  "name": "craftstudio-local",
+  "version": "1.0.7",
+  "private": true,
+  "description": "Desktop app for creating Minecraft Java Edition mods and server plugins with local Ollama.",
+  "author": "CraftStudio",
+  "license": "MIT",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
+    "dist:win": "electron-vite build && electron-builder --win portable nsis --publish never",
+    "dist:win:portable": "electron-vite build && electron-builder --win portable --publish never",
+    "dist:linux": "electron-vite build && electron-builder --linux dir AppImage --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac dir --publish never",
+    "dist:dir": "electron-vite build && electron-builder --dir --publish never"
+  },
+  "build": {
+    "appId": "local.craftstudio.app",
+    "productName": "CraftStudio Local",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "./out/main/index.js"
+    },
+    "linux": {
+      "category": "Development",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "identity": null,
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "^4.0.0",
+    "monaco-editor": "^0.52.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@electron-toolkit/eslint-config-ts": "^3.1.0",
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "@tailwindcss/vite": "^4.1.13",
+    "@types/node": "^22.18.6",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.1.4",
+    "electron": "^39.8.10",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.44.0",
+    "vite": "^7.1.7",
+    "vitest": "^3.2.4"
+  }
+}

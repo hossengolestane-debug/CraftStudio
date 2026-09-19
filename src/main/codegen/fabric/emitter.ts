@@ -1,0 +1,508 @@
+import { AppError } from '../../../shared/errors'
+import { itemModelJson } from '../../../shared/itemModels'
+import { fabricPinsFor, type FabricItemRegistration } from '../../../shared/platformPins'
+import type { ProjectSpec } from '../../../shared/spec'
+import { toConstName } from '../../../shared/spec'
+import type { ProjectManifest } from '../../../shared/types'
+import type { PlannedFile } from '../types'
+import { gradleWrapperFiles, javaEscape } from '../wrapper'
+import { defaultCommandPermission } from '../../../shared/spawn'
+import { fabricItemSettings, fabricNeedsAttributeImports } from '../items/settings'
+import {
+  blockLangEntries,
+  fabricBlockCreativeAdds,
+  fabricBlockFields,
+  fabricNeedsPillar,
+  fabricNeedsSlab,
+  fabricNeedsStairs,
+  planBlockAssetFiles,
+  planBlockDocs
+} from '../blocks/registration'
+import { planConfigFiles } from '../config/modConfig'
+import { fabricLootModify } from '../loot/inject'
+import { planEntityLootFiles, planItemLootFiles, planLootDocs } from '../loot/tables'
+import { planRecipeFiles } from '../recipes/json'
+import { planOreFeatureJson, planWorldgenDocs } from '../worldgen/oreVeins'
+import {
+  fabricAttributeLines,
+  fabricCommandBlocks,
+  fabricEntityFields,
+  fabricEntityRenderingNote,
+  fabricMenuField,
+  fabricRendererStyle,
+  fabricSpawnDoc,
+  fabricSpawnInit,
+  fabricWorldgenInit,
+  planFabricClientFiles,
+  planFabricEntityRenderers,
+  planFabricGuiFiles,
+  planFabricMobFiles,
+  placeholderEntityPng
+} from './extras'
+
+function itemJavaClassic(spec: ProjectSpec): string {
+  return spec.items
+    .map((item) => {
+      const constant = toConstName(item.id)
+      return `  public static final Item ${constant} = Registry.register(
+    Registries.ITEM,
+    Identifier.of(MOD_ID, "${item.id}"),
+    new Item(${fabricItemSettings(item, true)})
+  );`
+    })
+    .join('\n\n')
+}
+
+function itemKeys(spec: ProjectSpec): string {
+  return spec.items
+    .map((item) => {
+      const constant = toConstName(item.id)
+      return `  public static final RegistryKey<Item> ${constant}_KEY = RegistryKey.of(
+    RegistryKeys.ITEM,
+    Identifier.of(MOD_ID, "${item.id}")
+  );`
+    })
+    .join('\n\n')
+}
+
+function itemJavaRegistryKey(spec: ProjectSpec): string {
+  return spec.items
+    .map((item) => {
+      const constant = toConstName(item.id)
+      return `  public static final Item ${constant} = Items.register(
+    ${constant}_KEY,
+    Item::new,
+    ${fabricItemSettings(item, false)}
+  );`
+    })
+    .join('\n\n')
+}
+
+function itemAdds(spec: ProjectSpec): string {
+  return spec.items.map((item) => `      entries.add(${toConstName(item.id)});`).join('\n')
+}
+
+function fabricImports(
+  style: FabricItemRegistration,
+  spec: ProjectSpec
+): string {
+  const hasCommands = spec.commands.length > 0 || spec.modGuis.length > 0
+  const hasMobs = spec.mobs.length > 0
+  const hasGuis = spec.modGuis.length > 0
+  const hasSpawn = spec.mobs.some((mob) => mob.spawn.enabled && mob.spawn.biomes.length > 0)
+  const hasWorldgen = spec.worldgen.length > 0
+  const hasBlocks = spec.blocks.length > 0
+  const hasLootInject = spec.items.length > 0 || spec.blocks.length > 0
+  const lines = [
+    'import net.fabricmc.api.ModInitializer;',
+    'import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;',
+    'import net.minecraft.item.Item;',
+    'import net.minecraft.item.ItemGroups;'
+  ]
+  if (fabricNeedsAttributeImports(spec.items)) {
+    lines.push('import net.minecraft.component.type.AttributeModifierSlot;')
+    lines.push('import net.minecraft.component.type.AttributeModifiersComponent;')
+    lines.push('import net.minecraft.entity.attribute.EntityAttributeModifier;')
+    lines.push('import net.minecraft.entity.attribute.EntityAttributes;')
+  }
+  if (style === 'registry_key') {
+    lines.push('import net.minecraft.item.Items;')
+    lines.push('import net.minecraft.registry.RegistryKey;')
+    lines.push('import net.minecraft.registry.RegistryKeys;')
+  }
+  if (style === 'classic' || hasMobs || hasGuis || hasBlocks) {
+    lines.push('import net.minecraft.registry.Registries;')
+    lines.push('import net.minecraft.registry.Registry;')
+  }
+  if (hasBlocks) {
+    lines.push('import net.minecraft.block.AbstractBlock;')
+    lines.push('import net.minecraft.block.Block;')
+    if (fabricNeedsPillar(spec)) {
+      lines.push('import net.minecraft.block.PillarBlock;')
+    }
+    if (fabricNeedsSlab(spec)) {
+      lines.push('import net.minecraft.block.SlabBlock;')
+    }
+    if (fabricNeedsStairs(spec)) {
+      lines.push('import net.minecraft.block.StairsBlock;')
+    }
+    lines.push('import net.minecraft.item.BlockItem;')
+    lines.push('import net.minecraft.sound.BlockSoundGroup;')
+    if (style === 'registry_key') {
+      lines.push('import net.minecraft.registry.RegistryKey;')
+      lines.push('import net.minecraft.registry.RegistryKeys;')
+    }
+  }
+  if (hasLootInject) {
+    lines.push(
+      style === 'classic'
+        ? 'import net.fabricmc.fabric.api.loot.v2.LootTableEvents;'
+        : 'import net.fabricmc.fabric.api.loot.v3.LootTableEvents;'
+    )
+    lines.push('import net.minecraft.loot.LootPool;')
+    lines.push('import net.minecraft.loot.entry.ItemEntry;')
+  }
+  lines.push('import net.minecraft.util.Identifier;')
+  if (hasMobs) {
+    lines.push('import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;')
+    lines.push('import net.minecraft.entity.EntityType;')
+    lines.push('import net.minecraft.entity.SpawnGroup;')
+  }
+  if (hasSpawn || hasWorldgen) {
+    lines.push('import net.fabricmc.fabric.api.biome.v1.BiomeModifications;')
+    lines.push('import net.fabricmc.fabric.api.biome.v1.BiomeSelectors;')
+  }
+  if (hasSpawn || (hasWorldgen && spec.worldgen.some((entry) => entry.biomes.length > 0))) {
+    lines.push('import net.minecraft.world.biome.BiomeKeys;')
+  }
+  if (hasWorldgen) {
+    lines.push('import net.minecraft.registry.RegistryKey;')
+    lines.push('import net.minecraft.registry.RegistryKeys;')
+    lines.push('import net.minecraft.world.gen.GenerationStep;')
+  }
+  if (hasGuis) {
+    lines.push('import net.minecraft.resource.featuretoggle.FeatureFlags;')
+    lines.push('import net.minecraft.screen.ScreenHandlerType;')
+  }
+  if (hasCommands) {
+    lines.push('import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;')
+    lines.push('import net.minecraft.server.command.CommandManager;')
+    lines.push('import net.minecraft.text.Text;')
+  }
+  if (spec.modGuis.length > 0) {
+    lines.push('import com.mojang.brigadier.arguments.StringArgumentType;')
+    lines.push('import net.minecraft.screen.SimpleNamedScreenHandlerFactory;')
+    lines.push('import net.minecraft.server.network.ServerPlayerEntity;')
+  }
+  lines.push('import org.slf4j.Logger;')
+  lines.push('import org.slf4j.LoggerFactory;')
+  return [...new Set(lines)].join('\n')
+}
+
+function mainJava(spec: ProjectSpec, style: FabricItemRegistration): string {
+  const items =
+    style === 'registry_key'
+      ? `${itemKeys(spec)}\n\n${itemJavaRegistryKey(spec)}`
+      : itemJavaClassic(spec)
+  const blocks = spec.blocks.length ? `\n\n${fabricBlockFields(spec, style === 'classic')}` : ''
+  const entities = spec.mobs.length ? `\n\n${fabricEntityFields(spec, style)}` : ''
+  const menu = spec.modGuis.length ? `\n\n${fabricMenuField(spec, style)}` : ''
+  const commandBody = fabricCommandBlocks(spec)
+  const commands = commandBody
+    ? `
+    CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+${commandBody}
+    });`
+    : ''
+  const attrs = spec.mobs.length ? `\n${fabricAttributeLines(spec)}` : ''
+  const spawns = fabricSpawnInit(spec)
+  const ores = fabricWorldgenInit(spec)
+  const loot = fabricLootModify(spec, style === 'classic')
+  const blockAdds = fabricBlockCreativeAdds(spec)
+
+  return `package ${spec.packageName};
+
+${fabricImports(style, spec)}
+
+public class ${spec.mainClass} implements ModInitializer {
+  public static final String MOD_ID = "${javaEscape(spec.modId)}";
+  public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+
+${items}${blocks}${entities}${menu}
+
+  @Override
+  public void onInitialize() {
+    LOGGER.info("${javaEscape(spec.displayName)} initialized by CraftStudio Local Phase 10");
+    CraftStudioConfig.load();
+    ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
+${itemAdds(spec)}
+${blockAdds}
+    });
+${attrs}
+${spawns}
+${ores}
+${loot}
+${commands}
+  }
+}
+`
+}
+
+export function planFabricFiles(manifest: ProjectManifest, spec: ProjectSpec): PlannedFile[] {
+  if (manifest.platform !== 'fabric' || manifest.type !== 'mod') {
+    throw new AppError({
+      code: 'ADAPTER_UNSUPPORTED',
+      message: 'This emitter only generates Gradle projects for Fabric mods.',
+      action: 'Create a Fabric project on a supported 1.21.x version.'
+    })
+  }
+
+  const pins = fabricPinsFor(manifest.minecraftVersion)
+  const packagePath = spec.packageName.replace(/\./g, '/')
+  const files: PlannedFile[] = []
+
+  files.push({
+    relativePath: 'gradle.properties',
+    encoding: 'utf8',
+    contents: [
+      'org.gradle.jvmargs=-Xmx1G',
+      'org.gradle.parallel=true',
+      '',
+      '# Versions from https://fabricmc.net/develop — CraftStudio pins (not model-chosen).',
+      `minecraft_version=${pins.minecraft}`,
+      `yarn_mappings=${pins.yarn}`,
+      `loader_version=${pins.loader}`,
+      '',
+      'mod_version=1.0.0',
+      `maven_group=${spec.packageName}`,
+      `archives_base_name=${spec.modId}`,
+      '',
+      `fabric_version=${pins.fabricApi}`,
+      ''
+    ].join('\n')
+  })
+
+  files.push({
+    relativePath: 'settings.gradle',
+    encoding: 'utf8',
+    contents: `pluginManagement {
+  repositories {
+    maven { name = 'Fabric'; url = 'https://maven.fabricmc.net/' }
+    mavenCentral()
+    gradlePluginPortal()
+  }
+}
+
+rootProject.name = '${spec.modId}'
+`
+  })
+
+  files.push({
+    relativePath: 'build.gradle',
+    encoding: 'utf8',
+    contents: `plugins {
+  id 'fabric-loom' version '${pins.loom}'
+  id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+  archivesName = project.archives_base_name
+}
+
+repositories {
+}
+
+dependencies {
+  minecraft "com.mojang:minecraft:\${project.minecraft_version}"
+  mappings "net.fabricmc:yarn:\${project.yarn_mappings}:v2"
+  modImplementation "net.fabricmc:fabric-loader:\${project.loader_version}"
+  modImplementation "net.fabricmc.fabric-api:fabric-api:\${project.fabric_version}"
+}
+
+processResources {
+  inputs.property "version", project.version
+  filesMatching("fabric.mod.json") {
+    expand "version": project.version
+  }
+}
+
+tasks.withType(JavaCompile).configureEach {
+  it.options.release = ${pins.java}
+}
+
+java {
+  withSourcesJar()
+  sourceCompatibility = JavaVersion.VERSION_${pins.java}
+  targetCompatibility = JavaVersion.VERSION_${pins.java}
+}
+
+jar {
+  from("LICENSE") {
+    rename { "\${it}_\${project.base.archivesName.get()}" }
+  }
+}
+`
+  })
+
+  files.push(...gradleWrapperFiles(pins.gradle))
+
+  files.push({
+    relativePath: '.gitignore',
+    encoding: 'utf8',
+    contents: ['.gradle/', 'build/', 'run/', 'out/', '*.iml', '.idea/', '\n'].join('\n')
+  })
+
+  files.push({
+    relativePath: 'src/main/resources/fabric.mod.json',
+    encoding: 'utf8',
+    contents: `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        id: spec.modId,
+        version: '${version}',
+        name: spec.displayName,
+        description: spec.description || spec.displayName,
+        authors: ['CraftStudio Local'],
+        license: 'MIT',
+        environment: '*',
+        entrypoints: {
+          main: [`${spec.packageName}.${spec.mainClass}`],
+          ...(spec.modGuis.length > 0 || spec.mobs.length > 0
+            ? { client: [`${spec.packageName}.${spec.mainClass}Client`] }
+            : {})
+        },
+        depends: {
+          fabricloader: `>=${pins.loader}`,
+          minecraft: `~${pins.minecraft}`,
+          java: `>=${pins.java}`,
+          'fabric-api': '*'
+        }
+      },
+      null,
+      2
+    )}\n`
+  })
+
+  const lang: Record<string, string> = {
+    [`itemGroup.${spec.modId}`]: spec.displayName
+  }
+  for (const item of spec.items) {
+    lang[`item.${spec.modId}.${item.id}`] = item.displayName
+  }
+  Object.assign(lang, blockLangEntries(spec))
+  for (const mob of spec.mobs) {
+    lang[`entity.${spec.modId}.${mob.id}`] = mob.displayName
+  }
+  for (const gui of spec.modGuis) {
+    lang[`container.${spec.modId}.${gui.id}`] = gui.title
+  }
+  files.push({
+    relativePath: `src/main/resources/assets/${spec.modId}/lang/en_us.json`,
+    encoding: 'utf8',
+    contents: `${JSON.stringify(lang, null, 2)}\n`
+  })
+
+  for (const item of spec.items) {
+    files.push({
+      relativePath: `src/main/resources/assets/${spec.modId}/models/item/${item.id}.json`,
+      encoding: 'utf8',
+      contents: itemModelJson(spec.modId, item).replace(
+        `${spec.modId}:item/${item.id}`,
+        'minecraft:item/flint'
+      )
+    })
+  }
+
+  files.push(...planRecipeFiles(spec))
+  files.push(...planConfigFiles(spec, packagePath, 'fabric'))
+  files.push(...planBlockAssetFiles(spec))
+  files.push(...planBlockDocs(spec, 'fabric'))
+  files.push(...planOreFeatureJson(spec))
+  files.push(...planEntityLootFiles(spec))
+  files.push(...planItemLootFiles(spec))
+  files.push(...planLootDocs(spec, true))
+  files.push(...planWorldgenDocs(spec, 'fabric'))
+
+  files.push({
+    relativePath: `src/main/java/${packagePath}/${spec.mainClass}.java`,
+    encoding: 'utf8',
+    contents: mainJava(spec, pins.itemRegistration)
+  })
+
+  const classic = pins.itemRegistration === 'classic'
+  const rendererStyle = fabricRendererStyle(pins.minecraft)
+  files.push(...planFabricMobFiles(spec, packagePath, classic))
+  files.push(...planFabricGuiFiles(spec, packagePath))
+  files.push(...planFabricEntityRenderers(spec, packagePath, rendererStyle))
+  files.push(...planFabricClientFiles(spec, packagePath, rendererStyle))
+  if (spec.mobs.length > 0) {
+    files.push({
+      relativePath: `src/main/resources/assets/${spec.modId}/textures/entity/preset_mob.png`,
+      encoding: 'binary',
+      contents: placeholderEntityPng()
+    })
+    files.push({
+      relativePath: 'ENTITY_RENDERING.md',
+      encoding: 'utf8',
+      contents: fabricEntityRenderingNote(pins.minecraft, rendererStyle)
+    })
+    files.push({
+      relativePath: 'SPAWNS.md',
+      encoding: 'utf8',
+      contents: fabricSpawnDoc(spec)
+    })
+  }
+
+  files.push({
+    relativePath: 'INSTALL.md',
+    encoding: 'utf8',
+    contents: [
+      `# Install ${spec.displayName}`,
+      '',
+      `Fabric ${pins.minecraft} · Java ${pins.java} · item API: ${pins.itemRegistration}`,
+      '',
+      '1. Install the Minecraft launcher and this exact game version.',
+      '2. Install [Fabric Loader](https://fabricmc.net/use/) for that version, plus Fabric API.',
+      '3. Build with `./gradlew build`, then copy `build/libs/' +
+        spec.modId +
+        '-1.0.0.jar` (not `-sources`) into `.minecraft/mods`.',
+      '4. Optional: export a resource pack from the app (includes pack.png and layer1 when painted) if you want textures without rebuilding the jar.',
+      '5. Accept the Minecraft EULA yourself. CraftStudio never distributes game files or bypasses auth.',
+      '',
+      spec.modGuis.length > 0
+        ? 'Open a preview screen with `/opencustommenu [id]`. Client clicks are untrusted; the server menu validates slots and refuses illegal transfers.'
+        : '',
+      spec.mobs.length > 0
+        ? 'Summon preset mobs with `/summon ' + spec.modId + ':' + spec.mobs[0]!.id + '`. See ENTITY_RENDERING.md and SPAWNS.md. Presets expand into a capped goal list (max 5).'
+        : '',
+      spec.blocks.length > 0
+        ? 'Custom blocks are cube_all or pillar (axis), plus optional slab/stairs. Paint a block texture in Assets. Ore veins may place a spec block. See BLOCKS.md, CONFIG.md, and WORLDGEN.md.'
+        : '',
+      spec.items.length > 0
+        ? 'Chest bonus loot is injected into simple_dungeon, abandoned_mineshaft, spawn_bonus_chest, and village_toolsmith only. See LOOT.md.'
+        : '',
+      '',
+      '## Permission nodes',
+      '',
+      ...spec.commands.map(
+        (command) =>
+          `- \`/${command.name}\` → \`${command.permission?.trim() || defaultCommandPermission(spec.modId, command.name)}\` (Fabric uses op permission level ${command.permission?.trim() ? '2' : '0'})`
+      ),
+      spec.modGuis.length > 0 ? `- \`/opencustommenu\` is registered for operators and players (level 0).` : '',
+      spec.commands.length === 0 && spec.modGuis.length === 0 ? '- No extra spec commands in this project.' : '',
+      '',
+      '`./gradlew runClient` is optional developer wiring. A successful compile is **not** a Tested compatibility row.',
+      ''
+    ].join('\n')
+  })
+
+  files.push({
+    relativePath: 'README.md',
+    encoding: 'utf8',
+    contents: [
+      `# ${spec.displayName}`,
+      '',
+      spec.description || '_No description._',
+      '',
+      `Generated by CraftStudio Local Phase 10 for **Fabric ${pins.minecraft}** (${pins.itemRegistration} item registration).`,
+      'Build files come from trusted templates. The model never writes Gradle or Java directly.',
+      '',
+      '## Build',
+      '',
+      'Requires Java ' + pins.java + '.',
+      '',
+      '```bash',
+      './gradlew build',
+      '```',
+      '',
+      'Optional (after you accept Minecraft terms in the app): `./gradlew runClient`.',
+      'See INSTALL.md. Compatibility stays Experimental until a real client run is verified.',
+      ''
+    ].join('\n')
+  })
+
+  return files
+}

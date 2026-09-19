@@ -1,0 +1,14 @@
+node_modules
+out
+dist
+release
+coverage
+.eslintcache
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+.tmp
+src/shared/buildInfo.generated.ts
